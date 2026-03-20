@@ -1,0 +1,50 @@
+# docker-compose.yml — Catalyst local development environment
+#
+# This file defines the services (containers) that run on your machine.
+# For Phase 1 we only need the database. We'll add more services in Phase 2+.
+#
+# HOW TO USE:
+#   Start:   docker compose up -d
+#   Stop:    docker compose down
+#   Logs:    docker compose logs db
+#   Shell:   docker compose exec db psql -U catalyst_user -d catalyst_db
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # db — PostgreSQL database
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine # alpine = smaller image, production-grade
+    container_name: catalyst_db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: catalyst_db
+      POSTGRES_USER: catalyst_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD} # loaded from .env file — never hardcoded
+
+    ports:
+      - "5432:5432"
+        # host:container — lets you connect from your machine
+        # format is "your_machine_port:container_port"
+
+    volumes:
+      # Named volume: persists your data between container restarts
+      - catalyst_pgdata:/var/lib/postgresql/data
+
+      # Mount the migrations folder so you can run SQL files from inside psql
+      - ./database/migrations:/docker-entrypoint-initdb.d
+      # PostgreSQL automatically runs any .sql files in /docker-entrypoint-initdb.d
+      # on FIRST startup only (when the data volume is empty).
+      # This means your 001_initial_schema.sql runs automatically the first time!
+
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U catalyst_user -d catalyst_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# Named volumes are managed by Docker — data survives container restarts
+volumes:
+  catalyst_pgdata:
