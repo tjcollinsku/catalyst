@@ -1,0 +1,29 @@
+# .gitignore — files Git should never track
+
+# Environment variables — CRITICAL, never commit these
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Django
+*.sqlite3
+staticfiles/
+media/
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
