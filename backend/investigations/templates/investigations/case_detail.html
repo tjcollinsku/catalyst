@@ -1,0 +1,45 @@
+{% extends "investigations/base.html" %}
+{% block title %}{{ case.name }}{% endblock %}
+
+{% block content %}
+<h1>{{ case.name }}</h1>
+<p>
+  <span class="badge badge-{{ case.status|lower }}">{{ case.get_status_display }}</span>
+  {% if case.referral_ref %}<span class="meta" style="margin-left:.75rem;">Ref: {{ case.referral_ref }}</span>{% endif %}
+  <span class="meta" style="margin-left:.75rem;">Created {{ case.created_at|date:"Y-m-d" }}</span>
+</p>
+{% if case.notes %}<p>{{ case.notes }}</p>{% endif %}
+
+<h2>Documents</h2>
+{% if documents %}
+<table>
+  <thead>
+    <tr>
+      <th>Filename</th>
+      <th>Type</th>
+      <th>OCR</th>
+      <th>Size</th>
+      <th>Uploaded</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for doc in documents %}
+    <tr>
+      <td>{{ doc.filename }}</td>
+      <td>{{ doc.get_doc_type_display }}</td>
+      <td class="meta">{{ doc.get_ocr_status_display }}</td>
+      <td class="meta">{{ doc.file_size|filesizeformat }}</td>
+      <td class="meta">{{ doc.uploaded_at|date:"Y-m-d" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="meta">No documents yet.</p>
+{% endif %}
+
+<div style="margin-top: 1.25rem;">
+  <a class="btn" href="{% url 'document_upload' %}?case={{ case.pk }}">Upload Document</a>
+  <a href="{% url 'case_list' %}" style="margin-left: 1rem; color: #6b7280; font-size: .9rem;">Back to cases</a>
+</div>
+{% endblock %}

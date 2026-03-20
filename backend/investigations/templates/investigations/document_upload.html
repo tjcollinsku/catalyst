@@ -1,0 +1,18 @@
+{% extends "investigations/base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+<form method="post" enctype="multipart/form-data" style="max-width: 560px;">
+  {% csrf_token %}
+  {% for field in form %}
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {{ field }}
+    {% if field.errors %}<ul class="errorlist">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+  {% endfor %}
+  <div style="margin-top: 1.25rem;">
+    <button type="submit" class="btn">Upload</button>
+    <a href="{% url 'case_list' %}" style="margin-left: 1rem; color: #6b7280; font-size: .9rem;">Cancel</a>
+  </div>
+</form>
+{% endblock %}

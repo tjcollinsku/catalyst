@@ -1,0 +1,32 @@
+{% extends "investigations/base.html" %}
+{% block title %}Cases{% endblock %}
+
+{% block content %}
+<h1>Cases</h1>
+{% if cases %}
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Status</th>
+      <th>Referral Ref</th>
+      <th>Created</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for case in cases %}
+    <tr>
+      <td><a href="{% url 'case_detail' case.pk %}">{{ case.name }}</a></td>
+      <td><span class="badge badge-{{ case.status|lower }}">{{ case.get_status_display }}</span></td>
+      <td>{{ case.referral_ref|default:"—" }}</td>
+      <td class="meta">{{ case.created_at|date:"Y-m-d" }}</td>
+      <td><a class="btn btn-sm" href="{% url 'document_upload' %}?case={{ case.pk }}">Upload doc</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="meta">No cases yet. <a href="{% url 'case_create' %}">Create the first one.</a></p>
+{% endif %}
+{% endblock %}
