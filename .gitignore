@@ -27,3 +27,10 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Investigation evidence and archives
+Osgood Project Files/
+*.zip
+*.bak
+evidence/
+To The AG/
