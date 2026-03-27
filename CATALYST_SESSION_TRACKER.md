@@ -12,15 +12,17 @@ Use it to track:
 
 ## Current Open Tasks
 
-- Add proper `ModelAdmin` classes for remaining plain-registered models (Property, FinancialInstrument, junction tables)
-- Enter first real case through the new intake API or UI
-- Decide the next Phase 1 backend milestone after core case/document API completion
+- Begin Phase 2: ProPublica Nonprofit Explorer API connector (990 data)
+- Begin Phase 2: Ohio SOS business search connector
+- Begin Phase 2: Entity extraction (person/org/date/amount) from extracted text
+- Enter first real case through the intake UI to exercise the hardened upload workflow
 
 ## Immediate Next Steps
 
-- Exercise the expanded case/document API with a real intake payload set
-- Add proper `ModelAdmin` classes for remaining plain-registered models
-- Decide whether to keep the API Django-native or introduce DRF later
+- Build `entity_extraction.py` first pass (deterministic rules: names/orgs/dates/amounts)
+- Wire entity extraction into `document_upload` after extraction/classification
+- Persist extracted entities into existing `Person` and `Organization` models with idempotent upsert behavior
+- Add entity extraction matrix tests for OCR-noisy text and duplicate entity handling
 
 ## Current Blockers
 
@@ -63,6 +65,24 @@ Use it to track:
 - Added strict SHA-256 validation for document intake payloads
 - Grew the investigations test suite to 41 passing tests covering create, list, detail, update, delete, filters, sorting, and validation paths
 - Added `backend/API_COOKBOOK.md` and refreshed `backend/SERIALIZER_API_REFERENCE.md`
+
+### 2026-03-26 (Session 6) — Phase 1 Complete
+- Added NOTARY and TRUSTEE to PersonRole enum (run makemigrations to apply)
+- Fixed stale `orc_reference` field reference in FindingAdmin — updated to current Finding fields (severity, confidence, status, signal_type, signal_rule_id)
+- Added proper ModelAdmin classes for all 6 plain-registered models: Property, FinancialInstrument, PersonDocument, OrgDocument, PersonOrganization, PropertyTransaction
+- Confirmed Phase 1 minimal dashboard is complete — Django template views (case_list, case_detail, case_form, document_upload) satisfy the Phase 1 charter requirement; React frontend deferred to Phase 3 per charter
+- Phase 1 is fully closed out — all charter items complete
+
+### 2026-03-26 (Session 7) — Phase 2 Processing Pipeline Foundations
+- Implemented direct PDF text extraction using PyMuPDF and wired automatic extraction into `document_upload`
+- Added synchronous OCR fallback for scanned PDFs via Tesseract + Pillow with 30 MB gate for sync processing
+- Added rule-based document classification service and wired automatic classification when user keeps `doc_type=OTHER`
+- Expanded `DocumentType` taxonomy and added `is_generated` + `doc_subtype` fields for evidence/output separation
+- Added and applied migrations `0005` and `0006`; database schema updated and validated
+- Hardened `Person.role_tags` with `PersonRole` choices and added `Person.is_deceased()` helper
+- Added structured upload decision logging with dedicated logger `investigations.upload_pipeline`
+- Logging is production-ready by default, quiet in test/dev by default, and toggleable with `ENABLE_UPLOAD_PIPELINE_LOGS=true`
+- Expanded test coverage to 46 passing tests, including upload decision matrix and generated-flag behavior
 
 ## Update Pattern
 

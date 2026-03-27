@@ -1,5 +1,6 @@
 import json
 import hashlib
+import logging
 from datetime import datetime, time
 
 from django.db.models.deletion import ProtectedError, RestrictedError
@@ -10,7 +11,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from .forms import CaseForm, DocumentUploadForm
-from .models import Case, Document
+from .models import Case, Document, DocumentType, OcrStatus
 from .serializers import (
     CaseIntakeSerializer,
     CaseUpdateSerializer,
@@ -28,6 +29,9 @@ MAX_PAGE_LIMIT = 100
 CASE_SORT_FIELDS = {"created_at", "name", "status", "id"}
 DOCUMENT_SORT_FIELDS = {"uploaded_at", "filename",
                         "file_size", "doc_type", "ocr_status", "id"}
+
+
+logger = logging.getLogger("investigations.upload_pipeline")
 
 
 def _parse_json_body(request):
@@ -508,16 +512,59 @@ def document_upload(request):
             from django.core.files.storage import default_storage
             saved_path = default_storage.save(relative_path, uploaded)
 
-            Document.objects.create(
+            # Attempt text extraction for PDF files
+            extracted_text = ""
+            ocr_status = OcrStatus.PENDING
+            processing_route = "non_pdf"
+            if uploaded.name.lower().endswith(".pdf"):
+                from .extraction import extract_from_pdf
+                abs_path = default_storage.path(saved_path)
+                extracted_text, ocr_status = extract_from_pdf(
+                    abs_path, file_size=uploaded.size)
+                processing_route = f"pdf_{ocr_status.lower()}"
+            else:
+                ocr_status = OcrStatus.NOT_NEEDED
+
+            # Auto-classify doc_type when user left it as OTHER
+            doc_type = form.cleaned_data["doc_type"]
+            auto_classified = False
+            if doc_type == "OTHER" and extracted_text:
+                from .classification import classify_document
+                doc_type = classify_document(extracted_text)
+                auto_classified = True
+
+            is_generated = (
+                auto_classified and doc_type == DocumentType.REFERRAL_MEMO
+            )
+
+            document = Document.objects.create(
                 case=case,
                 filename=uploaded.name,
                 file_path=saved_path,
                 sha256_hash=sha256,
                 file_size=uploaded.size,
-                doc_type=form.cleaned_data["doc_type"],
+                doc_type=doc_type,
+                is_generated=is_generated,
                 source_url=form.cleaned_data.get("source_url") or None,
+                extracted_text=extracted_text or None,
+                ocr_status=ocr_status,
                 uploaded_at=timezone.now(),
                 updated_at=timezone.now(),
+            )
+
+            logger.info(
+                "document_upload_processed",
+                extra={
+                    "document_id": str(document.pk),
+                    "case_id": str(case.pk),
+                    "uploaded_filename": uploaded.name,
+                    "file_size": uploaded.size,
+                    "processing_route": processing_route,
+                    "ocr_status": ocr_status,
+                    "doc_type": doc_type,
+                    "auto_classified": auto_classified,
+                    "is_generated": is_generated,
+                },
             )
             return redirect("case_detail", pk=case.pk)
     else:

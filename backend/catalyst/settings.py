@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -79,3 +80,41 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+IS_TESTING = any(arg.startswith("test") for arg in sys.argv)
+UPLOAD_PIPELINE_FORCE_ENABLE = os.getenv(
+    "ENABLE_UPLOAD_PIPELINE_LOGS", "False"
+).lower() == "true"
+
+if UPLOAD_PIPELINE_FORCE_ENABLE:
+    UPLOAD_PIPELINE_LOG_LEVEL = "INFO"
+elif DEBUG or IS_TESTING:
+    # Keep local dev and tests quiet by default.
+    UPLOAD_PIPELINE_LOG_LEVEL = "WARNING"
+else:
+    # Production default: emit structured upload decision logs.
+    UPLOAD_PIPELINE_LOG_LEVEL = "INFO"
+
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "upload_json": {
+            "()": "investigations.logging_utils.JsonKeyValueFormatter",
+        },
+    },
+    "handlers": {
+        "upload_pipeline_console": {
+            "class": "logging.StreamHandler",
+            "formatter": "upload_json",
+        },
+    },
+    "loggers": {
+        "investigations.upload_pipeline": {
+            "handlers": ["upload_pipeline_console"],
+            "level": UPLOAD_PIPELINE_LOG_LEVEL,
+            "propagate": False,
+        },
+    },
+}

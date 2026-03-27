@@ -1,7 +1,9 @@
 import json
 import uuid
 from datetime import timedelta
+from unittest.mock import patch
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -869,3 +871,183 @@ class CaseIntakeApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 404)
+
+
+class DocumentUploadRoutingTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.case = Case.objects.create(name="Upload Routing Case")
+
+    def _upload_file(
+        self,
+        *,
+        filename: str,
+        content: bytes,
+        content_type: str,
+        doc_type: str = "OTHER",
+    ):
+        upload = SimpleUploadedFile(
+            filename, content, content_type=content_type)
+        return self.client.post(
+            reverse("document_upload"),
+            data={
+                "case": str(self.case.pk),
+                "doc_type": doc_type,
+                "source_url": "",
+                "file": upload,
+            },
+        )
+
+    def _upload_pdf(self, *, doc_type: str = "OTHER", filename: str = "routing-test.pdf"):
+        return self._upload_file(
+            filename=filename,
+            content=b"%PDF-1.4 test payload",
+            content_type="application/pdf",
+            doc_type=doc_type,
+        )
+
+    @patch("investigations.classification.classify_document")
+    @patch("investigations.extraction.extract_from_pdf")
+    def test_auto_classified_referral_memo_sets_is_generated_true(
+        self,
+        mock_extract_from_pdf,
+        mock_classify_document,
+    ):
+        mock_extract_from_pdf.return_value = (
+            "referral memorandum summary of findings",
+            OcrStatus.COMPLETED,
+        )
+        mock_classify_document.return_value = DocumentType.REFERRAL_MEMO
+
+        response = self._upload_pdf(doc_type=DocumentType.OTHER)
+
+        self.assertEqual(response.status_code, 302)
+        document = Document.objects.get(case=self.case)
+        self.assertEqual(document.doc_type, DocumentType.REFERRAL_MEMO)
+        self.assertTrue(document.is_generated)
+
+    @patch("investigations.classification.classify_document")
+    @patch("investigations.extraction.extract_from_pdf")
+    def test_manual_referral_memo_does_not_auto_set_generated(
+        self,
+        mock_extract_from_pdf,
+        mock_classify_document,
+    ):
+        mock_extract_from_pdf.return_value = (
+            "referral memorandum summary of findings",
+            OcrStatus.COMPLETED,
+        )
+
+        response = self._upload_pdf(doc_type=DocumentType.REFERRAL_MEMO)
+
+        self.assertEqual(response.status_code, 302)
+        document = Document.objects.get(case=self.case)
+        self.assertEqual(document.doc_type, DocumentType.REFERRAL_MEMO)
+        self.assertFalse(document.is_generated)
+        mock_classify_document.assert_not_called()
+
+    @patch("investigations.classification.classify_document")
+    @patch("investigations.extraction.extract_from_pdf")
+    def test_auto_classified_non_referral_document_stays_not_generated(
+        self,
+        mock_extract_from_pdf,
+        mock_classify_document,
+    ):
+        mock_extract_from_pdf.return_value = (
+            "warranty deed legal description grantor grantee",
+            OcrStatus.COMPLETED,
+        )
+        mock_classify_document.return_value = DocumentType.DEED
+
+        response = self._upload_pdf(doc_type=DocumentType.OTHER)
+
+        self.assertEqual(response.status_code, 302)
+        document = Document.objects.get(case=self.case)
+        self.assertEqual(document.doc_type, DocumentType.DEED)
+        self.assertFalse(document.is_generated)
+
+    @patch("investigations.classification.classify_document")
+    @patch("investigations.extraction.extract_from_pdf")
+    def test_upload_routing_matrix_for_pdf_paths(
+        self,
+        mock_extract_from_pdf,
+        mock_classify_document,
+    ):
+        scenarios = [
+            {
+                "name": "digital_pdf_direct_text",
+                "extract_result": ("embedded text from digital pdf", OcrStatus.NOT_NEEDED),
+                "classified_type": DocumentType.DEED,
+                "expected_doc_type": DocumentType.DEED,
+                "expected_ocr_status": OcrStatus.NOT_NEEDED,
+                "expected_is_generated": False,
+            },
+            {
+                "name": "scanned_pdf_ocr_completed",
+                "extract_result": ("ocr result with financing statement", OcrStatus.COMPLETED),
+                "classified_type": DocumentType.UCC,
+                "expected_doc_type": DocumentType.UCC,
+                "expected_ocr_status": OcrStatus.COMPLETED,
+                "expected_is_generated": False,
+            },
+            {
+                "name": "scanned_pdf_too_large_pending",
+                "extract_result": ("", OcrStatus.PENDING),
+                "classified_type": None,
+                "expected_doc_type": DocumentType.OTHER,
+                "expected_ocr_status": OcrStatus.PENDING,
+                "expected_is_generated": False,
+            },
+        ]
+
+        for index, scenario in enumerate(scenarios):
+            with self.subTest(scenario=scenario["name"]):
+                mock_extract_from_pdf.return_value = scenario["extract_result"]
+                mock_classify_document.reset_mock()
+                if scenario["classified_type"] is not None:
+                    mock_classify_document.return_value = scenario["classified_type"]
+
+                response = self._upload_pdf(
+                    doc_type=DocumentType.OTHER,
+                    filename=f"routing-{index}.pdf",
+                )
+                self.assertEqual(response.status_code, 302)
+
+                document = Document.objects.get(
+                    case=self.case,
+                    filename=f"routing-{index}.pdf",
+                )
+                self.assertEqual(document.doc_type,
+                                 scenario["expected_doc_type"])
+                self.assertEqual(document.ocr_status,
+                                 scenario["expected_ocr_status"])
+                self.assertEqual(document.is_generated,
+                                 scenario["expected_is_generated"])
+
+                if scenario["extract_result"][0]:
+                    mock_classify_document.assert_called_once()
+                else:
+                    mock_classify_document.assert_not_called()
+
+    @patch("investigations.classification.classify_document")
+    @patch("investigations.extraction.extract_from_pdf")
+    def test_non_pdf_upload_skips_extraction_and_classification(
+        self,
+        mock_extract_from_pdf,
+        mock_classify_document,
+    ):
+        response = self._upload_file(
+            filename="notes.txt",
+            content=b"plain text note",
+            content_type="text/plain",
+            doc_type=DocumentType.OTHER,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        document = Document.objects.get(case=self.case, filename="notes.txt")
+        self.assertEqual(document.doc_type, DocumentType.OTHER)
+        self.assertEqual(document.ocr_status, OcrStatus.NOT_NEEDED)
+        self.assertFalse(document.is_generated)
+
+        mock_extract_from_pdf.assert_not_called()
+        mock_classify_document.assert_not_called()
