@@ -21,7 +21,7 @@ Its current Phase 1 focus is:
 - PostgreSQL 16 runs locally in Docker container `catalyst_db` (port 5432)
 - SQL bootstrap migrations live in `database/migrations/`
 - Django migrations live in `backend/investigations/migrations/`
-- 18 Django migrations applied; 23 tables confirmed in database
+- 20 Django migrations applied; 23 tables confirmed in database
 - Django connects via credentials in `.env` at project root — loaded by `load_dotenv()` in `settings.py`
 
 ### Key Design Direction
@@ -79,6 +79,23 @@ Django admin is now configured with proper `ModelAdmin` classes for the primary 
 - Validation and serialization logic is isolated in `investigations/serializers.py`
 - API usage is documented in `backend/SERIALIZER_API_REFERENCE.md` and `backend/API_COOKBOOK.md`
 
+## Phase 2 Processing Layer (Current State)
+
+- Upload pipeline now performs direct PDF text extraction (PyMuPDF) automatically on document upload
+- Scanned/sparse PDFs now use synchronous OCR fallback (Tesseract + Pillow) for files up to 30 MB
+- Files above the 30 MB OCR gate are preserved with `ocr_status=PENDING` for later async handling
+- Rule-based document classification now auto-assigns `doc_type` when user input stays at `OTHER`
+- `Document` model now separates source evidence from generated outputs via `is_generated`
+- `doc_subtype` added for fine-grained subtype detail without enum explosion
+
+## Hardening & Observability
+
+- Upload decision routing is now covered by matrix-style tests and generated-flag path tests
+- Upload pipeline emits structured decision logs through dedicated logger `investigations.upload_pipeline`
+- Logs are JSON-formatted for machine parsing in production (`INFO` level by default)
+- Test/dev logging noise is suppressed by default (`WARNING` level), with optional override via `ENABLE_UPLOAD_PIPELINE_LOGS=true`
+- Person role tags now use constrained choices (`PersonRole`) instead of free-text arrays for reliable filtering
+
 ## Session Recap Log
 
 ### 2026-03-20 (Session 1)
@@ -115,6 +132,14 @@ Django admin is now configured with proper `ModelAdmin` classes for the primary 
 - Strict document SHA-256 validation added at intake time
 - API docs were formalized with a narrative reference and a copy/paste cookbook
 - Test coverage expanded to 41 passing API tests, giving the Phase 1 backend a stronger regression safety net
+
+### 2026-03-26 (Session 7)
+- Implemented Phase 2 processing foundations: direct extraction + OCR fallback + classification
+- Added expanded document taxonomy and output separation fields (`is_generated`, `doc_subtype`)
+- Added and applied migrations `0005` and `0006` to align schema with new processing and person-role constraints
+- Hardened person roles with constrained `PersonRole` choices and added deceased convenience logic
+- Added structured upload decision logging with environment-aware behavior (prod on, dev/test quiet by default)
+- Expanded investigations test coverage to 46 passing tests with dedicated upload routing matrix coverage
 
 ## Next Updates
 

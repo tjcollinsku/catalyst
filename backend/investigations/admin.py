@@ -61,9 +61,9 @@ class OrganizationAdmin(admin.ModelAdmin):
 
 @admin.register(Finding)
 class FindingAdmin(admin.ModelAdmin):
-    list_display = ("title", "case", "severity", "orc_reference", "created_at")
-    list_filter = ("severity",)
-    search_fields = ("title", "orc_reference", "narrative")
+    list_display = ("title", "case", "severity", "confidence", "status", "created_at")
+    list_filter = ("severity", "confidence", "status")
+    search_fields = ("title", "narrative", "signal_type", "signal_rule_id")
     ordering = ("-created_at",)
 
 
@@ -88,9 +88,49 @@ class AuditLogAdmin(admin.ModelAdmin):
         return False  # append-only — no deletes via admin
 
 
-admin.site.register(Property)
-admin.site.register(FinancialInstrument)
-admin.site.register(PersonDocument)
-admin.site.register(OrgDocument)
-admin.site.register(PersonOrganization)
-admin.site.register(PropertyTransaction)
+@admin.register(Property)
+class PropertyAdmin(admin.ModelAdmin):
+    list_display = ("address", "parcel_number", "county", "assessed_value",
+                    "purchase_price", "case")
+    list_filter = ("county",)
+    search_fields = ("address", "parcel_number", "county")
+    ordering = ("county", "address")
+
+
+@admin.register(FinancialInstrument)
+class FinancialInstrumentAdmin(admin.ModelAdmin):
+    list_display = ("filing_number", "instrument_type", "filing_date",
+                    "amount", "signer", "case")
+    list_filter = ("instrument_type",)
+    search_fields = ("filing_number",)
+    ordering = ("-filing_date",)
+
+
+@admin.register(PersonDocument)
+class PersonDocumentAdmin(admin.ModelAdmin):
+    list_display = ("person", "document", "page_reference")
+    search_fields = ("person__full_name", "document__filename")
+    ordering = ("person",)
+
+
+@admin.register(OrgDocument)
+class OrgDocumentAdmin(admin.ModelAdmin):
+    list_display = ("org", "document", "page_reference")
+    search_fields = ("org__name", "document__filename")
+    ordering = ("org",)
+
+
+@admin.register(PersonOrganization)
+class PersonOrganizationAdmin(admin.ModelAdmin):
+    list_display = ("person", "org", "role", "start_date", "end_date")
+    list_filter = ("role",)
+    search_fields = ("person__full_name", "org__name", "role")
+    ordering = ("person",)
+
+
+@admin.register(PropertyTransaction)
+class PropertyTransactionAdmin(admin.ModelAdmin):
+    list_display = ("property", "transaction_date", "price", "document")
+    list_filter = ("transaction_date",)
+    search_fields = ("property__address", "property__parcel_number")
+    ordering = ("-transaction_date",)

@@ -19,6 +19,8 @@ def serialize_document(document: Document) -> dict:
         "sha256_hash": document.sha256_hash,
         "file_size": document.file_size,
         "doc_type": document.doc_type,
+        "is_generated": document.is_generated,
+        "doc_subtype": document.doc_subtype,
         "source_url": document.source_url,
         "ocr_status": document.ocr_status,
         "uploaded_at": _serialize_datetime(document.uploaded_at),
@@ -207,6 +209,8 @@ class DocumentIntakeSerializer:
         "sha256_hash",
         "file_size",
         "doc_type",
+        "is_generated",
+        "doc_subtype",
         "source_url",
         "ocr_status",
         "extracted_text",
@@ -260,6 +264,8 @@ class DocumentIntakeSerializer:
             "doc_type": self.initial_data.get(
                 "doc_type", Document._meta.get_field("doc_type").default
             ),
+            "is_generated": self.initial_data.get("is_generated", False),
+            "doc_subtype": self.initial_data.get("doc_subtype", ""),
             "source_url": self.initial_data.get("source_url") or None,
             "ocr_status": self.initial_data.get(
                 "ocr_status", Document._meta.get_field("ocr_status").default
@@ -291,6 +297,8 @@ class DocumentIntakeSerializer:
             "sha256_hash": candidate.sha256_hash,
             "file_size": candidate.file_size,
             "doc_type": candidate.doc_type,
+            "is_generated": candidate.is_generated,
+            "doc_subtype": candidate.doc_subtype,
             "source_url": candidate.source_url,
             "ocr_status": candidate.ocr_status,
             "extracted_text": candidate.extracted_text,
@@ -306,7 +314,14 @@ class DocumentIntakeSerializer:
 
 
 class DocumentUpdateSerializer:
-    allowed_fields = {"doc_type", "source_url", "ocr_status", "extracted_text"}
+    allowed_fields = {
+        "doc_type",
+        "is_generated",
+        "doc_subtype",
+        "source_url",
+        "ocr_status",
+        "extracted_text",
+    }
 
     def __init__(self, data=None, instance=None):
         self.initial_data = data or {}
@@ -357,6 +372,12 @@ class DocumentUpdateSerializer:
 
         self.validated_data = {
             "doc_type": self.initial_data.get("doc_type", self.instance.doc_type),
+            "is_generated": self.initial_data.get(
+                "is_generated", self.instance.is_generated
+            ),
+            "doc_subtype": self.initial_data.get(
+                "doc_subtype", self.instance.doc_subtype
+            ),
             "source_url": self.initial_data.get("source_url", self.instance.source_url),
             "ocr_status": self.initial_data.get("ocr_status", self.instance.ocr_status),
             "extracted_text": self.initial_data.get(
@@ -371,6 +392,8 @@ class DocumentUpdateSerializer:
             self.validated_data["extracted_text"] = None
 
         self.instance.doc_type = self.validated_data["doc_type"]
+        self.instance.is_generated = self.validated_data["is_generated"]
+        self.instance.doc_subtype = self.validated_data["doc_subtype"]
         self.instance.source_url = self.validated_data["source_url"]
         self.instance.ocr_status = self.validated_data["ocr_status"]
         self.instance.extracted_text = self.validated_data["extracted_text"]
@@ -388,7 +411,7 @@ class DocumentUpdateSerializer:
             raise ValueError("Call is_valid() before save().")
         self.instance.updated_at = timezone.now()
         self.instance.save(
-            update_fields=["doc_type", "source_url",
+            update_fields=["doc_type", "is_generated", "doc_subtype", "source_url",
                            "ocr_status", "extracted_text", "updated_at"]
         )
         return self.instance
