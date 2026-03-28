@@ -1,0 +1,24 @@
+# type(scope): short summary (<= 72 chars)
+#
+# Body (required for non-trivial changes):
+# Why:
+# What:
+# Risk:
+# Validation:
+#
+# Example:
+# feat(api): add case created_at filter
+#
+# Why:
+# Needed timeline filtering in intake workflow.
+#
+# What:
+# Added serializer validation and queryset filter in case collection endpoint.
+# Added tests for valid date, invalid date, and inverted range.
+#
+# Risk:
+# Low; filter is opt-in and does not alter default query behavior.
+#
+# Validation:
+# pre-commit run --all-files
+# python manage.py test investigations.tests.test_api
