@@ -1120,10 +1120,15 @@ _REGISTRY: dict[OhioCounty, CountyInfo] = {
     ),
     OhioCounty.STARK: CountyInfo(
         name="Stark", fips="151", seat="Canton",
-        system=RecorderSystem.DTS_PAXWORLD,
-        portal_url="https://recordersearch.starkcountyohio.gov/paxworld/",
+        system=RecorderSystem.CUSTOM,
+        portal_url="https://starkcountyohio.gov/government/offices/recorder/",
         search_url_template=None,
-        portal_notes="Stark County uses DTS PAXWorld hosted on county infrastructure. No login required. Search by grantor/grantee name, last name first.",
+        portal_notes=(
+            "Stark County recorder office landing page. Use this as the stable entry "
+            "point for investigators to reach current records access links and office "
+            "instructions. Search endpoint availability may vary. "
+            "⚠️ UPDATED 2026-03-28: previous direct DTS PAXWorld URL timed out repeatedly."
+        ),
         phone="330-451-7443", address="110 Central Plaza S, Canton, OH 44702",
         records_from=1987,
     ),

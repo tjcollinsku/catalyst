@@ -186,6 +186,8 @@ USER_CONFIRMED_URLS: set[str] = {
     "https://cotthosting.com/OHKnoxLANExternal/LandRecords/protected/v4/SrchName.aspx",
     # Ross — CORRECTED 2026-03-28: RossRecords.us (was co.ross.oh.us, returned DEAD)
     "https://www.rossrecords.us/",
+    # Stark — user-confirmed recorder office landing page
+    "https://starkcountyohio.gov/government/offices/recorder/",
 }
 
 # Counties confirmed via Gemini audit and domain-pattern match.
