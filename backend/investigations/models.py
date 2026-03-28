@@ -216,6 +216,11 @@ class Organization(UUIDPrimaryKeyModel):
     registration_state = models.CharField(max_length=2, blank=True, null=True)
     status = models.CharField(
         max_length=20, choices=OrganizationStatus.choices, default=OrganizationStatus.UNKNOWN)
+    formation_date = models.DateField(
+        blank=True,
+        null=True,
+        help_text="Date the entity was legally formed per Secretary of State records. Used for SR-002 signal detection.",
+    )
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(default=timezone.now)
@@ -375,6 +380,11 @@ class Signal(UUIDPrimaryKeyModel):
         null=True,
         help_text="Required when dismissed — rationale for dismissal.",
     )
+    detected_summary = models.TextField(
+        blank=True,
+        default="",
+        help_text="Machine-generated explanation of what triggered this signal.",
+    )
     detected_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
@@ -438,7 +448,8 @@ class FindingEntity(UUIDPrimaryKeyModel):
 
     class Meta:
         db_table = "finding_entity"
-        indexes = [models.Index(fields=["finding"], name="idx_finding_entity_finding")]
+        indexes = [models.Index(
+            fields=["finding"], name="idx_finding_entity_finding")]
 
 
 class FindingDocument(UUIDPrimaryKeyModel):
@@ -455,7 +466,8 @@ class FindingDocument(UUIDPrimaryKeyModel):
             models.UniqueConstraint(
                 fields=["finding", "document"], name="uniq_finding_document_pair"),
         ]
-        indexes = [models.Index(fields=["document"], name="idx_finding_document_doc")]
+        indexes = [models.Index(fields=["document"],
+                                name="idx_finding_document_doc")]
 
 
 class EntitySignal(UUIDPrimaryKeyModel):
@@ -470,7 +482,8 @@ class EntitySignal(UUIDPrimaryKeyModel):
             models.UniqueConstraint(
                 fields=["signal", "entity_id", "entity_type"], name="uniq_entity_signal"),
         ]
-        indexes = [models.Index(fields=["signal"], name="idx_entity_signal_signal")]
+        indexes = [models.Index(
+            fields=["signal"], name="idx_entity_signal_signal")]
 
 
 class AuditLog(UUIDPrimaryKeyModel):

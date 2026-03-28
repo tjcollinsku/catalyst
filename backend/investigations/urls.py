@@ -15,6 +15,16 @@ urlpatterns = [
         views.api_case_document_detail,
         name="api_case_document_detail",
     ),
+    path(
+        "api/cases/<uuid:pk>/signals/",
+        views.api_case_signal_collection,
+        name="api_case_signal_collection",
+    ),
+    path(
+        "api/cases/<uuid:pk>/signals/<uuid:signal_id>/",
+        views.api_case_signal_detail,
+        name="api_case_signal_detail",
+    ),
     path("", views.case_list, name="case_list"),
     path("cases/new/", views.case_create, name="case_create"),
     path("cases/<uuid:pk>/", views.case_detail, name="case_detail"),

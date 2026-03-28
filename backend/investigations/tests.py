@@ -1,4 +1,5 @@
 import json
+import unittest
 import uuid
 from datetime import timedelta
 from unittest.mock import patch
@@ -555,6 +556,432 @@ class CaseIntakeApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         payload = response.json()
         self.assertIn("uploaded_from", payload["errors"])
+
+
+# =============================================================================
+# Entity Extraction Tests
+# These tests are pure Python — no DB, no Django. They test that regex patterns
+# correctly identify candidates from realistic public records text.
+# =============================================================================
+
+class EntityExtractionPersonTests(unittest.TestCase):
+    """Tests for person name extraction from labeled contexts."""
+
+    def setUp(self):
+        from .entity_extraction import extract_entities
+        self.extract = extract_entities
+
+    def test_extracts_labeled_grantor(self):
+        text = "GRANTOR: John A. Homan, of Hardin County, Ohio"
+        result = self.extract(text)
+        raws = [p["raw"] for p in result["persons"]]
+        self.assertTrue(
+            any("Homan" in r for r in raws),
+            f"Expected 'Homan' in persons, got: {raws}",
+        )
+
+    def test_extracts_labeled_grantee(self):
+        text = "GRANTEE: Do Good RE LLC, an Ohio limited liability company"
+        result = self.extract(text)
+        # Org should catch the LLC, person list should be empty or not contain LLC
+        raws = [p["raw"] for p in result["persons"]]
+        self.assertFalse(
+            any("Do Good RE LLC" in r for r in raws),
+            "LLC should not be extracted as a person",
+        )
+
+    def test_extracts_inverted_name(self):
+        text = "Debtor: HOMAN, JOHN A., Hardin County"
+        result = self.extract(text)
+        raws = [p["raw"] for p in result["persons"]]
+        self.assertTrue(
+            any("Homan" in r for r in raws),
+            f"Expected inverted name in persons, got: {raws}",
+        )
+
+    def test_returns_context_snippet(self):
+        text = "GRANTOR: John A. Homan, of Hardin County, Ohio, hereinafter"
+        result = self.extract(text)
+        self.assertTrue(len(result["persons"]) > 0)
+        self.assertIn("context", result["persons"][0])
+        self.assertIsInstance(result["persons"][0]["context"], str)
+
+    def test_empty_text_returns_empty_results(self):
+        result = self.extract("")
+        self.assertEqual(result["persons"], [])
+        self.assertEqual(result["orgs"], [])
+        self.assertEqual(result["dates"], [])
+        self.assertEqual(result["amounts"], [])
+
+    def test_whitespace_only_text_returns_empty_results(self):
+        result = self.extract("   \n\t  ")
+        self.assertEqual(result["persons"], [])
+
+
+class EntityExtractionOrgTests(unittest.TestCase):
+    """Tests for organization name extraction."""
+
+    def setUp(self):
+        from .entity_extraction import extract_entities
+        self.extract = extract_entities
+
+    def test_extracts_nonprofit_with_inc(self):
+        text = "Grantor: Do Good Ministries, Inc., an Ohio nonprofit corporation"
+        result = self.extract(text)
+        raws = [o["raw"] for o in result["orgs"]]
+        self.assertTrue(
+            any("Do Good Ministries" in r for r in raws),
+            f"Expected 'Do Good Ministries' in orgs, got: {raws}",
+        )
+
+    def test_extracts_llc(self):
+        text = "The property was transferred to Do Good RE LLC."
+        result = self.extract(text)
+        raws = [o["raw"] for o in result["orgs"]]
+        self.assertTrue(
+            any("Do Good RE LLC" in r for r in raws),
+            f"Expected LLC in orgs, got: {raws}",
+        )
+
+    def test_extracts_management_llp(self):
+        text = "Secured Party: Homan AG Management LLP"
+        result = self.extract(text)
+        raws = [o["raw"] for o in result["orgs"]]
+        self.assertTrue(
+            any("Homan AG Management" in r for r in raws),
+            f"Expected management org in orgs, got: {raws}",
+        )
+
+    def test_no_duplicate_orgs(self):
+        text = (
+            "Do Good Ministries, Inc. transferred property to Do Good Ministries, Inc."
+        )
+        result = self.extract(text)
+        raws = [o["raw"] for o in result["orgs"]]
+        do_good_count = sum(1 for r in raws if "Do Good Ministries" in r)
+        self.assertEqual(do_good_count, 1, "Duplicate org should be deduplicated")
+
+
+class EntityExtractionDateTests(unittest.TestCase):
+    """Tests for date extraction and normalization."""
+
+    def setUp(self):
+        from .entity_extraction import extract_entities
+        self.extract = extract_entities
+
+    def test_extracts_long_form_date(self):
+        text = "This deed is made this March 2, 2022, by and between"
+        result = self.extract(text)
+        self.assertTrue(len(result["dates"]) > 0)
+        normalized = result["dates"][0]["normalized"]
+        self.assertEqual(normalized, "2022-03-02")
+
+    def test_extracts_slash_date(self):
+        text = "Filed on 08/02/2022 with the Ohio Secretary of State."
+        result = self.extract(text)
+        self.assertTrue(len(result["dates"]) > 0)
+        normalized = result["dates"][0]["normalized"]
+        self.assertEqual(normalized, "2022-08-02")
+
+    def test_extracts_iso_date(self):
+        text = "Amendment date: 2022-08-02"
+        result = self.extract(text)
+        self.assertTrue(len(result["dates"]) > 0)
+        normalized = result["dates"][0]["normalized"]
+        self.assertEqual(normalized, "2022-08-02")
+
+    def test_no_duplicate_dates(self):
+        text = "Filed March 2, 2022. Recorded on 03/02/2022."
+        result = self.extract(text)
+        # Both refer to the same date — should be deduplicated by normalized form
+        march_2_count = sum(
+            1 for d in result["dates"] if d.get("normalized") == "2022-03-02"
+        )
+        self.assertEqual(march_2_count, 1, "Same date in two formats should deduplicate")
+
+
+class EntityExtractionAmountTests(unittest.TestCase):
+    """Tests for dollar amount extraction and normalization."""
+
+    def setUp(self):
+        from .entity_extraction import extract_entities
+        self.extract = extract_entities
+
+    def test_extracts_large_amount_with_commas(self):
+        text = "Total construction value: $4,505,000.00"
+        result = self.extract(text)
+        self.assertTrue(len(result["amounts"]) > 0)
+        self.assertEqual(result["amounts"][0]["normalized"], 4505000.0)
+
+    def test_extracts_zero_consideration(self):
+        text = "For consideration of $0.00 and other valuable consideration"
+        result = self.extract(text)
+        self.assertTrue(len(result["amounts"]) > 0)
+        self.assertEqual(result["amounts"][0]["normalized"], 0.0)
+
+    def test_extracts_round_amount(self):
+        text = "Purchase price: $300,000"
+        result = self.extract(text)
+        self.assertTrue(len(result["amounts"]) > 0)
+        self.assertEqual(result["amounts"][0]["normalized"], 300000.0)
+
+    def test_no_false_positive_on_year(self):
+        text = "Filed in the year 2022 with reference number 12345"
+        result = self.extract(text)
+        # Years and reference numbers should not be extracted as dollar amounts
+        self.assertEqual(result["amounts"], [])
+
+
+# =============================================================================
+# Entity Normalization Tests
+# Pure Python — no DB needed.
+# =============================================================================
+
+class EntityNormalizationPersonTests(unittest.TestCase):
+    """Tests that normalize_person_name produces consistent canonical forms."""
+
+    def setUp(self):
+        from .entity_normalization import normalize_person_name
+        self.normalize = normalize_person_name
+
+    def test_western_order_normalizes(self):
+        self.assertEqual(self.normalize("John A. Homan"), "john a homan")
+
+    def test_inverted_order_normalizes_to_same(self):
+        # Both should normalize to the same canonical form
+        western = self.normalize("John A. Homan")
+        inverted = self.normalize("HOMAN, JOHN A.")
+        self.assertEqual(western, inverted)
+
+    def test_all_caps_normalizes(self):
+        self.assertEqual(self.normalize("JOHN A HOMAN"), "john a homan")
+
+    def test_strips_honorifics(self):
+        self.assertEqual(self.normalize("Dr. John Homan"), "john homan")
+        self.assertEqual(self.normalize("Mr. John Homan"), "john homan")
+
+    def test_strips_jr_suffix(self):
+        result = self.normalize("John Homan Jr.")
+        self.assertNotIn("jr", result)
+        self.assertIn("john", result)
+        self.assertIn("homan", result)
+
+    def test_preserves_hyphen_in_name(self):
+        result = self.normalize("Mary Jo Winner-Baumer")
+        self.assertIn("winner-baumer", result)
+
+    def test_preserves_apostrophe_in_name(self):
+        result = self.normalize("Patrick O'Brien")
+        self.assertIn("o'brien", result)
+
+    def test_empty_string_returns_empty(self):
+        self.assertEqual(self.normalize(""), "")
+
+    def test_whitespace_only_returns_empty(self):
+        self.assertEqual(self.normalize("   "), "")
+
+
+class EntityNormalizationOrgTests(unittest.TestCase):
+    """Tests that normalize_org_name produces consistent canonical forms."""
+
+    def setUp(self):
+        from .entity_normalization import normalize_org_name
+        self.normalize = normalize_org_name
+
+    def test_strips_inc_designator(self):
+        with_inc = self.normalize("Do Good Ministries, Inc.")
+        without_inc = self.normalize("Do Good Ministries")
+        self.assertEqual(with_inc, without_inc)
+
+    def test_strips_llc_designator(self):
+        with_llc = self.normalize("Do Good RE LLC")
+        without_llc = self.normalize("Do Good RE")
+        self.assertEqual(with_llc, without_llc)
+
+    def test_strips_leading_the(self):
+        with_the = self.normalize("The Baumer Foundation")
+        without_the = self.normalize("Baumer Foundation")
+        self.assertEqual(with_the, without_the)
+
+    def test_normalizes_to_lowercase(self):
+        result = self.normalize("DO GOOD MINISTRIES INC")
+        self.assertEqual(result, result.lower())
+
+    def test_empty_string_returns_empty(self):
+        self.assertEqual(self.normalize(""), "")
+
+
+# =============================================================================
+# Entity Resolution Tests
+# These tests require the database (Django TestCase).
+# =============================================================================
+
+class EntityResolutionPersonTests(TestCase):
+    """Tests for resolve_person() — exact match, new record creation, fuzzy."""
+
+    def setUp(self):
+        from .entity_resolution import resolve_person
+        self.resolve = resolve_person
+        self.case = Case.objects.create(name="Resolution Test Case")
+
+    def test_creates_new_person_when_no_match(self):
+        result = self.resolve("John A. Homan", self.case)
+        self.assertTrue(result.created)
+        self.assertEqual(result.person.full_name, "John A. Homan")
+
+    def test_exact_match_returns_existing_person(self):
+        # First call — creates
+        first = self.resolve("John A. Homan", self.case)
+        self.assertTrue(first.created)
+        # Second call with identical name — should match
+        second = self.resolve("John A. Homan", self.case)
+        self.assertFalse(second.created)
+        self.assertEqual(first.person.id, second.person.id)
+
+    def test_normalized_match_returns_existing_person(self):
+        # Create with one form
+        first = self.resolve("John A. Homan", self.case)
+        self.assertTrue(first.created)
+        # Match with all-caps inverted form — normalizes to the same string
+        second = self.resolve("HOMAN, JOHN A.", self.case)
+        self.assertFalse(second.created)
+        self.assertEqual(first.person.id, second.person.id)
+
+    def test_no_cross_case_contamination(self):
+        other_case = Case.objects.create(name="Other Case")
+        self.resolve("John A. Homan", self.case)
+        # Same name in a different case should create a new record
+        result = self.resolve("John A. Homan", other_case)
+        self.assertTrue(result.created)
+
+    def test_fuzzy_candidate_surfaced_for_near_match(self):
+        # Create a person
+        self.resolve("John A. Homan", self.case)
+        # Resolve a near-match — should not create, but should surface fuzzy candidate
+        result = self.resolve("John Homan", self.case)
+        # May or may not create depending on threshold, but should have fuzzy candidates
+        # if it creates, the fuzzy list should still be populated for the near-match
+        if result.created:
+            self.assertTrue(
+                len(result.fuzzy_candidates) > 0,
+                "Near-match should surface fuzzy candidates even if new record created",
+            )
+
+    def test_completely_different_name_has_no_fuzzy_candidates(self):
+        self.resolve("John A. Homan", self.case)
+        result = self.resolve("Maria Gonzalez", self.case)
+        self.assertTrue(result.created)
+        self.assertEqual(result.fuzzy_candidates, [])
+
+    def test_creates_person_document_link_when_document_provided(self):
+        from .models import PersonDocument
+        doc = Document.objects.create(
+            case=self.case,
+            filename="deed.pdf",
+            file_path="cases/test/deed.pdf",
+            sha256_hash="d" * 64,
+            file_size=1024,
+        )
+        self.resolve("John A. Homan", self.case, document=doc)
+        self.assertTrue(
+            PersonDocument.objects.filter(
+                document=doc,
+                person__full_name="John A. Homan",
+            ).exists()
+        )
+
+    def test_person_document_link_is_idempotent(self):
+        from .models import PersonDocument
+        doc = Document.objects.create(
+            case=self.case,
+            filename="deed2.pdf",
+            file_path="cases/test/deed2.pdf",
+            sha256_hash="e" * 64,
+            file_size=1024,
+        )
+        self.resolve("John A. Homan", self.case, document=doc)
+        self.resolve("John A. Homan", self.case, document=doc)
+        link_count = PersonDocument.objects.filter(document=doc).count()
+        self.assertEqual(link_count, 1, "Repeated resolution should not create duplicate links")
+
+
+class EntityResolutionOrgTests(TestCase):
+    """Tests for resolve_org() — exact match, normalization, fuzzy."""
+
+    def setUp(self):
+        from .entity_resolution import resolve_org
+        self.resolve = resolve_org
+        self.case = Case.objects.create(name="Org Resolution Test Case")
+
+    def test_creates_new_org_when_no_match(self):
+        result = self.resolve("Do Good Ministries, Inc.", self.case)
+        self.assertTrue(result.created)
+
+    def test_exact_match_returns_existing_org(self):
+        first = self.resolve("Do Good Ministries, Inc.", self.case)
+        second = self.resolve("Do Good Ministries, Inc.", self.case)
+        self.assertFalse(second.created)
+        self.assertEqual(first.org.id, second.org.id)
+
+    def test_normalized_match_strips_inc_designator(self):
+        first = self.resolve("Do Good Ministries, Inc.", self.case)
+        # Without "Inc." should normalize to the same form
+        second = self.resolve("Do Good Ministries", self.case)
+        self.assertFalse(second.created)
+        self.assertEqual(first.org.id, second.org.id)
+
+
+class EntityResolutionBatchTests(TestCase):
+    """Tests for resolve_all_entities() batch entry point."""
+
+    def setUp(self):
+        from .entity_resolution import resolve_all_entities
+        self.resolve_all = resolve_all_entities
+        self.case = Case.objects.create(name="Batch Resolution Test Case")
+
+    def test_batch_creates_persons_and_orgs(self):
+        extraction_result = {
+            "persons": [
+                {"raw": "John A. Homan", "context": "GRANTOR: John A. Homan"},
+                {"raw": "Mary Jo Winner", "context": "GRANTEE: Mary Jo Winner"},
+            ],
+            "orgs": [
+                {"raw": "Do Good Ministries, Inc.", "context": "..."},
+            ],
+            "dates": [],
+            "amounts": [],
+            "parcels": [],
+            "filing_refs": [],
+        }
+        summary = self.resolve_all(extraction_result, self.case)
+        self.assertEqual(summary.persons_created, 2)
+        self.assertEqual(summary.orgs_created, 1)
+        self.assertEqual(summary.persons_matched, 0)
+        self.assertEqual(summary.orgs_matched, 0)
+
+    def test_batch_matches_existing_on_second_run(self):
+        extraction_result = {
+            "persons": [{"raw": "John A. Homan", "context": ""}],
+            "orgs": [],
+            "dates": [],
+            "amounts": [],
+            "parcels": [],
+            "filing_refs": [],
+        }
+        self.resolve_all(extraction_result, self.case)
+        summary = self.resolve_all(extraction_result, self.case)
+        self.assertEqual(summary.persons_created, 0)
+        self.assertEqual(summary.persons_matched, 1)
+
+    def test_batch_handles_empty_extraction_result(self):
+        extraction_result = {
+            "persons": [], "orgs": [], "dates": [],
+            "amounts": [], "parcels": [], "filing_refs": [],
+        }
+        summary = self.resolve_all(extraction_result, self.case)
+        self.assertEqual(summary.persons_created, 0)
+        self.assertEqual(summary.orgs_created, 0)
+        self.assertEqual(summary.fuzzy_candidates, [])
 
     def test_list_case_documents_rejects_inverted_uploaded_date_range(self):
         case = Case.objects.create(name="Inverted Uploaded Range Case")
