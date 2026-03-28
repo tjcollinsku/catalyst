@@ -118,12 +118,13 @@ One-time setup:
    - `git config commit.template .gitmessage.txt`
 2. Install and enable pre-commit hooks:
    - `pip install -r backend/requirements-dev.txt`
-   - `pre-commit install`
+   - `bash ./pc install`
 
 Daily usage:
 
 1. Run checks before commit:
-   - `pre-commit run --all-files`
+   - `bash ./pc`
+   - Or: `bash ./pc run --all-files`
 2. Keep commit scope focused by concern.
 3. Complete the PR template for every merge request.
 
