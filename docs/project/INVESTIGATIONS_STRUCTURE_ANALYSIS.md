@@ -1,6 +1,6 @@
 # Backend/Investigations Folder - Logical Structure Analysis
 
-**Analysis Date:** March 28, 2026  
+**Analysis Date:** March 28, 2026
 **Purpose:** Understand module categorization, dependencies, and interdependencies
 
 ---
@@ -242,41 +242,41 @@ These are standard Django components:
 ```
 1. REST API: POST /api/cases/<case>/documents/upload
    ↓ views.py
-   
+
 2. Extract Text from PDF
    → extraction.extract_from_pdf(file_path)
    → extraction.py (Tier 1: stateless)
    ↓ (text, ocr_status)
-   
+
 3. Classify Document Type
    → classification.classify_document(text)
    → classification.py (Tier 1: stateless)
    ↓ DocumentType guess
-   
+
 4. Extract Entity Candidates
    → entity_extraction.extract_entities(text, doc_type)
    → entity_extraction.py (Tier 1: stateless)
    ↓ (persons, orgs, dates, amounts, parcels, filing_refs)
-   
+
 5. Normalize Entities
    → entity_normalization.normalize_person_name(raw)
    → entity_normalization.py (Tier 1: stateless)
    ↓ normalized_name
-   
+
 6. Resolve Entities (Tier 2: needs DB)
    → entity_resolution.resolve_person(case, normalized_name)
    → entity_resolution.py (may write to Person model)
    ↓ PersonResolutionResult (matched/created + fuzzy candidates)
-   
+
 7. Evaluate Signals
    → signal_rules.evaluate_document(case, document)
    → signal_rules.py (Tier 2: ORM queries)
    ↓ list[SignalTrigger]
-   
+
 8. Persist Results (Tier 2: writes)
    → signal_rules.persist_signals(case, triggers)
    → Creates Signal model instances
-   
+
 9. Return Response
    ← serializers.py (format for JSON)
    ← views.py
@@ -340,10 +340,10 @@ Investigator can manually associate/create Organization record
 ## VI. Potential Refactoring / Improvement Areas
 
 ### **Current Strengths**
-✅ Clear separation of concerns (Tier 1 vs Tier 2)  
-✅ Stateless utilities are testable and reusable  
-✅ Explicit error handling with domain-specific exceptions  
-✅ Staleness warnings prevent silent data rot  
+✅ Clear separation of concerns (Tier 1 vs Tier 2)
+✅ Stateless utilities are testable and reusable
+✅ Explicit error handling with domain-specific exceptions
+✅ Staleness warnings prevent silent data rot
 
 ### **Potential Improvements**
 - [ ] `entity_resolution.py` uses TYPE_CHECKING imports but still touches models — could move DB writes to a separate `models.py` function (would be pure factory pattern)

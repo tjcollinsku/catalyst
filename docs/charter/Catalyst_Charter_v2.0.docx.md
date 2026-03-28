@@ -515,4 +515,3 @@ Catalyst is designed to function simultaneously as a working investigative tool 
 ***The most dangerous feature is the one that removes human judgment.***
 
 This principle is not a disclaimer. It is a design constraint that shapes every architectural decision in the platform. Signals require investigator confirmation before becoming Findings. Findings require investigator narrative before appearing in memos. Memos cite sources and describe patterns — they do not assert guilt. The platform is software built by someone who understands that in investigative work, the difference between a well-documented referral and a dangerous accusation is human judgment, applied carefully, at every step.
-

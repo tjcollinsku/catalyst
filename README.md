@@ -91,8 +91,9 @@ Extraction and connector paths are best-effort where appropriate. A partial fail
 - [backend/README.md](backend/README.md)
 - [database/migrations](database/migrations)
 - [database/migrations/README.md](database/migrations/README.md)
-- [CATALYST_SYSTEM_OVERVIEW.md](CATALYST_SYSTEM_OVERVIEW.md)
-- [CATALYST_FILE_WALKTHROUGH.md](CATALYST_FILE_WALKTHROUGH.md)
+- [docs/README.md](docs/README.md)
+- [docs/project/CATALYST_SYSTEM_OVERVIEW.md](docs/project/CATALYST_SYSTEM_OVERVIEW.md)
+- [docs/project/CATALYST_FILE_WALKTHROUGH.md](docs/project/CATALYST_FILE_WALKTHROUGH.md)
 
 ## How To Run
 
