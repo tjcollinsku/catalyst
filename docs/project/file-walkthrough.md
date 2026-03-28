@@ -14,7 +14,7 @@ This file tracks what the important project files do so we can update it increme
 - Template for local configuration values
 - Includes database and Django settings
 
-### `docs/ops/GOVERNMENT_CORRESPONDENCE_TRACKER.md`
+### `docs/ops/government-correspondence-tracker.md`
 - Tracks external agency handoff references
 - Holds filing IDs and operational notes
 
