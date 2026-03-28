@@ -22,7 +22,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import (
+from ..models import (
     Case,
     Document,
     DocumentType,
@@ -37,8 +37,8 @@ from .models import (
     SignalSeverity,
     SignalStatus,
 )
-from .serializers import SignalUpdateSerializer, serialize_signal
-from .signal_rules import (
+from ..serializers import SignalUpdateSerializer, serialize_signal
+from ..signal_rules import (
     RULE_REGISTRY,
     SignalTrigger,
     evaluate_case,
