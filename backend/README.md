@@ -33,3 +33,36 @@ This folder contains the Django project skeleton that will own model-first schem
    ```bash
    python manage.py makemigrations investigations
    ```
+
+## Developer Guardrails
+
+Use these commands to keep the codebase clean and avoid cleanup debt.
+
+1. Install dev tooling:
+
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
+
+2. Enable pre-commit hooks:
+
+   ```bash
+   pre-commit install
+   ```
+
+3. Run checks before commit:
+
+   ```bash
+   pre-commit run --all-files
+   ```
+
+4. Manual lint/format (optional):
+
+   ```bash
+   ruff check . --fix
+   ruff format .
+   ```
+
+Guardrails configured in repo root:
+- `.pre-commit-config.yaml`
+- `pyproject.toml`
