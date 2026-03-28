@@ -2,7 +2,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 import re
 
-from .models import Case, Document
+from .models import Case, Document, Signal, SignalStatus
 
 
 def _serialize_datetime(value):
@@ -414,4 +414,134 @@ class DocumentUpdateSerializer:
             update_fields=["doc_type", "is_generated", "doc_subtype", "source_url",
                            "ocr_status", "extracted_text", "updated_at"]
         )
+        return self.instance
+
+
+# ---------------------------------------------------------------------------
+# Signal serializers
+# ---------------------------------------------------------------------------
+
+def serialize_signal(signal: Signal) -> dict:
+    from .signal_rules import RULE_REGISTRY
+    rule = RULE_REGISTRY.get(signal.rule_id)
+    return {
+        "id": str(signal.pk),
+        "rule_id": signal.rule_id,
+        "severity": signal.severity,
+        "status": signal.status,
+        "title": rule.title if rule else signal.rule_id,
+        "description": rule.description if rule else "",
+        "detected_summary": signal.detected_summary,
+        "trigger_entity_id": (
+            str(signal.trigger_entity_id) if signal.trigger_entity_id else None
+        ),
+        "trigger_doc_id": (
+            str(signal.trigger_doc_id) if signal.trigger_doc_id else None
+        ),
+        "investigator_note": signal.investigator_note,
+        "detected_at": _serialize_datetime(signal.detected_at),
+    }
+
+
+_VALID_SIGNAL_STATUSES = {
+    SignalStatus.OPEN,
+    SignalStatus.CONFIRMED,
+    SignalStatus.DISMISSED,
+    SignalStatus.ESCALATED,
+}
+
+
+class SignalUpdateSerializer:
+    """
+    Validates PATCH payloads for a Signal instance.
+
+    Allowed fields: ``status``, ``investigator_note``.
+    ``investigator_note`` is required when status is DISMISSED so that there is
+    always a documented rationale (FR-604).
+    """
+
+    allowed_fields = {"status", "investigator_note"}
+
+    def __init__(self, data=None, instance=None):
+        self.initial_data = data or {}
+        self.instance = instance
+        self.validated_data = {}
+        self._errors = {}
+
+    @property
+    def errors(self) -> dict:
+        return self._errors
+
+    @property
+    def data(self) -> dict:
+        if self.instance is None:
+            return {}
+        return serialize_signal(self.instance)
+
+    def is_valid(self) -> bool:
+        self._errors = {}
+        self.validated_data = {}
+
+        if self.instance is None:
+            self._errors = {"non_field_errors": [
+                "A signal instance is required."]}
+            return False
+
+        if not isinstance(self.initial_data, dict):
+            self._errors = {"non_field_errors": ["Expected a JSON object."]}
+            return False
+
+        if not self.initial_data:
+            self._errors = {
+                "non_field_errors": [
+                    "Provide at least one updatable field in the payload."
+                ]
+            }
+            return False
+
+        unexpected_fields = sorted(
+            set(self.initial_data.keys()) - self.allowed_fields
+        )
+        if unexpected_fields:
+            self._errors = {
+                "non_field_errors": [
+                    f"Unexpected field(s): {', '.join(unexpected_fields)}"
+                ]
+            }
+            return False
+
+        new_status = self.initial_data.get("status", self.instance.status)
+        if new_status not in _VALID_SIGNAL_STATUSES:
+            valid_list = ", ".join(sorted(_VALID_SIGNAL_STATUSES))
+            self._errors = {
+                "status": [
+                    f"Invalid status. Expected one of: {valid_list}."
+                ]
+            }
+            return False
+
+        new_note = self.initial_data.get(
+            "investigator_note", self.instance.investigator_note
+        )
+
+        if new_status == SignalStatus.DISMISSED and not (new_note or "").strip():
+            self._errors = {
+                "investigator_note": [
+                    "A dismissal rationale is required when setting status to DISMISSED."
+                ]
+            }
+            return False
+
+        self.validated_data = {
+            "status": new_status,
+            "investigator_note": new_note or "",
+        }
+        return True
+
+    def save(self) -> Signal:
+        if not self.validated_data:
+            raise ValueError("Call is_valid() before save().")
+        self.instance.status = self.validated_data["status"]
+        self.instance.investigator_note = self.validated_data["investigator_note"]
+        self.instance.save(update_fields=["status", "investigator_note"])
         return self.instance

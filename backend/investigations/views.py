@@ -11,15 +11,17 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from .forms import CaseForm, DocumentUploadForm
-from .models import Case, Document, DocumentType, OcrStatus
+from .models import Case, Document, DocumentType, OcrStatus, Signal, SignalSeverity, SignalStatus
 from .serializers import (
     CaseIntakeSerializer,
     CaseUpdateSerializer,
     DocumentIntakeSerializer,
     DocumentUpdateSerializer,
+    SignalUpdateSerializer,
     serialize_case,
     serialize_case_detail,
     serialize_document,
+    serialize_signal,
 )
 
 
@@ -472,6 +474,108 @@ def api_case_document_detail(request, pk, document_id):
     return JsonResponse(serialize_document(document))
 
 
+# ---------------------------------------------------------------------------
+# Signal API endpoints
+# ---------------------------------------------------------------------------
+
+SIGNAL_SORT_FIELDS = {"detected_at", "severity", "status", "rule_id", "id"}
+
+
+@require_http_methods(["GET"])
+def api_case_signal_collection(request, pk):
+    case = get_object_or_404(Case, pk=pk)
+
+    limit, offset, pagination_error = _parse_limit_offset(request)
+    if pagination_error is not None:
+        return pagination_error
+
+    order_by, direction, sort_error = _parse_sort_params(
+        request,
+        allowed_fields=SIGNAL_SORT_FIELDS,
+        default_field="detected_at",
+    )
+    if sort_error is not None:
+        return sort_error
+
+    ordering = _build_ordering_fields(order_by, direction)
+    signals_qs = Signal.objects.filter(case=case).order_by(*ordering)
+
+    # Optional filters
+    raw_status = request.GET.get("status")
+    if raw_status is not None:
+        valid_statuses = {c[0]
+                          for c in Signal._meta.get_field("status").choices}
+        if raw_status not in valid_statuses:
+            return JsonResponse(
+                {
+                    "errors": {
+                        "status": [
+                            f"Invalid status. Expected one of: {', '.join(sorted(valid_statuses))}."
+                        ]
+                    }
+                },
+                status=400,
+            )
+        signals_qs = signals_qs.filter(status=raw_status)
+
+    raw_severity = request.GET.get("severity")
+    if raw_severity is not None:
+        valid_severities = {c[0]
+                            for c in Signal._meta.get_field("severity").choices}
+        if raw_severity not in valid_severities:
+            return JsonResponse(
+                {
+                    "errors": {
+                        "severity": [
+                            f"Invalid severity. Expected one of: {', '.join(sorted(valid_severities))}."
+                        ]
+                    }
+                },
+                status=400,
+            )
+        signals_qs = signals_qs.filter(severity=raw_severity)
+
+    raw_rule_id = request.GET.get("rule_id")
+    if raw_rule_id is not None:
+        signals_qs = signals_qs.filter(rule_id=raw_rule_id)
+
+    total_count = signals_qs.count()
+    paged = signals_qs[offset:offset + limit]
+    next_offset = offset + limit if (offset + limit) < total_count else None
+    previous_offset = max(offset - limit, 0) if offset > 0 else None
+
+    return JsonResponse(
+        {
+            "count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "next_offset": next_offset,
+            "previous_offset": previous_offset,
+            "results": [serialize_signal(s) for s in paged],
+        }
+    )
+
+
+@require_http_methods(["GET", "PATCH"])
+def api_case_signal_detail(request, pk, signal_id):
+    case = get_object_or_404(Case, pk=pk)
+    signal = get_object_or_404(Signal, pk=signal_id, case=case)
+
+    if request.method == "PATCH":
+        payload, error_response = _parse_json_body(request)
+        if error_response is not None:
+            return error_response
+
+        serializer = SignalUpdateSerializer(data=payload, instance=signal)
+        if not serializer.is_valid():
+            return JsonResponse({"errors": serializer.errors}, status=400)
+
+        serializer.save()
+        return JsonResponse(serializer.data)
+
+    return JsonResponse(serialize_signal(signal))
+
+
 def case_list(request):
     cases = Case.objects.order_by("-created_at")
     return render(request, "investigations/case_list.html", {"cases": cases})
@@ -552,6 +656,61 @@ def document_upload(request):
                 updated_at=timezone.now(),
             )
 
+            # Entity extraction — runs only when we have text to work with.
+            # Extraction is best-effort: a failure here does NOT abort the upload.
+            # Fuzzy candidates are logged for now; the review UI comes in Phase 3.
+            entity_summary = None
+            if extracted_text and not is_generated:
+                try:
+                    from .entity_extraction import extract_entities
+                    from .entity_resolution import resolve_all_entities
+                    extraction_result = extract_entities(
+                        extracted_text, doc_type=doc_type)
+                    entity_summary = resolve_all_entities(
+                        extraction_result, case=case, document=document
+                    )
+                    if entity_summary.fuzzy_candidates:
+                        logger.info(
+                            "entity_extraction_fuzzy_candidates",
+                            extra={
+                                "document_id": str(document.pk),
+                                "case_id": str(case.pk),
+                                "candidate_count": len(entity_summary.fuzzy_candidates),
+                                "top_candidates": [
+                                    {
+                                        "incoming": c.incoming_raw,
+                                        "existing": c.existing_raw,
+                                        "similarity": c.similarity,
+                                        "type": c.entity_type,
+                                    }
+                                    for c in entity_summary.fuzzy_candidates[:5]
+                                ],
+                            },
+                        )
+                except Exception:
+                    logger.exception(
+                        "entity_extraction_failed",
+                        extra={
+                            "document_id": str(document.pk),
+                            "case_id": str(case.pk),
+                        },
+                    )
+
+            # Signal detection — best-effort, never aborts the upload.
+            try:
+                from .signal_rules import evaluate_document, evaluate_case, persist_signals
+                doc_triggers = evaluate_document(case, document)
+                case_triggers = evaluate_case(case, trigger_doc=document)
+                persist_signals(case, doc_triggers + case_triggers)
+            except Exception:
+                logger.exception(
+                    "signal_detection_failed",
+                    extra={
+                        "document_id": str(document.pk),
+                        "case_id": str(case.pk),
+                    },
+                )
+
             logger.info(
                 "document_upload_processed",
                 extra={
@@ -564,6 +723,9 @@ def document_upload(request):
                     "doc_type": doc_type,
                     "auto_classified": auto_classified,
                     "is_generated": is_generated,
+                    "persons_created": entity_summary.persons_created if entity_summary else 0,
+                    "orgs_created": entity_summary.orgs_created if entity_summary else 0,
+                    "fuzzy_candidates": len(entity_summary.fuzzy_candidates) if entity_summary else 0,
                 },
             )
             return redirect("case_detail", pk=case.pk)
