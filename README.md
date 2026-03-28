@@ -104,6 +104,29 @@ Extraction and connector paths are best-effort where appropriate. A partial fail
 5. Start Django server:
    - python manage.py runserver
 
+## Workflow Guardrails
+
+This repository includes lightweight workflow controls to prevent cleanup debt.
+
+- Contributor workflow and standards: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Pull request checklist template: [.github/pull_request_template.md](.github/pull_request_template.md)
+- Commit message template: [.gitmessage.txt](.gitmessage.txt)
+
+One-time setup:
+
+1. Enable local commit message template:
+   - `git config commit.template .gitmessage.txt`
+2. Install and enable pre-commit hooks:
+   - `pip install -r backend/requirements-dev.txt`
+   - `pre-commit install`
+
+Daily usage:
+
+1. Run checks before commit:
+   - `pre-commit run --all-files`
+2. Keep commit scope focused by concern.
+3. Complete the PR template for every merge request.
+
 ## Portfolio Value (What This Shows Employers)
 
 This project demonstrates ability to:
