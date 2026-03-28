@@ -22,10 +22,10 @@
 
 | Tier | Count |
 |------|-------|
-| 🔴 CRITICAL | 1 |
+| 🔴 CRITICAL | 0 |
 | 🟠 LOW | 0 |
 | 🟡 MEDIUM | 15 |
-| 🟢 HIGH | 42 |
+| 🟢 HIGH | 43 |
 | ⏭️  SKIPPED (CountyFusion — outage) | 30 |
 | **Total** | **88** |
 
@@ -35,9 +35,7 @@
 
 _Score 0–24. These URLs are dead, redirect to aggregators, or have no recorder content._
 
-| County | System | Score | Flags | Original URL | Final URL | Note |
-|--------|--------|-------|-------|--------------|-----------|------|
-| Stark | DTS PAXWorld | 0 | TIMEOUT | `https://recordersearch.starkcountyohio.gov/paxworld/` | — | TIMEOUT |
+_None._
 
 ---
 
@@ -116,6 +114,7 @@ _Score 80–100. URL confirmed working with recorder content present._
 | Pickaway | Custom/Other | 80 | `https://pickawaycountyrecorder.com/` |
 | Pike | Custom/Other | 80 | `https://pikeohpublic.avenuinsights.com/` |
 | Ross | Custom/Other | 90 | `https://www.rossrecords.us/` |
+| Stark | Custom/Other | 85 | `https://starkcountyohio.gov/government/offices/recorder/` |
 | Summit | EagleWeb (Tyler) | 84 | `https://summitcountyoh-web.tylerhost.net/web/search/DOCSEARCH236S2` |
 | Trumbull | DTS PAXWorld | 84 | `https://records.co.trumbull.oh.us/PAXWorld/views/search` |
 | Warren | Fidlar AVA | 80 | `https://ohwarren.fidlar.com/OHWarren/AvaWeb/` |
