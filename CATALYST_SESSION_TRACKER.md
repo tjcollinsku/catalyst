@@ -125,49 +125,6 @@ Use it to track:
 - Built `tests_county_auditor.py`: 126/126 tests pass — all HTTP mocked via `MagicMock` session injection, no real network calls
 - Tests cover: `OhioCounty` enum (88 members, all lowercase), `AuditorPortalSystem` (3 values), registry completeness (all 88, FIPS all odd, Beacon URLs use `schneidercorp.com`, Beacon counties have beacon_app with "OH", county sites have `beacon_app=None`, all use https), system spot-checks (Darke/Mercer/Seneca/Franklin/Hamilton/Cuyahoga/Trumbull/Allen/Wood), `get_auditor_info` (spot checks, every county retrievable, missing-county error), `list_counties` (count, filter by system, alphabetical, filter sums to 88), `get_auditor_url` (requires_login=False for all, Beacon URL format, name/parcel hints in instructions, county site URL), search HTTP paths (success, 500, 404, timeout, connection error, JSON parse error, ArcGIS error envelope), truncation flag at MAX_RESULTS, WHERE clause content (OWNER1+OWNER2, county filter, PIN+STATEWIDE_PIN), `_parse_parcel_feature` (all fields, None for missing/empty/non-numeric), `_escape_like`, `_build_result_note`, `AuditorError` attributes, `ParcelRecord`/`ParcelSearchResult` dataclass fields
 
-### 2026-03-20 (Session 1)
-- Added recurring recap documents for architecture and file walkthroughs
-- Added this tracker file for open tasks, next steps, and blockers
-- Project in stable state for continuing Phase 1 work
-
-### 2026-03-20 (Session 2)
-- Fixed Docker Compose obsolete `version` warning — removed `version: "3.9"` line
-- Upgraded Django admin registrations with proper `ModelAdmin` classes
-- `GovernmentReferral` admin: list view, status/agency filters, search, `filing_date` locked read-only
-- `AuditLog` admin: fully enforced read-only — add, change, delete all disabled
-- `Case`, `Document`, `Person`, `Organization`, `Finding` all upgraded with list views and filters
-- Django system check passes with 0 issues
-
-### 2026-03-20 (Session 3)
-- Fixed Django → PostgreSQL authentication: `load_dotenv()` added to `settings.py` so `.env` is loaded before DB config is read
-- Reset `catalyst_user` password in Docker container to match `.env`
-- Confirmed Django connects to PostgreSQL successfully
-- `showmigrations` verified: 18 migrations applied across all apps
-- `\dt` confirmed: 23 tables present in database including all Phase 1 domain tables
-- Database is fully built and Django is live against it
-
-### 2026-03-26 (Session 4)
-- Added `investigations/serializers.py` for case intake validation and JSON serialization
-- Added Django-native JSON API endpoints for case list, create, and detail under `/api/cases/`
-- Added API tests covering create, validation failure, detail payload, and list ordering
-- Updated project docs so the current milestone state matches the codebase
-
-### 2026-03-26 (Session 5)
-- Expanded the JSON API from basic intake to a fuller case/document workflow surface
-- Added case PATCH and DELETE support with conflict handling for protected related records
-- Added case and document list pagination metadata, filters, date-range filters, and allowlisted sorting
-- Added case-scoped document detail, PATCH, and DELETE endpoints
-- Added strict SHA-256 validation for document intake payloads
-- Grew the investigations test suite to 41 passing tests covering create, list, detail, update, delete, filters, sorting, and validation paths
-- Added `backend/API_COOKBOOK.md` and refreshed `backend/SERIALIZER_API_REFERENCE.md`
-
-### 2026-03-26 (Session 6) — Phase 1 Complete
-- Added NOTARY and TRUSTEE to PersonRole enum (run makemigrations to apply)
-- Fixed stale `orc_reference` field reference in FindingAdmin — updated to current Finding fields (severity, confidence, status, signal_type, signal_rule_id)
-- Added proper ModelAdmin classes for all 6 plain-registered models: Property, FinancialInstrument, PersonDocument, OrgDocument, PersonOrganization, PropertyTransaction
-- Confirmed Phase 1 minimal dashboard is complete — Django template views (case_list, case_detail, case_form, document_upload) satisfy the Phase 1 charter requirement; React frontend deferred to Phase 3 per charter
-- Phase 1 is fully closed out — all charter items complete
-
 ### 2026-03-27 (Session 12) — Phase 3: County Recorder Connector + Tests
 - Built `county_recorder_connector.py`: human-in-the-loop Ohio county recorder connector
 - Strategy: URL builder + document parser, no HTTP requests in the module (investigator downloads docs manually)
@@ -252,6 +209,49 @@ Use it to track:
 - Added structured upload decision logging with dedicated logger `investigations.upload_pipeline`
 - Logging is production-ready by default, quiet in test/dev by default, and toggleable with `ENABLE_UPLOAD_PIPELINE_LOGS=true`
 - Expanded test coverage to 46 passing tests, including upload decision matrix and generated-flag behavior
+
+### 2026-03-26 (Session 6) — Phase 1 Complete
+- Added NOTARY and TRUSTEE to PersonRole enum (run makemigrations to apply)
+- Fixed stale `orc_reference` field reference in FindingAdmin — updated to current Finding fields (severity, confidence, status, signal_type, signal_rule_id)
+- Added proper ModelAdmin classes for all 6 plain-registered models: Property, FinancialInstrument, PersonDocument, OrgDocument, PersonOrganization, PropertyTransaction
+- Confirmed Phase 1 minimal dashboard is complete — Django template views (case_list, case_detail, case_form, document_upload) satisfy the Phase 1 charter requirement; React frontend deferred to Phase 3 per charter
+- Phase 1 is fully closed out — all charter items complete
+
+### 2026-03-26 (Session 5)
+- Expanded the JSON API from basic intake to a fuller case/document workflow surface
+- Added case PATCH and DELETE support with conflict handling for protected related records
+- Added case and document list pagination metadata, filters, date-range filters, and allowlisted sorting
+- Added case-scoped document detail, PATCH, and DELETE endpoints
+- Added strict SHA-256 validation for document intake payloads
+- Grew the investigations test suite to 41 passing tests covering create, list, detail, update, delete, filters, sorting, and validation paths
+- Added `backend/API_COOKBOOK.md` and refreshed `backend/SERIALIZER_API_REFERENCE.md`
+
+### 2026-03-26 (Session 4)
+- Added `investigations/serializers.py` for case intake validation and JSON serialization
+- Added Django-native JSON API endpoints for case list, create, and detail under `/api/cases/`
+- Added API tests covering create, validation failure, detail payload, and list ordering
+- Updated project docs so the current milestone state matches the codebase
+
+### 2026-03-20 (Session 3)
+- Fixed Django → PostgreSQL authentication: `load_dotenv()` added to `settings.py` so `.env` is loaded before DB config is read
+- Reset `catalyst_user` password in Docker container to match `.env`
+- Confirmed Django connects to PostgreSQL successfully
+- `showmigrations` verified: 18 migrations applied across all apps
+- `\dt` confirmed: 23 tables present in database including all Phase 1 domain tables
+- Database is fully built and Django is live against it
+
+### 2026-03-20 (Session 2)
+- Fixed Docker Compose obsolete `version` warning — removed `version: "3.9"` line
+- Upgraded Django admin registrations with proper `ModelAdmin` classes
+- `GovernmentReferral` admin: list view, status/agency filters, search, `filing_date` locked read-only
+- `AuditLog` admin: fully enforced read-only — add, change, delete all disabled
+- `Case`, `Document`, `Person`, `Organization`, `Finding` all upgraded with list views and filters
+- Django system check passes with 0 issues
+
+### 2026-03-20 (Session 1)
+- Added recurring recap documents for architecture and file walkthroughs
+- Added this tracker file for open tasks, next steps, and blockers
+- Project in stable state for continuing Phase 1 work
 
 ## Update Pattern
 
