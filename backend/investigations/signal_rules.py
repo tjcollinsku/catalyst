@@ -30,8 +30,8 @@ Entry points:
 import logging
 import re
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
-from datetime import date, timedelta
+from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -46,12 +46,13 @@ logger = logging.getLogger("investigations.signal_rules")
 # Keeps rule titles and descriptions in one place — not on the DB model.
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class RuleInfo:
     rule_id: str
-    severity: str       # CRITICAL | HIGH | MEDIUM | LOW
+    severity: str  # CRITICAL | HIGH | MEDIUM | LOW
     title: str
-    description: str    # One-sentence charter description
+    description: str  # One-sentence charter description
 
 
 RULE_REGISTRY: dict[str, RuleInfo] = {
@@ -78,8 +79,7 @@ RULE_REGISTRY: dict[str, RuleInfo] = {
         severity="HIGH",
         title="Purchase Price Deviates >50% From Assessed Value",
         description=(
-            "Purchase price deviates more than 50% from county-assessed value, "
-            "in either direction."
+            "Purchase price deviates more than 50% from county-assessed value, in either direction."
         ),
     ),
     "SR-004": RuleInfo(
@@ -145,6 +145,34 @@ RULE_REGISTRY: dict[str, RuleInfo] = {
             "or more years in which it held tax-exempt status."
         ),
     ),
+    "SR-011": RuleInfo(
+        rule_id="SR-011",
+        severity="HIGH",
+        title="No Independent Board Members Disclosed on Form 990",
+        description=(
+            "Form 990 Part VI discloses zero independent voting members of the "
+            "governing body, indicating a fully insider-controlled board."
+        ),
+    ),
+    "SR-012": RuleInfo(
+        rule_id="SR-012",
+        severity="HIGH",
+        title="No Conflict of Interest Policy at Material-Revenue Organization",
+        description=(
+            "Form 990 Part VI Line 12a answered No — the organization has no "
+            "written conflict of interest policy despite material revenue."
+        ),
+    ),
+    "SR-013": RuleInfo(
+        rule_id="SR-013",
+        severity="HIGH",
+        title="Principal Officer Reports Zero Compensation at High-Revenue Organization",
+        description=(
+            "Form 990 Part VII lists the principal officer with $0 reportable "
+            "compensation at an organization with gross receipts exceeding $500,000, "
+            "which may indicate unreported compensation or related-party payments."
+        ),
+    ),
 }
 
 
@@ -155,6 +183,7 @@ RULE_REGISTRY: dict[str, RuleInfo] = {
 # The caller (views.py or persist_signals) handles persistence.
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SignalTrigger:
     rule_id: str
@@ -162,7 +191,7 @@ class SignalTrigger:
     title: str
     detected_summary: str
     trigger_entity_id: Optional[UUID] = None
-    trigger_doc: object = None          # Document model instance or None
+    trigger_doc: object = None  # Document model instance or None
 
 
 # ---------------------------------------------------------------------------
@@ -172,12 +201,10 @@ class SignalTrigger:
 _ZERO_CONSIDERATION_PATTERNS = [
     re.compile(r"\$\s*0\.00\b"),
     re.compile(r"\bno\s+(?:monetary\s+)?consideration\b", re.IGNORECASE),
-    re.compile(
-        r"\bzero\s+(?:and\s+no[/\-]100\s+)?(?:dollars?|consideration)\b", re.IGNORECASE),
+    re.compile(r"\bzero\s+(?:and\s+no[/\-]100\s+)?(?:dollars?|consideration)\b", re.IGNORECASE),
     re.compile(r"\bnominal\s+consideration\b", re.IGNORECASE),
     re.compile(r"\blove\s+and\s+affection\b", re.IGNORECASE),
-    re.compile(
-        r"\bten\s+dollars?\s+and\s+other\s+valuable\s+consideration\b", re.IGNORECASE),
+    re.compile(r"\bten\s+dollars?\s+and\s+other\s+valuable\s+consideration\b", re.IGNORECASE),
 ]
 
 _990_PART4_YES_PATTERNS = [
@@ -202,10 +229,49 @@ _CONTRACTOR_PATTERN = re.compile(
 
 _DEED_DOC_TYPES = {"DEED", "RECORDER_INSTRUMENT"}
 
+# SR-011 — No independent board members
+# Matches "0" or "zero" on the line for independent voting members (Part VI line 1b)
+_INDEPENDENT_MEMBERS_ZERO_PATTERNS = [
+    re.compile(
+        r"(?:independent\s+voting\s+members?|line\s+1b)[^\n]{0,80}\b(0|zero)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b4\s*\n?\s*(?:Number\s+of\s+independent[^\n]{0,60})?\s*4\s+0\b",
+        re.IGNORECASE,
+    ),
+]
+
+# SR-012 — No conflict of interest policy
+_NO_COI_POLICY_PATTERNS = [
+    re.compile(
+        r"conflict\s+of\s+interest\s+policy[^\n]{0,80}No\b",
+        re.IGNORECASE | re.DOTALL,
+    ),
+    re.compile(
+        r"12a[^\n]{0,60}No\b",
+        re.IGNORECASE,
+    ),
+]
+
+# SR-013 — Gross receipts and zero officer compensation
+# Captures gross receipts dollar amount from 990 header
+_GROSS_RECEIPTS_PATTERN = re.compile(
+    r"Gross\s+receipts?\s*\$\s*([\d,]+)",
+    re.IGNORECASE,
+)
+# Matches lines where a named officer shows $0 / 0 compensation in Part VII table
+_ZERO_OFFICER_COMP_PATTERN = re.compile(
+    r"(?:president|principal\s+officer|executive\s+director|ceo|cfo|treasurer|secretary)"
+    r"[^\n]{0,200}?\b0\s+0\s+0\b",
+    re.IGNORECASE | re.DOTALL,
+)
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _run_rule(rule_id: str, fn, results: list, *args, **kwargs):
     """
@@ -215,8 +281,7 @@ def _run_rule(rule_id: str, fn, results: list, *args, **kwargs):
     try:
         results.extend(fn(*args, **kwargs))
     except Exception:
-        logger.exception("signal_rule_evaluation_failed",
-                         extra={"rule_id": rule_id})
+        logger.exception("signal_rule_evaluation_failed", extra={"rule_id": rule_id})
 
 
 def _extract_dates_from_text(text: str) -> list[date]:
@@ -228,6 +293,7 @@ def _extract_dates_from_text(text: str) -> list[date]:
         return []
     # Import here to avoid circular imports at module load time.
     from .entity_extraction import extract_entities
+
     results = extract_entities(text)
     dates = []
     for entry in results.get("dates", []):
@@ -247,6 +313,7 @@ def _extract_dates_from_text(text: str) -> list[date]:
 # is named in the document AND the document contains a date that falls after
 # that person's date of death.
 # ---------------------------------------------------------------------------
+
 
 def evaluate_sr001_deceased_signer(case, document) -> list[SignalTrigger]:
     if not document or not document.extracted_text:
@@ -274,19 +341,21 @@ def evaluate_sr001_deceased_signer(case, document) -> list[SignalTrigger]:
         for doc_date in doc_dates:
             if doc_date > person.date_of_death:
                 gap_days = (doc_date - person.date_of_death).days
-                triggers.append(SignalTrigger(
-                    rule_id="SR-001",
-                    severity="CRITICAL",
-                    title=RULE_REGISTRY["SR-001"].title,
-                    detected_summary=(
-                        f"{person.full_name} (date of death: {person.date_of_death}) "
-                        f"is referenced in a document dated {doc_date} — "
-                        f"{gap_days} days after death."
-                    ),
-                    trigger_entity_id=person.pk,
-                    trigger_doc=document,
-                ))
-                break   # one signal per deceased person per document
+                triggers.append(
+                    SignalTrigger(
+                        rule_id="SR-001",
+                        severity="CRITICAL",
+                        title=RULE_REGISTRY["SR-001"].title,
+                        detected_summary=(
+                            f"{person.full_name} (date of death: {person.date_of_death}) "
+                            f"is referenced in a document dated {doc_date} — "
+                            f"{gap_days} days after death."
+                        ),
+                        trigger_entity_id=person.pk,
+                        trigger_doc=document,
+                    )
+                )
+                break  # one signal per deceased person per document
 
     return triggers
 
@@ -299,6 +368,7 @@ def evaluate_sr001_deceased_signer(case, document) -> list[SignalTrigger]:
 # date that precedes that formation date.
 # ---------------------------------------------------------------------------
 
+
 def evaluate_sr002_entity_predates_formation(case, document) -> list[SignalTrigger]:
     if not document or not document.extracted_text:
         return []
@@ -307,8 +377,7 @@ def evaluate_sr002_entity_predates_formation(case, document) -> list[SignalTrigg
     text_lower = text.lower()
     triggers = []
 
-    orgs_with_formation = case.organizations.filter(
-        formation_date__isnull=False)
+    orgs_with_formation = case.organizations.filter(formation_date__isnull=False)
     if not orgs_with_formation.exists():
         return []
 
@@ -323,19 +392,21 @@ def evaluate_sr002_entity_predates_formation(case, document) -> list[SignalTrigg
         for doc_date in doc_dates:
             if doc_date < org.formation_date:
                 gap_days = (org.formation_date - doc_date).days
-                triggers.append(SignalTrigger(
-                    rule_id="SR-002",
-                    severity="CRITICAL",
-                    title=RULE_REGISTRY["SR-002"].title,
-                    detected_summary=(
-                        f"'{org.name}' (formation date: {org.formation_date}) "
-                        f"is named in a document dated {doc_date} — "
-                        f"{gap_days} days before the entity existed."
-                    ),
-                    trigger_entity_id=org.pk,
-                    trigger_doc=document,
-                ))
-                break   # one signal per org per document
+                triggers.append(
+                    SignalTrigger(
+                        rule_id="SR-002",
+                        severity="CRITICAL",
+                        title=RULE_REGISTRY["SR-002"].title,
+                        detected_summary=(
+                            f"'{org.name}' (formation date: {org.formation_date}) "
+                            f"is named in a document dated {doc_date} — "
+                            f"{gap_days} days before the entity existed."
+                        ),
+                        trigger_entity_id=org.pk,
+                        trigger_doc=document,
+                    )
+                )
+                break  # one signal per org per document
 
     return triggers
 
@@ -347,6 +418,7 @@ def evaluate_sr002_entity_predates_formation(case, document) -> list[SignalTrigg
 # purchase_price and assessed_value are set.  Flags any deviation > 50%.
 # ---------------------------------------------------------------------------
 
+
 def evaluate_sr003_valuation_anomaly(case, trigger_doc=None) -> list[SignalTrigger]:
     triggers = []
 
@@ -357,25 +429,26 @@ def evaluate_sr003_valuation_anomaly(case, trigger_doc=None) -> list[SignalTrigg
         if prop.assessed_value == 0:
             continue
 
-        deviation = abs(prop.purchase_price -
-                        prop.assessed_value) / prop.assessed_value
+        deviation = abs(prop.purchase_price - prop.assessed_value) / prop.assessed_value
         if deviation <= Decimal("0.50"):
             continue
 
         direction = "above" if prop.purchase_price > prop.assessed_value else "below"
         label = prop.parcel_number or prop.address or str(prop.pk)
-        triggers.append(SignalTrigger(
-            rule_id="SR-003",
-            severity="HIGH",
-            title=RULE_REGISTRY["SR-003"].title,
-            detected_summary=(
-                f"Property '{label}': purchase price ${prop.purchase_price:,.2f} is "
-                f"{float(deviation) * 100:.0f}% {direction} assessed value "
-                f"${prop.assessed_value:,.2f}."
-            ),
-            trigger_entity_id=prop.pk,
-            trigger_doc=trigger_doc,
-        ))
+        triggers.append(
+            SignalTrigger(
+                rule_id="SR-003",
+                severity="HIGH",
+                title=RULE_REGISTRY["SR-003"].title,
+                detected_summary=(
+                    f"Property '{label}': purchase price ${prop.purchase_price:,.2f} is "
+                    f"{float(deviation) * 100:.0f}% {direction} assessed value "
+                    f"${prop.assessed_value:,.2f}."
+                ),
+                trigger_entity_id=prop.pk,
+                trigger_doc=trigger_doc,
+            )
+        )
 
     return triggers
 
@@ -387,6 +460,7 @@ def evaluate_sr003_valuation_anomaly(case, trigger_doc=None) -> list[SignalTrigg
 # same filing-number prefix where all filing dates fall within a 24-hour
 # window.
 # ---------------------------------------------------------------------------
+
 
 def evaluate_sr004_ucc_burst(case, trigger_doc=None) -> list[SignalTrigger]:
     ucc_instruments = list(
@@ -403,8 +477,7 @@ def evaluate_sr004_ucc_burst(case, trigger_doc=None) -> list[SignalTrigger]:
     # filing number.  Empty / missing filing numbers go into their own bucket.
     groups: dict[str, list] = defaultdict(list)
     for instr in ucc_instruments:
-        prefix = (instr.filing_number or "")[
-            :16].strip() or f"_unknown_{instr.pk}"
+        prefix = (instr.filing_number or "")[:16].strip() or f"_unknown_{instr.pk}"
         groups[prefix].append(instr)
 
     triggers = []
@@ -425,19 +498,21 @@ def evaluate_sr004_ucc_burst(case, trigger_doc=None) -> list[SignalTrigger]:
                 continue
             seen_windows.add(window_key)
 
-            triggers.append(SignalTrigger(
-                rule_id="SR-004",
-                severity="HIGH",
-                title=RULE_REGISTRY["SR-004"].title,
-                detected_summary=(
-                    f"{len(window_dates)} UCC amendments to filing number prefix "
-                    f"'{prefix}' between {min(window_dates)} and {max(window_dates)} "
-                    f"({abs((max(window_dates) - min(window_dates)).days * 24)} hours or less)."
-                ),
-                trigger_entity_id=instruments[0].pk,
-                trigger_doc=trigger_doc,
-            ))
-            break   # one signal per group prefix
+            triggers.append(
+                SignalTrigger(
+                    rule_id="SR-004",
+                    severity="HIGH",
+                    title=RULE_REGISTRY["SR-004"].title,
+                    detected_summary=(
+                        f"{len(window_dates)} UCC amendments to filing number prefix "
+                        f"'{prefix}' between {min(window_dates)} and {max(window_dates)} "
+                        f"({abs((max(window_dates) - min(window_dates)).days * 24)} hours or less)."
+                    ),
+                    trigger_entity_id=instruments[0].pk,
+                    trigger_doc=trigger_doc,
+                )
+            )
+            break  # one signal per group prefix
 
     return triggers
 
@@ -449,6 +524,7 @@ def evaluate_sr004_ucc_burst(case, trigger_doc=None) -> list[SignalTrigger]:
 # documents.  Always worth human review for related-party transfers.
 # ---------------------------------------------------------------------------
 
+
 def evaluate_sr005_zero_consideration(case, document) -> list[SignalTrigger]:
     if not document or not document.extracted_text:
         return []
@@ -458,16 +534,18 @@ def evaluate_sr005_zero_consideration(case, document) -> list[SignalTrigger]:
     text = document.extracted_text
     for pattern in _ZERO_CONSIDERATION_PATTERNS:
         if pattern.search(text):
-            return [SignalTrigger(
-                rule_id="SR-005",
-                severity="HIGH",
-                title=RULE_REGISTRY["SR-005"].title,
-                detected_summary=(
-                    "Deed or instrument contains zero-consideration or nominal "
-                    "consideration language. Review for related-party transfer."
-                ),
-                trigger_doc=document,
-            )]
+            return [
+                SignalTrigger(
+                    rule_id="SR-005",
+                    severity="HIGH",
+                    title=RULE_REGISTRY["SR-005"].title,
+                    detected_summary=(
+                        "Deed or instrument contains zero-consideration or nominal "
+                        "consideration language. Review for related-party transfer."
+                    ),
+                    trigger_doc=document,
+                )
+            ]
 
     return []
 
@@ -478,6 +556,7 @@ def evaluate_sr005_zero_consideration(case, document) -> list[SignalTrigger]:
 # Document-scoped.  Checks IRS_990 documents for evidence that Part IV
 # Line 28a/b/c was answered "Yes" without Schedule L being present.
 # ---------------------------------------------------------------------------
+
 
 def evaluate_sr006_990_schedule_l(case, document) -> list[SignalTrigger]:
     if not document or not document.extracted_text:
@@ -495,16 +574,18 @@ def evaluate_sr006_990_schedule_l(case, document) -> list[SignalTrigger]:
     if _SCHEDULE_L_PRESENT_PATTERN.search(text):
         return []
 
-    return [SignalTrigger(
-        rule_id="SR-006",
-        severity="HIGH",
-        title=RULE_REGISTRY["SR-006"].title,
-        detected_summary=(
-            "Form 990 indicates transactions with interested persons "
-            "(Part IV Line 28a/b/c = Yes) but Schedule L is absent from this filing."
-        ),
-        trigger_doc=document,
-    )]
+    return [
+        SignalTrigger(
+            rule_id="SR-006",
+            severity="HIGH",
+            title=RULE_REGISTRY["SR-006"].title,
+            detected_summary=(
+                "Form 990 indicates transactions with interested persons "
+                "(Part IV Line 28a/b/c = Yes) but Schedule L is absent from this filing."
+            ),
+            trigger_doc=document,
+        )
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -515,10 +596,10 @@ def evaluate_sr006_990_schedule_l(case, document) -> list[SignalTrigger]:
 # permits where the stated applicant does not match any case entity.
 # ---------------------------------------------------------------------------
 
+
 def evaluate_sr007_permit_owner_mismatch(case, trigger_doc=None) -> list[SignalTrigger]:
     permit_docs = list(
-        case.documents.filter(doc_type="BUILDING_PERMIT",
-                              extracted_text__isnull=False)
+        case.documents.filter(doc_type="BUILDING_PERMIT", extracted_text__isnull=False)
     )
     if not permit_docs:
         return []
@@ -549,16 +630,18 @@ def evaluate_sr007_permit_owner_mismatch(case, trigger_doc=None) -> list[SignalT
         )
 
         if not name_matched:
-            triggers.append(SignalTrigger(
-                rule_id="SR-007",
-                severity="HIGH",
-                title=RULE_REGISTRY["SR-007"].title,
-                detected_summary=(
-                    f"Building permit applicant '{applicant}' does not match any "
-                    f"known person or organization in this case."
-                ),
-                trigger_doc=permit_doc,
-            ))
+            triggers.append(
+                SignalTrigger(
+                    rule_id="SR-007",
+                    severity="HIGH",
+                    title=RULE_REGISTRY["SR-007"].title,
+                    detected_summary=(
+                        f"Building permit applicant '{applicant}' does not match any "
+                        f"known person or organization in this case."
+                    ),
+                    trigger_doc=permit_doc,
+                )
+            )
 
     return triggers
 
@@ -572,14 +655,15 @@ def evaluate_sr007_permit_owner_mismatch(case, trigger_doc=None) -> list[SignalT
 # the rule fires.
 # ---------------------------------------------------------------------------
 
+
 def evaluate_sr008_survey_before_purchase(case, trigger_doc=None) -> list[SignalTrigger]:
     _SURVEY_TERMS = ("survey", "plat", "boundary")
 
     survey_docs = [
-        doc for doc in case.documents.filter(extracted_text__isnull=False)
+        doc
+        for doc in case.documents.filter(extracted_text__isnull=False)
         if any(
-            term in (doc.filename or "").lower() or
-            term in (doc.doc_subtype or "").lower()
+            term in (doc.filename or "").lower() or term in (doc.doc_subtype or "").lower()
             for term in _SURVEY_TERMS
         )
     ]
@@ -587,9 +671,7 @@ def evaluate_sr008_survey_before_purchase(case, trigger_doc=None) -> list[Signal
     if not survey_docs:
         return []
 
-    purchase_instruments = list(
-        case.financial_instruments.filter(filing_date__isnull=False)
-    )
+    purchase_instruments = list(case.financial_instruments.filter(filing_date__isnull=False))
     if not purchase_instruments:
         return []
 
@@ -604,18 +686,20 @@ def evaluate_sr008_survey_before_purchase(case, trigger_doc=None) -> list[Signal
         for instrument in purchase_instruments:
             gap = (instrument.filing_date - earliest_survey).days
             if gap > 90:
-                triggers.append(SignalTrigger(
-                    rule_id="SR-008",
-                    severity="MEDIUM",
-                    title=RULE_REGISTRY["SR-008"].title,
-                    detected_summary=(
-                        f"Survey dated {earliest_survey} precedes financial instrument "
-                        f"'{instrument.filing_number or instrument.pk}' dated "
-                        f"{instrument.filing_date} by {gap} days."
-                    ),
-                    trigger_doc=survey_doc,
-                ))
-                break   # one signal per survey doc
+                triggers.append(
+                    SignalTrigger(
+                        rule_id="SR-008",
+                        severity="MEDIUM",
+                        title=RULE_REGISTRY["SR-008"].title,
+                        detected_summary=(
+                            f"Survey dated {earliest_survey} precedes financial instrument "
+                            f"'{instrument.filing_number or instrument.pk}' dated "
+                            f"{instrument.filing_date} by {gap} days."
+                        ),
+                        trigger_doc=survey_doc,
+                    )
+                )
+                break  # one signal per survey doc
 
     return triggers
 
@@ -628,10 +712,10 @@ def evaluate_sr008_survey_before_purchase(case, trigger_doc=None) -> list[Signal
 # attributable permits), the rule fires.
 # ---------------------------------------------------------------------------
 
+
 def evaluate_sr009_single_contractor(case, trigger_doc=None) -> list[SignalTrigger]:
     permit_docs = list(
-        case.documents.filter(doc_type="BUILDING_PERMIT",
-                              extracted_text__isnull=False)
+        case.documents.filter(doc_type="BUILDING_PERMIT", extracted_text__isnull=False)
     )
     if len(permit_docs) < 2:
         return []
@@ -651,16 +735,18 @@ def evaluate_sr009_single_contractor(case, trigger_doc=None) -> list[SignalTrigg
     if most_common_count < len(contractors):
         return []
 
-    return [SignalTrigger(
-        rule_id="SR-009",
-        severity="MEDIUM",
-        title=RULE_REGISTRY["SR-009"].title,
-        detected_summary=(
-            f"'{contractors[0]}' appears as contractor on all {len(contractors)} "
-            f"building permit documents with no evidence of competitive bidding."
-        ),
-        trigger_doc=trigger_doc,
-    )]
+    return [
+        SignalTrigger(
+            rule_id="SR-009",
+            severity="MEDIUM",
+            title=RULE_REGISTRY["SR-009"].title,
+            detected_summary=(
+                f"'{contractors[0]}' appears as contractor on all {len(contractors)} "
+                f"building permit documents with no evidence of competitive bidding."
+            ),
+            trigger_doc=trigger_doc,
+        )
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -669,6 +755,7 @@ def evaluate_sr009_single_contractor(case, trigger_doc=None) -> list[SignalTrigg
 # Case-scoped.  If the case contains any Organization with org_type=CHARITY,
 # and no IRS_990 documents have been added to the case, this rule fires.
 # ---------------------------------------------------------------------------
+
 
 def evaluate_sr010_missing_990(case, trigger_doc=None) -> list[SignalTrigger]:
     charity_orgs = list(case.organizations.filter(org_type="CHARITY"))
@@ -681,24 +768,185 @@ def evaluate_sr010_missing_990(case, trigger_doc=None) -> list[SignalTrigger]:
 
     triggers = []
     for org in charity_orgs:
-        triggers.append(SignalTrigger(
-            rule_id="SR-010",
-            severity="MEDIUM",
-            title=RULE_REGISTRY["SR-010"].title,
-            detected_summary=(
-                f"'{org.name}' is classified as a charity but no IRS Form 990 "
-                f"documents have been added to this case."
-            ),
-            trigger_entity_id=org.pk,
-            trigger_doc=trigger_doc,
-        ))
+        triggers.append(
+            SignalTrigger(
+                rule_id="SR-010",
+                severity="MEDIUM",
+                title=RULE_REGISTRY["SR-010"].title,
+                detected_summary=(
+                    f"'{org.name}' is classified as a charity but no IRS Form 990 "
+                    f"documents have been added to this case."
+                ),
+                trigger_entity_id=org.pk,
+                trigger_doc=trigger_doc,
+            )
+        )
 
     return triggers
 
 
 # ---------------------------------------------------------------------------
+# SR-011 — No Independent Board Members
+#
+# Document-scoped.  Checks IRS_990 documents for evidence that the number of
+# independent voting members of the governing body (Part VI, line 1b) is zero.
+# ---------------------------------------------------------------------------
+
+
+def evaluate_sr011_no_independent_board(case, document) -> list[SignalTrigger]:
+    if not document or not document.extracted_text:
+        return []
+    if document.doc_type != "IRS_990":
+        return []
+
+    text = document.extracted_text
+
+    # Primary pattern: look for "4  0" line structure (line 1b = 0 independent members)
+    # The 990 renders as: "4 Number of independent voting members ... 4  0"
+    # Also catches explicit "independent voting members ... 0" text
+    matched = any(p.search(text) for p in _INDEPENDENT_MEMBERS_ZERO_PATTERNS)
+
+    # Fallback: find "independent voting members" and check if a bare "0" immediately
+    # follows within 120 chars (handles OCR spacing variations)
+    if not matched:
+        idx = text.lower().find("independent voting members")
+        if idx >= 0:
+            snippet = text[idx : idx + 120]
+            if re.search(r"\b0\b", snippet):
+                matched = True
+
+    if not matched:
+        return []
+
+    return [
+        SignalTrigger(
+            rule_id="SR-011",
+            severity="HIGH",
+            title=RULE_REGISTRY["SR-011"].title,
+            detected_summary=(
+                "Form 990 Part VI discloses zero independent voting members of the "
+                "governing body. The organization appears to be fully insider-controlled "
+                "with no independent oversight — a primary self-dealing risk factor."
+            ),
+            trigger_doc=document,
+        )
+    ]
+
+
+# ---------------------------------------------------------------------------
+# SR-012 — No Conflict of Interest Policy
+#
+# Document-scoped.  Checks IRS_990 documents for Part VI Line 12a answered
+# "No" — the organization has no written conflict of interest policy.
+# ---------------------------------------------------------------------------
+
+
+def evaluate_sr012_no_coi_policy(case, document) -> list[SignalTrigger]:
+    if not document or not document.extracted_text:
+        return []
+    if document.doc_type != "IRS_990":
+        return []
+
+    text = document.extracted_text
+
+    matched = any(p.search(text) for p in _NO_COI_POLICY_PATTERNS)
+
+    # Fallback: find the COI policy question and look for "No" within 120 chars
+    if not matched:
+        idx = text.lower().find("conflict of interest policy")
+        if idx >= 0:
+            snippet = text[idx : idx + 120]
+            if re.search(r"\bNo\b", snippet, re.IGNORECASE):
+                matched = True
+
+    if not matched:
+        return []
+
+    return [
+        SignalTrigger(
+            rule_id="SR-012",
+            severity="HIGH",
+            title=RULE_REGISTRY["SR-012"].title,
+            detected_summary=(
+                "Form 990 Part VI Line 12a indicates no written conflict of interest "
+                "policy exists. Without a COI policy, self-dealing transactions between "
+                "officers and the organization are structurally undetectable."
+            ),
+            trigger_doc=document,
+        )
+    ]
+
+
+# ---------------------------------------------------------------------------
+# SR-013 — Zero Officer Compensation at High-Revenue Organization
+#
+# Document-scoped.  Checks IRS_990 documents where gross receipts exceed
+# $500,000 and the principal officer or named officers report $0 compensation.
+# This pattern may indicate unreported compensation, related-party payments,
+# or commingling of personal and organizational finances.
+# ---------------------------------------------------------------------------
+
+_SR013_REVENUE_THRESHOLD = 500_000
+
+
+def evaluate_sr013_zero_officer_pay(case, document) -> list[SignalTrigger]:
+    if not document or not document.extracted_text:
+        return []
+    if document.doc_type != "IRS_990":
+        return []
+
+    text = document.extracted_text
+
+    # Extract gross receipts
+    receipts_match = _GROSS_RECEIPTS_PATTERN.search(text)
+    if not receipts_match:
+        return []
+
+    try:
+        gross_receipts = int(receipts_match.group(1).replace(",", ""))
+    except ValueError:
+        return []
+
+    if gross_receipts < _SR013_REVENUE_THRESHOLD:
+        return []
+
+    # Check for zero officer compensation
+    matched = bool(_ZERO_OFFICER_COMP_PATTERN.search(text))
+
+    # Fallback: look for the Part VII officer table — if named officers all show 0
+    if not matched:
+        idx = text.find("Section A. Officers")
+        if idx >= 0:
+            section = text[idx : idx + 2000]
+            # Count named persons and zero-comp entries
+            zero_entries = len(re.findall(r"\b0\s+0\s+0\b", section))
+            named_entries = len(re.findall(r"\(\d+\)\s+[A-Z][A-Z\s]+\n", section))
+            if zero_entries > 0 and named_entries > 0 and zero_entries >= named_entries:
+                matched = True
+
+    if not matched:
+        return []
+
+    return [
+        SignalTrigger(
+            rule_id="SR-013",
+            severity="HIGH",
+            title=RULE_REGISTRY["SR-013"].title,
+            detected_summary=(
+                f"Form 990 reports gross receipts of ${gross_receipts:,} but lists "
+                f"named officers with $0 reportable compensation. At this revenue level, "
+                f"zero officer pay warrants review for unreported compensation, "
+                f"related-party payments, or commingling of funds."
+            ),
+            trigger_doc=document,
+        )
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Public entry points
 # ---------------------------------------------------------------------------
+
 
 def evaluate_document(case, document) -> list[SignalTrigger]:
     """
@@ -708,14 +956,13 @@ def evaluate_document(case, document) -> list[SignalTrigger]:
     Safe to call immediately after text extraction on every upload.
     """
     triggers: list[SignalTrigger] = []
-    _run_rule("SR-001", evaluate_sr001_deceased_signer,
-              triggers, case, document)
-    _run_rule("SR-002", evaluate_sr002_entity_predates_formation,
-              triggers, case, document)
-    _run_rule("SR-005", evaluate_sr005_zero_consideration,
-              triggers, case, document)
-    _run_rule("SR-006", evaluate_sr006_990_schedule_l,
-              triggers, case, document)
+    _run_rule("SR-001", evaluate_sr001_deceased_signer, triggers, case, document)
+    _run_rule("SR-002", evaluate_sr002_entity_predates_formation, triggers, case, document)
+    _run_rule("SR-005", evaluate_sr005_zero_consideration, triggers, case, document)
+    _run_rule("SR-006", evaluate_sr006_990_schedule_l, triggers, case, document)
+    _run_rule("SR-011", evaluate_sr011_no_independent_board, triggers, case, document)
+    _run_rule("SR-012", evaluate_sr012_no_coi_policy, triggers, case, document)
+    _run_rule("SR-013", evaluate_sr013_zero_officer_pay, triggers, case, document)
     return triggers
 
 
@@ -732,63 +979,88 @@ def evaluate_case(case, trigger_doc=None) -> list[SignalTrigger]:
     when no more specific entity is the natural trigger.
     """
     triggers: list[SignalTrigger] = []
-    _run_rule("SR-003", evaluate_sr003_valuation_anomaly,
-              triggers, case, trigger_doc)
+    _run_rule("SR-003", evaluate_sr003_valuation_anomaly, triggers, case, trigger_doc)
     _run_rule("SR-004", evaluate_sr004_ucc_burst, triggers, case, trigger_doc)
-    _run_rule("SR-007", evaluate_sr007_permit_owner_mismatch,
-              triggers, case, trigger_doc)
-    _run_rule("SR-008", evaluate_sr008_survey_before_purchase,
-              triggers, case, trigger_doc)
-    _run_rule("SR-009", evaluate_sr009_single_contractor,
-              triggers, case, trigger_doc)
-    _run_rule("SR-010", evaluate_sr010_missing_990,
-              triggers, case, trigger_doc)
+    _run_rule("SR-007", evaluate_sr007_permit_owner_mismatch, triggers, case, trigger_doc)
+    _run_rule("SR-008", evaluate_sr008_survey_before_purchase, triggers, case, trigger_doc)
+    _run_rule("SR-009", evaluate_sr009_single_contractor, triggers, case, trigger_doc)
+    _run_rule("SR-010", evaluate_sr010_missing_990, triggers, case, trigger_doc)
     return triggers
+
+
+# Maps SR rule IDs to Detection.signal_type values.
+_RULE_TO_SIGNAL_TYPE: dict[str, str] = {
+    "SR-001": "DECEASED_SIGNER",
+    "SR-002": "DATE_IMPOSSIBILITY",
+    "SR-003": "VALUATION_DELTA",
+    "SR-004": "UCC_LOOP",
+    "SR-005": "SELF_DEALING",
+    "SR-006": "SELF_DEALING",
+    "SR-007": "PROCUREMENT_BYPASS",
+    "SR-008": "TIMELINE_COMPRESSION",
+    "SR-009": "PROCUREMENT_BYPASS",
+    "SR-010": "REVENUE_ANOMALY",
+    "SR-011": "SELF_DEALING",
+    "SR-012": "SELF_DEALING",
+    "SR-013": "PHANTOM_OFFICER",
+}
 
 
 def persist_signals(case, triggers: list[SignalTrigger]) -> list:
     """
-    Persist SignalTrigger results to the database with deduplication.
+    Persist SignalTrigger results to the Detection table with deduplication.
 
-    A signal is skipped (deduplicated) if a Signal record already exists for
-    the same (case, rule_id, trigger_entity_id, trigger_doc) combination that
-    is not in DISMISSED status.
+    A trigger is skipped if a Detection already exists for the same
+    (case, signal_type, primary_document) combination that is not DISMISSED.
 
-    Returns: list of newly created Signal model instances.
+    Returns: list of newly created Detection instances.
     """
-    # Import inside function to keep this module importable in stateless contexts.
-    from .models import Signal, SignalStatus
+    from .models import Detection, DetectionStatus
 
     created = []
+    seen_this_batch: set[tuple] = set()
+
     for trigger in triggers:
-        trigger_doc_id = trigger.trigger_doc.pk if trigger.trigger_doc else None
+        trigger_doc = trigger.trigger_doc
+        signal_type = _RULE_TO_SIGNAL_TYPE.get(trigger.rule_id, "MISSING_REQUIRED_FIELDS")
+        trigger_doc_id = trigger_doc.pk if trigger_doc else None
 
-        already_exists = Signal.objects.filter(
+        # Dedup within this batch (prevents duplicate inserts when caller passes
+        # combined doc + case triggers in a single list).
+        batch_key = (signal_type, trigger.rule_id, trigger_doc_id)
+        if batch_key in seen_this_batch:
+            continue
+        seen_this_batch.add(batch_key)
+
+        # Dedup against DB: use get_or_create keyed on (case, signal_type,
+        # primary_document, rule_id). Only create if no non-dismissed row exists.
+        existing_qs = Detection.objects.filter(
             case=case,
-            rule_id=trigger.rule_id,
-            trigger_entity_id=trigger.trigger_entity_id,
-            trigger_doc_id=trigger_doc_id,
-        ).exclude(status=SignalStatus.DISMISSED).exists()
+            signal_type=signal_type,
+            primary_document=trigger_doc,
+            evidence_snapshot__rule_id=trigger.rule_id,
+        ).exclude(status=DetectionStatus.DISMISSED)
 
-        if already_exists:
+        if existing_qs.exists():
             continue
 
-        signal = Signal.objects.create(
+        detection = Detection.objects.create(
             case=case,
-            rule_id=trigger.rule_id,
+            signal_type=signal_type,
             severity=trigger.severity,
-            trigger_entity_id=trigger.trigger_entity_id,
-            trigger_doc_id=trigger_doc_id,
-            detected_summary=trigger.detected_summary,
-            status=SignalStatus.OPEN,
+            detection_method="SYSTEM_AUTO",
+            primary_document=trigger_doc,
+            evidence_snapshot={"rule_id": trigger.rule_id, "summary": trigger.detected_summary},
+            confidence_score=1.0,
         )
-        created.append(signal)
+        created.append(detection)
         logger.info(
-            "signal_detected",
+            "detection_created",
             extra={
-                "signal_id": str(signal.pk),
-                "rule_id": signal.rule_id,
-                "severity": signal.severity,
+                "detection_id": str(detection.pk),
+                "rule_id": trigger.rule_id,
+                "signal_type": signal_type,
+                "severity": trigger.severity,
                 "case_id": str(case.pk),
             },
         )
