@@ -1,174 +1,165 @@
 # Catalyst
 
-Catalyst is an investigation intelligence platform focused on fraud pattern detection, defensible audit history, and human-in-the-loop evidence workflows.
+Investigation intelligence platform for fraud pattern detection, defensible
+audit history, and human-in-the-loop evidence workflows.
 
-This repository demonstrates practical backend engineering for compliance-sensitive systems: schema design, migration discipline, API design, ingestion pipelines, connector architecture, and production-minded controls.
+Built to support a real nonprofit fraud investigation that produced formal
+referrals to the Ohio Attorney General Charitable Law Section (Ref #113628),
+the IRS (Form 13909), the FBI, and the Farm Credit Administration OIG
+(Case #OIGC-394T2MR8). The manual investigation process exposed specific
+organizational and tooling gaps — Catalyst is the systematic solution to those
+gaps.
 
-## Why This Project Exists
+This repository demonstrates practical backend engineering for
+compliance-sensitive systems: schema design, migration discipline, API design,
+ingestion pipelines, connector architecture, and production-minded controls.
+
+---
+
+## Why this project exists
 
 Most investigation tooling is either:
 - too manual to scale, or
 - too automated to be legally defensible.
 
-Catalyst is designed for the middle path:
-- automate extraction and triage,
-- preserve investigator control,
-- keep a clean and auditable chain of evidence.
+Catalyst is designed for the middle path: automate extraction and triage,
+preserve investigator control, keep a clean and auditable chain of evidence.
 
-## What I Built
+---
 
-### Platform Foundation
+## What I built
+
+### Platform foundation
 - Django backend with PostgreSQL
 - SQL bootstrap migrations for clean environment initialization
-- Django migration path as canonical source of truth for app evolution
-- Timezone-aware timestamps and immutable timestamp guards where audit integrity matters
+- Django migration path as canonical source of truth for schema evolution
+- Timezone-aware timestamps and immutable timestamp guards where audit
+  integrity matters
 
-### Core Data Model
-Implemented investigation-centered entities and link tables including:
-- cases, documents, persons, organizations, properties, financial_instruments
-- findings, signals, audit_log, government_referrals
-- relationship tables for person-document, org-document, person-org, and property transactions
+### Core data model
+Investigation-centered entities and link tables:
+- cases, documents, persons, organizations, properties, financial instruments
+- findings, signals, audit log, government referrals
+- relationship tables for person-document, org-document, person-org, and
+  property transactions
 
-### Processing Pipeline
+### Processing pipeline
 - PDF text extraction with OCR fallback
 - Rule-based document classification
-- 3-stage entity pipeline:
-  - extraction
-  - normalization
-  - resolution (exact upsert + fuzzy candidate surfacing)
-- Signal detection engine with rule-based anomaly triggers (SR-001 through SR-010)
+- 3-stage entity pipeline: extraction → normalization → resolution
+  (exact upsert + fuzzy candidate surfacing)
+- Signal detection engine with 10 rule-based anomaly triggers (SR-001
+  through SR-010), derived directly from patterns found in the founding
+  investigation
 
-### Integrations and Connectors
-Implemented stateless connectors for external intelligence sources:
+### Integrations and connectors
+Stateless connectors for external intelligence sources:
 - ProPublica Nonprofit Explorer
 - IRS Pub78 + EO BMF bulk files
 - Ohio Secretary of State bulk files
-- Ohio county recorder portal support
-- Ohio county auditor support via statewide parcel layer + county links
+- Ohio county recorder portal (88-county coverage)
+- Ohio county auditor via statewide parcel layer + county links
 - Ohio Auditor of State report search
 
-### API Surface
-Built case and document intake endpoints with:
-- validation
-- pagination
-- filtering
-- deterministic sorting
-- conflict-aware deletion behavior
+### API surface
+Case and document intake endpoints with validation, pagination, filtering,
+deterministic sorting, and conflict-aware deletion behavior.
 
-### Test Architecture
-- Reorganized tests into a dedicated package for maintainability
-- Connector tests run offline with mocked HTTP
+### Test architecture
+- Connector tests run fully offline with mocked HTTP
 - API and signal tests cover behavior and edge cases
+- Organized into a dedicated test package for maintainability
 - Emphasis on reproducibility and confidence during refactors
 
-## Engineering Decisions That Matter
+---
+
+## Engineering decisions that matter
 
 ### 1. SQL bootstrap + Django evolution
-I used SQL migrations for baseline clarity and environment bootstrap, then Django migrations for day-to-day schema evolution. This gives both operational portability and developer velocity.
+SQL migrations for baseline clarity and environment bootstrap, then Django
+migrations for day-to-day schema evolution. Operational portability without
+sacrificing developer velocity.
 
 ### 2. Audit-first controls
-I treated auditability as a primary feature:
+Auditability treated as a primary feature, not an afterthought:
 - immutable fields for key timestamps
-- append-only style audit logging
-- strict timestamp handling
+- append-only audit logging
+- strict timestamp handling throughout
 
 ### 3. Human-in-the-loop by design
-Connectors and fuzzy entity logic surface candidates rather than silently merging uncertain matches. This supports legal defensibility and investigator trust.
+Connectors and fuzzy entity logic surface candidates rather than silently
+merging uncertain matches. Investigator confirmation is required before any
+match becomes a resolved entity. This is a deliberate legal defensibility
+decision, not a missing feature.
 
 ### 4. Failure isolation
-Extraction and connector paths are best-effort where appropriate. A partial failure should not collapse the full intake workflow.
+Extraction and connector paths are best-effort where appropriate. A partial
+failure in one connector or OCR step does not collapse the full intake
+workflow.
 
-## Current State
+---
 
-- Backend schema and migration story are stable
-- Documentation now reflects the schema evolution path
-- Idempotent SQL sync migration exists for repeat bootstrap scenarios
-- Project is ready for frontend implementation phase
+## Status
 
-## Repo Map
+Backend schema and migration story are stable. Signal detection engine,
+connector suite, and API surface are production-ready for the backend phase.
+Frontend implementation is the active next phase.
+
+---
+
+## Repo map
 
 - [backend](backend)
 - [backend/README.md](backend/README.md)
 - [database/migrations](database/migrations)
-- [database/migrations/README.md](database/migrations/README.md)
-- [docs/README.md](docs/README.md)
 - [docs/project/system-overview.md](docs/project/system-overview.md)
 - [docs/project/file-walkthrough.md](docs/project/file-walkthrough.md)
 
-## How To Run
+---
 
-1. Start PostgreSQL via Docker Compose from repo root.
-2. Create and activate Python virtual environment.
-3. Install dependencies from [backend/requirements.txt](backend/requirements.txt).
-4. Run migrations from [backend](backend):
-   - python manage.py migrate
-5. Start Django server:
-   - python manage.py runserver
+## How to run
 
-## Frontend (New)
+**Backend**
 
-The repository now includes a React + Vite frontend scaffold in [frontend](frontend).
+1. Start PostgreSQL: `docker-compose up`
+2. Create and activate a Python virtual environment
+3. Install dependencies: `pip install -r backend/requirements.txt`
+4. Run migrations: `python manage.py migrate`
+5. Start server: `python manage.py runserver`
 
-1. In a new terminal, go to the frontend folder:
-   - `cd frontend`
-2. Install dependencies:
-   - `npm install`
-3. Start the frontend development server:
-   - `npm run dev`
+**Frontend**
 
-Notes:
-- Vite runs on `http://127.0.0.1:5173`.
-- API requests to `/api/*` are proxied to Django at `http://127.0.0.1:8000`.
-- Keep Django running in parallel for live data.
+1. `cd frontend`
+2. `npm install`
+3. `npm run dev`
 
-Frontend productivity shortcuts:
-- `j` / `k`: move down/up the visible case list
-- `1`: set active signal draft status to `OPEN`
-- `2`: set active signal draft status to `REVIEWED`
-- `3`: set active signal draft status to `DISMISSED`
+Vite runs on `http://127.0.0.1:5173`. API requests to `/api/*` proxy to
+Django at `http://127.0.0.1:8000`. Keep Django running in parallel.
 
-Shortcut note:
-- Shortcuts are ignored while typing in form fields.
-- The active signal is whichever signal card is currently focused/selected in the signal list.
+Keyboard shortcuts (case list):
+- `j` / `k` — move down / up
+- `1` / `2` / `3` — set active signal status to Open / Reviewed / Dismissed
+- Shortcuts are suppressed while typing in form fields
 
-## Workflow Guardrails
+---
 
-This repository includes lightweight workflow controls to prevent cleanup debt.
+## Workflow guardrails
 
-- Contributor workflow and standards: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Pull request checklist template: [.github/pull_request_template.md](.github/pull_request_template.md)
-- Commit message template: [.gitmessage.txt](.gitmessage.txt)
+Lightweight controls to keep the repo clean as it grows.
+
+- Contributor standards: [CONTRIBUTING.md](CONTRIBUTING.md)
+- PR checklist: [.github/pull_request_template.md](.github/pull_request_template.md)
+- Commit template: [.gitmessage.txt](.gitmessage.txt)
 
 One-time setup:
-
-1. Enable local commit message template:
-   - `git config commit.template .gitmessage.txt`
-2. Install and enable pre-commit hooks:
-   - `pip install -r backend/requirements-dev.txt`
-   - `bash ./pc install`
+```bash
+git config commit.template .gitmessage.txt
+pip install -r backend/requirements-dev.txt
+bash ./pc install
+```
 
 Daily usage:
-
-1. Run checks before commit:
-   - `bash ./pc`
-   - Or: `bash ./pc run --all-files`
-2. Keep commit scope focused by concern.
-3. Complete the PR template for every merge request.
-
-## Portfolio Value (What This Shows Employers)
-
-This project demonstrates ability to:
-- design relational schemas for real investigative workflows
-- evolve schema safely with migration discipline
-- build resilient ingestion and normalization pipelines
-- implement APIs with real validation and operational constraints
-- structure tests for confidence in a growing codebase
-- engineer for audit/compliance requirements, not just happy-path features
-
-## Next Phase
-
-Frontend implementation to expose:
-- case timeline and evidence views
-- signal triage workflows
-- investigator review queues for fuzzy entity matches
-- referral and audit status dashboards
+```bash
+bash ./pc           # run checks before committing
+bash ./pc run --all-files
+```
