@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -8,8 +9,14 @@ load_dotenv(BASE_DIR.parent / ".env")
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "replace-me-in-env")
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
-ALLOWED_HOSTS = [h.strip() for h in os.getenv(
-    "ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
+ALLOWED_HOSTS = [
+    h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -82,9 +89,7 @@ MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 IS_TESTING = any(arg.startswith("test") for arg in sys.argv)
-UPLOAD_PIPELINE_FORCE_ENABLE = os.getenv(
-    "ENABLE_UPLOAD_PIPELINE_LOGS", "False"
-).lower() == "true"
+UPLOAD_PIPELINE_FORCE_ENABLE = os.getenv("ENABLE_UPLOAD_PIPELINE_LOGS", "False").lower() == "true"
 
 if UPLOAD_PIPELINE_FORCE_ENABLE:
     UPLOAD_PIPELINE_LOG_LEVEL = "INFO"

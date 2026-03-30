@@ -12,19 +12,23 @@ Use it to track:
 
 ## Current Open Tasks
 
-- Enter first real case through the intake UI to exercise the hardened upload workflow
+- **Run Osgood/Do Good case end-to-end** — create case, bulk upload ~100 docs in two batches, watch signals panel, create 4 referrals (FBI, State AG, IRS, FCA), generate memo
+- Monitor OCC/CIC document classification accuracy — may need keyword rule tuning once actual docs are uploaded
 - Phase 3: Build investigator UI for fuzzy match candidate review (confirm/reject/merge)
+- Findings workflow — model exists, no API or UI yet
+- Case list pagination — hardcoded to 25
 - Phase 5 (future): Multi-state SOS connector support (same interface pattern as Ohio)
 - **⚠️ MUST RETURN: Re-verify all CountyFusion counties once GovOS outage resolves** — see blocker below
 
 ## Immediate Next Steps
 
-- Signal Detection Engine is **complete** — all 10 rules wired, tested, and green.
-- Next Phase 3 items per charter:
-  1. Referral memo generator — auto-draft narrative from confirmed signals and findings
-  2. Government referral tracking — mark signals as referred, log agency + date
-  3. React frontend (Phase 3 charter item) — case list, signal triage UI, finding editor
-- **County Recorder connector corrections are complete** for all non-CF counties — verified working
+- Stack is ready to run: CSRF fix is applied, bulk upload is wired, OCC/CIC types are added
+- **Restart both servers before starting the Osgood case:**
+  - Terminal 1 (backend): `cd C:\Users\tjcol\Catalyst\backend && ../.venv/Scripts/python.exe manage.py runserver`
+  - Terminal 2 (frontend): `cd C:\Users\tjcol\Catalyst\frontend && npm run dev`
+  - Open: http://localhost:5173
+- Upload documents in two batches of ≤50 files each (bulk endpoint limit is 50 per request)
+- Watch for OCC/CIC docs classifying as OTHER — if so, keyword rules in `classification.py` may need tuning
 - **After CF outage clears:** spot-check Seneca (key Osgood county) + ~5 other CF counties, then update checklist ❌ → ✅
 
 ## Current Blockers
@@ -37,6 +41,40 @@ Use it to track:
 - Seneca recorder phone (if urgent): 419-447-4476
 
 ## Session Recap Log
+
+### 2026-03-29 (Session 20) — Referral Workflow, Bulk Upload, OCC/CIC Types, CSRF Fix
+
+- **Government referral lifecycle workflow** — added `ReferralStatus` TextChoices (DRAFT/SUBMITTED/ACKNOWLEDGED/CLOSED), FK from `GovernmentReferral` to `Case` (Option A), `notes` field; migrations `0009` and `0010` generated and applied.
+- **Referral memo generation** — `POST /api/cases/<uuid>/referral-memo/` builds plain-text memo from case + referrals, stores as `Document` with `doc_type=REFERRAL_MEMO`, `is_generated=True`.
+- **`ReferralsPanel` component** (new) — inline create/edit/delete referral cards, status badge rendering, `REFERRAL_STATUS_LABELS` map.
+- **Bulk signal severity endpoint** — `GET /api/signal-summary/` runs single `GROUP BY` aggregation with SQL CASE expression severity ranking; returns `{case_id, highest_severity, open_count}` per case; fetched in parallel with case list on page load; severity badges now visible in case queue before clicking into a case.
+- **Bulk file upload** — `POST /api/cases/<uuid>/documents/bulk/` accepts up to 50 files via `multipart/form-data`; runs full upload pipeline per file (SHA-256, storage, OCR, classification, entity extraction, signal detection); shared `_process_uploaded_file()` helper extracted from `document_upload`.
+- **`BulkUploadPanel` component** (new) — drag-and-drop zone, deduplication by filename, per-file status rows (pending/done/error), up to 50 PDFs per batch.
+- **OCC and CIC document types** — added `OCC_REPORT` and `CIC_REPORT` to `DocumentType` enum; migration `0010` applied; keyword classification rules added to `classification.py`.
+- **CSRF fix** — `@csrf_exempt` added to all 11 `api_` view functions; `CSRF_TRUSTED_ORIGINS` set to `localhost:5173` in `settings.py`; admin and HTML views retain full CSRF protection.
+- **CSS filter overflow fixes** — two separate filter-row layouts were clipping dropdowns; fixed `compact-filters` (`flex` + `width: auto`) and `filter-row` grid columns (`minmax(0, 1fr) auto auto`).
+- **Test suite kept green** — `CasesPanel.test.tsx` updated with `caseSeverityMap` prop; `CaseDetailPanel.test.tsx` updated with shared `referralProps` fixture including bulk upload handlers.
+
+### 2026-03-29 (Session 19) — Frontend Phase Completion + UX Acceleration
+
+- Completed frontend plan phases and validated with build + automated tests.
+- Phase 1 complete: success/error feedback, inline form validation, loading and empty state quality pass.
+- Phase 2 complete: refactored monolithic app into structured components and utility modules.
+- Shared UI primitives expanded (`Button`, `FormInput`, `FormSelect`, `FormTextarea`, `StateBlock`, `EmptyState`, `ToastStack`).
+- API hardening complete in frontend client:
+  - timeout handling
+  - structured error extraction
+  - abort-safe request flow
+  - improved network failure messages
+- Added frontend test harness (Vitest + Testing Library) with API and component coverage.
+- Added quick triage status chips in Signals panel for faster status draft updates.
+- Added case sort controls in the Cases panel (`updated`, `name`, `status`) with URL persistence.
+- Replaced top banners with toast notifications for action feedback.
+- Added keyboard shortcuts for investigator speed:
+  - `j` / `k` case navigation
+  - `1` / `2` / `3` set active signal draft status
+  - shortcut handling safely ignores typing in form fields
+- Current frontend baseline is ready for feature expansion, not just infrastructure work.
 
 ### 2026-03-28 (Session 18) — County Recorder Connector Full Audit + Test Suite Update
 

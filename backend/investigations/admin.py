@@ -3,12 +3,13 @@ from django.contrib import admin
 from .models import (
     AuditLog,
     Case,
+    Detection,
     Document,
-    Finding,
     FinancialInstrument,
+    Finding,
     GovernmentReferral,
-    OrgDocument,
     Organization,
+    OrgDocument,
     Person,
     PersonDocument,
     PersonOrganization,
@@ -19,13 +20,20 @@ from .models import (
 
 @admin.register(GovernmentReferral)
 class GovernmentReferralAdmin(admin.ModelAdmin):
-    list_display = ("referral_id", "agency_name", "submission_id",
-                    "contact_alias", "status", "filing_date")
+    list_display = (
+        "referral_id",
+        "case",
+        "agency_name",
+        "submission_id",
+        "contact_alias",
+        "status",
+        "filing_date",
+    )
     list_filter = ("status", "agency_name")
     search_fields = ("agency_name", "submission_id", "contact_alias")
-    # immutable after creation — enforced here and in DB
     readonly_fields = ("filing_date",)
     ordering = ("-filing_date",)
+    autocomplete_fields = ("case",)
 
 
 @admin.register(Case)
@@ -38,8 +46,7 @@ class CaseAdmin(admin.ModelAdmin):
 
 @admin.register(Document)
 class DocumentAdmin(admin.ModelAdmin):
-    list_display = ("filename", "case", "doc_type",
-                    "ocr_status", "uploaded_at")
+    list_display = ("filename", "case", "doc_type", "ocr_status", "uploaded_at")
     list_filter = ("doc_type", "ocr_status")
     search_fields = ("filename", "sha256_hash")
     ordering = ("-uploaded_at",)
@@ -69,13 +76,21 @@ class FindingAdmin(admin.ModelAdmin):
 
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):
-    list_display = ("table_name", "action", "performed_by",
-                    "performed_at", "record_id")
+    list_display = ("table_name", "action", "performed_by", "performed_at", "record_id")
     list_filter = ("action", "table_name")
     search_fields = ("performed_by", "table_name")
-    readonly_fields = ("case_id", "table_name", "record_id", "action",
-                       "before_state", "after_state", "performed_by",
-                       "performed_at", "ip_address", "notes")
+    readonly_fields = (
+        "case_id",
+        "table_name",
+        "record_id",
+        "action",
+        "before_state",
+        "after_state",
+        "performed_by",
+        "performed_at",
+        "ip_address",
+        "notes",
+    )
     ordering = ("-performed_at",)
 
     def has_add_permission(self, request):
@@ -90,8 +105,14 @@ class AuditLogAdmin(admin.ModelAdmin):
 
 @admin.register(Property)
 class PropertyAdmin(admin.ModelAdmin):
-    list_display = ("address", "parcel_number", "county", "assessed_value",
-                    "purchase_price", "case")
+    list_display = (
+        "address",
+        "parcel_number",
+        "county",
+        "assessed_value",
+        "purchase_price",
+        "case",
+    )
     list_filter = ("county",)
     search_fields = ("address", "parcel_number", "county")
     ordering = ("county", "address")
@@ -99,8 +120,7 @@ class PropertyAdmin(admin.ModelAdmin):
 
 @admin.register(FinancialInstrument)
 class FinancialInstrumentAdmin(admin.ModelAdmin):
-    list_display = ("filing_number", "instrument_type", "filing_date",
-                    "amount", "signer", "case")
+    list_display = ("filing_number", "instrument_type", "filing_date", "amount", "signer", "case")
     list_filter = ("instrument_type",)
     search_fields = ("filing_number",)
     ordering = ("-filing_date",)
@@ -134,3 +154,12 @@ class PropertyTransactionAdmin(admin.ModelAdmin):
     list_filter = ("transaction_date",)
     search_fields = ("property__address", "property__parcel_number")
     ordering = ("-transaction_date",)
+
+
+@admin.register(Detection)
+class DetectionAdmin(admin.ModelAdmin):
+    list_display = ("signal_type", "severity", "status", "case", "detected_at")
+    list_filter = ("signal_type", "severity", "status", "detection_method")
+    search_fields = ("case__name", "investigator_note")
+    ordering = ("-detected_at",)
+    readonly_fields = ("detected_at",)

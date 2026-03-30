@@ -38,3 +38,7 @@ Osgood Project Files/
 *.bak
 evidence/
 To The AG/
+
+# Frontend (Node/Vite)
+frontend/node_modules/
+frontend/dist/

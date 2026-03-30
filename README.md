@@ -105,6 +105,32 @@ Extraction and connector paths are best-effort where appropriate. A partial fail
 5. Start Django server:
    - python manage.py runserver
 
+## Frontend (New)
+
+The repository now includes a React + Vite frontend scaffold in [frontend](frontend).
+
+1. In a new terminal, go to the frontend folder:
+   - `cd frontend`
+2. Install dependencies:
+   - `npm install`
+3. Start the frontend development server:
+   - `npm run dev`
+
+Notes:
+- Vite runs on `http://127.0.0.1:5173`.
+- API requests to `/api/*` are proxied to Django at `http://127.0.0.1:8000`.
+- Keep Django running in parallel for live data.
+
+Frontend productivity shortcuts:
+- `j` / `k`: move down/up the visible case list
+- `1`: set active signal draft status to `OPEN`
+- `2`: set active signal draft status to `REVIEWED`
+- `3`: set active signal draft status to `DISMISSED`
+
+Shortcut note:
+- Shortcuts are ignored while typing in form fields.
+- The active signal is whichever signal card is currently focused/selected in the signal list.
+
 ## Workflow Guardrails
 
 This repository includes lightweight workflow controls to prevent cleanup debt.

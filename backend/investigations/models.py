@@ -40,6 +40,8 @@ class DocumentType(models.TextChoices):
     WEB_ARCHIVE = "WEB_ARCHIVE", "Web Archive / Screenshot"
     REFERRAL_MEMO = "REFERRAL_MEMO", "Referral / Complaint Memo"
     AUDITOR = "AUDITOR", "Auditor"
+    OCC_REPORT = "OCC_REPORT", "OCC Report"
+    CIC_REPORT = "CIC_REPORT", "CIC Report"
     OTHER = "OTHER", "Other"
 
 
@@ -130,10 +132,49 @@ class SignalStatus(models.TextChoices):
     ESCALATED = "ESCALATED", "Escalated"
 
 
+class SignalType(models.TextChoices):
+    DECEASED_SIGNER = "DECEASED_SIGNER", "Deceased signer"
+    DATE_IMPOSSIBILITY = "DATE_IMPOSSIBILITY", "Date impossibility"
+    MISSING_REQUIRED_FIELDS = "MISSING_REQUIRED_FIELDS", "Missing required fields"
+    METADATA_MISMATCH = "METADATA_MISMATCH", "Metadata mismatch"
+    HASH_CHANGE = "HASH_CHANGE", "Hash change on re-intake"
+    VALUATION_DELTA = "VALUATION_DELTA", "Property valuation delta"
+    SELF_DEALING = "SELF_DEALING", "Self-dealing indicator"
+    UCC_LOOP = "UCC_LOOP", "UCC lien loop"
+    PROCUREMENT_BYPASS = "PROCUREMENT_BYPASS", "Procurement bypass"
+    REVENUE_ANOMALY = "REVENUE_ANOMALY", "990 revenue anomaly"
+    PHANTOM_OFFICER = "PHANTOM_OFFICER", "Phantom officer"
+    NAME_RECONCILIATION = "NAME_RECONCILIATION", "Name reconciliation"
+    TIMELINE_COMPRESSION = "TIMELINE_COMPRESSION", "Timeline compression"
+    CHARTER_CONFLICT = "CHARTER_CONFLICT", "Charter status conflict"
+    ADDRESS_NEXUS = "ADDRESS_NEXUS", "Address nexus"
+    ASSET_DISCREPANCY = "ASSET_DISCREPANCY", "990 vs deed asset discrepancy"
+
+
+class Severity(models.TextChoices):
+    CRITICAL = "CRITICAL", "Critical"
+    HIGH = "HIGH", "High"
+    MEDIUM = "MEDIUM", "Medium"
+    LOW = "LOW", "Low"
+    INFORMATIONAL = "INFORMATIONAL", "Informational"
+
+
+class DetectionStatus(models.TextChoices):
+    OPEN = "OPEN", "Open"
+    REVIEWED = "REVIEWED", "Reviewed"
+    CONFIRMED = "CONFIRMED", "Confirmed — valid signal"
+    DISMISSED = "DISMISSED", "Dismissed — false positive"
+    ESCALATED = "ESCALATED", "Escalated to finding"
+
+
+class DetectionMethod(models.TextChoices):
+    SYSTEM_AUTO = "SYSTEM_AUTO", "Detected automatically by system"
+    INVESTIGATOR_MANUAL = "INVESTIGATOR_MANUAL", "Flagged manually by investigator"
+
+
 class Case(UUIDPrimaryKeyModel):
     name = models.CharField(max_length=255)
-    status = models.CharField(
-        max_length=20, choices=CaseStatus.choices, default=CaseStatus.ACTIVE)
+    status = models.CharField(max_length=20, choices=CaseStatus.choices, default=CaseStatus.ACTIVE)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(default=timezone.now)
     notes = models.TextField(blank=True, null=True)
@@ -147,14 +188,14 @@ class Case(UUIDPrimaryKeyModel):
 
 
 class Document(UUIDPrimaryKeyModel):
-    case = models.ForeignKey(
-        Case, on_delete=models.RESTRICT, related_name="documents")
+    case = models.ForeignKey(Case, on_delete=models.RESTRICT, related_name="documents")
     filename = models.CharField(max_length=255)
     file_path = models.CharField(max_length=500)
     sha256_hash = models.CharField(max_length=64)
     file_size = models.BigIntegerField()
     doc_type = models.CharField(
-        max_length=30, choices=DocumentType.choices, default=DocumentType.OTHER)
+        max_length=30, choices=DocumentType.choices, default=DocumentType.OTHER
+    )
     is_generated = models.BooleanField(
         default=False,
         help_text=(
@@ -172,7 +213,8 @@ class Document(UUIDPrimaryKeyModel):
     uploaded_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(default=timezone.now)
     ocr_status = models.CharField(
-        max_length=20, choices=OcrStatus.choices, default=OcrStatus.PENDING)
+        max_length=20, choices=OcrStatus.choices, default=OcrStatus.PENDING
+    )
     extracted_text = models.TextField(blank=True, null=True)
 
     class Meta:
@@ -181,8 +223,7 @@ class Document(UUIDPrimaryKeyModel):
 
 
 class Person(UUIDPrimaryKeyModel):
-    case = models.ForeignKey(
-        Case, on_delete=models.RESTRICT, related_name="persons")
+    case = models.ForeignKey(Case, on_delete=models.RESTRICT, related_name="persons")
     full_name = models.CharField(max_length=255)
     aliases = ArrayField(models.TextField(), blank=True, default=list)
     role_tags = ArrayField(
@@ -207,19 +248,23 @@ class Person(UUIDPrimaryKeyModel):
 
 
 class Organization(UUIDPrimaryKeyModel):
-    case = models.ForeignKey(
-        Case, on_delete=models.RESTRICT, related_name="organizations")
+    case = models.ForeignKey(Case, on_delete=models.RESTRICT, related_name="organizations")
     name = models.CharField(max_length=255)
     org_type = models.CharField(
-        max_length=20, choices=OrganizationType.choices, default=OrganizationType.OTHER)
+        max_length=20, choices=OrganizationType.choices, default=OrganizationType.OTHER
+    )
     ein = models.CharField(max_length=20, blank=True, null=True)
     registration_state = models.CharField(max_length=2, blank=True, null=True)
     status = models.CharField(
-        max_length=20, choices=OrganizationStatus.choices, default=OrganizationStatus.UNKNOWN)
+        max_length=20, choices=OrganizationStatus.choices, default=OrganizationStatus.UNKNOWN
+    )
     formation_date = models.DateField(
         blank=True,
         null=True,
-        help_text="Date the entity was legally formed per Secretary of State records. Used for SR-002 signal detection.",
+        help_text=(
+            "Date the entity was legally formed per Secretary of State records."
+            " Used for SR-002 signal detection."
+        ),
     )
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(default=timezone.now)
@@ -227,23 +272,19 @@ class Organization(UUIDPrimaryKeyModel):
 
     class Meta:
         db_table = "organizations"
-        indexes = [models.Index(
-            fields=["case"], name="idx_organizations_case_id")]
+        indexes = [models.Index(fields=["case"], name="idx_organizations_case_id")]
 
     def __str__(self) -> str:
         return self.name
 
 
 class Property(UUIDPrimaryKeyModel):
-    case = models.ForeignKey(
-        Case, on_delete=models.RESTRICT, related_name="properties")
+    case = models.ForeignKey(Case, on_delete=models.RESTRICT, related_name="properties")
     parcel_number = models.CharField(max_length=50, blank=True, null=True)
     address = models.CharField(max_length=500, blank=True, null=True)
     county = models.CharField(max_length=100, blank=True, null=True)
-    assessed_value = models.DecimalField(
-        max_digits=12, decimal_places=2, blank=True, null=True)
-    purchase_price = models.DecimalField(
-        max_digits=12, decimal_places=2, blank=True, null=True)
+    assessed_value = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
+    purchase_price = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     valuation_delta = models.GeneratedField(
         expression=F("purchase_price") - F("assessed_value"),
         output_field=models.DecimalField(max_digits=12, decimal_places=2),
@@ -256,23 +297,22 @@ class Property(UUIDPrimaryKeyModel):
 
     class Meta:
         db_table = "properties"
-        indexes = [models.Index(
-            fields=["case"], name="idx_properties_case_id")]
+        indexes = [models.Index(fields=["case"], name="idx_properties_case_id")]
 
 
 class FinancialInstrument(UUIDPrimaryKeyModel):
-    case = models.ForeignKey(
-        Case, on_delete=models.RESTRICT, related_name="financial_instruments")
+    case = models.ForeignKey(Case, on_delete=models.RESTRICT, related_name="financial_instruments")
     instrument_type = models.CharField(
-        max_length=20, choices=InstrumentType.choices, default=InstrumentType.OTHER)
+        max_length=20, choices=InstrumentType.choices, default=InstrumentType.OTHER
+    )
     filing_number = models.CharField(max_length=100, blank=True, null=True)
     filing_date = models.DateField(blank=True, null=True)
-    signer = models.ForeignKey(Person, on_delete=models.SET_NULL,
-                               blank=True, null=True, related_name="signed_instruments")
+    signer = models.ForeignKey(
+        Person, on_delete=models.SET_NULL, blank=True, null=True, related_name="signed_instruments"
+    )
     secured_party_id = models.UUIDField(blank=True, null=True)
     debtor_id = models.UUIDField(blank=True, null=True)
-    amount = models.DecimalField(
-        max_digits=12, decimal_places=2, blank=True, null=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     anomaly_flags = ArrayField(models.TextField(), blank=True, default=list)
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(default=timezone.now)
@@ -281,20 +321,16 @@ class FinancialInstrument(UUIDPrimaryKeyModel):
     class Meta:
         db_table = "financial_instruments"
         indexes = [
-            models.Index(fields=["case"],
-                         name="idx_fin_instr_case_id"),
-            models.Index(fields=["signer"],
-                         name="idx_fin_instr_signer"),
+            models.Index(fields=["case"], name="idx_fin_instr_case_id"),
+            models.Index(fields=["signer"], name="idx_fin_instr_signer"),
         ]
 
 
 class PersonDocument(UUIDPrimaryKeyModel):
     # Django ORM currently does not support composite primary keys.
     # We keep a surrogate UUID PK and enforce SQL-equivalent pair uniqueness.
-    person = models.ForeignKey(
-        Person, on_delete=models.CASCADE, related_name="document_links")
-    document = models.ForeignKey(
-        Document, on_delete=models.CASCADE, related_name="person_links")
+    person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="document_links")
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="person_links")
     page_reference = models.CharField(max_length=100, blank=True, null=True)
     context_note = models.TextField(blank=True, null=True)
 
@@ -302,37 +338,33 @@ class PersonDocument(UUIDPrimaryKeyModel):
         db_table = "person_document"
         constraints = [
             models.UniqueConstraint(
-                fields=["person", "document"], name="uniq_person_document_pair"),
+                fields=["person", "document"], name="uniq_person_document_pair"
+            ),
         ]
-        indexes = [models.Index(fields=["document"],
-                                name="idx_person_document_doc")]
+        indexes = [models.Index(fields=["document"], name="idx_person_document_doc")]
 
 
 class OrgDocument(UUIDPrimaryKeyModel):
     # Django ORM currently does not support composite primary keys.
     # We keep a surrogate UUID PK and enforce SQL-equivalent pair uniqueness.
-    org = models.ForeignKey(
-        Organization, on_delete=models.CASCADE, related_name="document_links")
-    document = models.ForeignKey(
-        Document, on_delete=models.CASCADE, related_name="org_links")
+    org = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="document_links")
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="org_links")
     page_reference = models.CharField(max_length=100, blank=True, null=True)
     context_note = models.TextField(blank=True, null=True)
 
     class Meta:
         db_table = "org_document"
-        constraints = [models.UniqueConstraint(
-            fields=["org", "document"], name="uniq_org_document_pair")]
-        indexes = [models.Index(fields=["document"],
-                                name="idx_org_document_doc")]
+        constraints = [
+            models.UniqueConstraint(fields=["org", "document"], name="uniq_org_document_pair")
+        ]
+        indexes = [models.Index(fields=["document"], name="idx_org_document_doc")]
 
 
 class PersonOrganization(UUIDPrimaryKeyModel):
     # Django ORM currently does not support composite primary keys.
     # We keep a surrogate UUID PK and enforce SQL-equivalent tuple uniqueness.
-    person = models.ForeignKey(
-        Person, on_delete=models.CASCADE, related_name="organization_roles")
-    org = models.ForeignKey(
-        Organization, on_delete=models.CASCADE, related_name="person_roles")
+    person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="organization_roles")
+    org = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="person_roles")
     role = models.CharField(max_length=100)
     start_date = models.DateField(blank=True, null=True)
     end_date = models.DateField(blank=True, null=True)
@@ -341,40 +373,43 @@ class PersonOrganization(UUIDPrimaryKeyModel):
     class Meta:
         db_table = "person_org"
         constraints = [
-            models.UniqueConstraint(
-                fields=["person", "org", "role"], name="uniq_person_org_role"),
+            models.UniqueConstraint(fields=["person", "org", "role"], name="uniq_person_org_role"),
         ]
 
 
 class PropertyTransaction(UUIDPrimaryKeyModel):
-    property = models.ForeignKey(
-        Property, on_delete=models.CASCADE, related_name="transactions")
-    document = models.ForeignKey(Document, on_delete=models.SET_NULL,
-                                 blank=True, null=True, related_name="property_transactions")
+    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="transactions")
+    document = models.ForeignKey(
+        Document,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="property_transactions",
+    )
     transaction_date = models.DateField(blank=True, null=True)
     buyer_id = models.UUIDField(blank=True, null=True)
     seller_id = models.UUIDField(blank=True, null=True)
-    price = models.DecimalField(
-        max_digits=12, decimal_places=2, blank=True, null=True)
+    price = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     notes = models.TextField(blank=True, null=True)
 
     class Meta:
         db_table = "property_transaction"
-        indexes = [models.Index(fields=["property"],
-                                name="idx_prop_tx_property")]
+        indexes = [models.Index(fields=["property"], name="idx_prop_tx_property")]
 
 
 class Signal(UUIDPrimaryKeyModel):
-    case = models.ForeignKey(
-        Case, on_delete=models.RESTRICT, related_name="signals")
+    case = models.ForeignKey(Case, on_delete=models.RESTRICT, related_name="signals")
     rule_id = models.CharField(max_length=10)
     severity = models.CharField(
-        max_length=20, choices=SignalSeverity.choices, default=SignalSeverity.MEDIUM)
+        max_length=20, choices=SignalSeverity.choices, default=SignalSeverity.MEDIUM
+    )
     trigger_entity_id = models.UUIDField(blank=True, null=True)
     trigger_doc = models.ForeignKey(
-        Document, on_delete=models.SET_NULL, blank=True, null=True, related_name="signals")
+        Document, on_delete=models.SET_NULL, blank=True, null=True, related_name="signals"
+    )
     status = models.CharField(
-        max_length=20, choices=SignalStatus.choices, default=SignalStatus.OPEN)
+        max_length=20, choices=SignalStatus.choices, default=SignalStatus.OPEN
+    )
     investigator_note = models.TextField(
         blank=True,
         null=True,
@@ -400,16 +435,26 @@ class Signal(UUIDPrimaryKeyModel):
 
 
 class Finding(UUIDPrimaryKeyModel):
-    case = models.ForeignKey(
-        Case, on_delete=models.RESTRICT, related_name="findings")
+    case = models.ForeignKey(Case, on_delete=models.RESTRICT, related_name="findings")
+    detection = models.ForeignKey(
+        "Detection",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="findings",
+        help_text="The detection that was escalated to produce this finding, if any.",
+    )
     title = models.CharField(max_length=500)
     narrative = models.TextField()
     severity = models.CharField(
-        max_length=20, choices=FindingSeverity.choices, default=FindingSeverity.MEDIUM)
+        max_length=20, choices=FindingSeverity.choices, default=FindingSeverity.MEDIUM
+    )
     confidence = models.CharField(
-        max_length=20, choices=FindingConfidence.choices, default=FindingConfidence.POSSIBLE)
+        max_length=20, choices=FindingConfidence.choices, default=FindingConfidence.POSSIBLE
+    )
     status = models.CharField(
-        max_length=20, choices=FindingStatus.choices, default=FindingStatus.DRAFT)
+        max_length=20, choices=FindingStatus.choices, default=FindingStatus.DRAFT
+    )
     signal_type = models.CharField(
         max_length=50,
         blank=True,
@@ -440,23 +485,19 @@ class Finding(UUIDPrimaryKeyModel):
 
 
 class FindingEntity(UUIDPrimaryKeyModel):
-    finding = models.ForeignKey(
-        Finding, on_delete=models.CASCADE, related_name="entity_links")
+    finding = models.ForeignKey(Finding, on_delete=models.CASCADE, related_name="entity_links")
     entity_id = models.UUIDField()
     entity_type = models.CharField(max_length=50)
     context_note = models.TextField(blank=True, null=True)
 
     class Meta:
         db_table = "finding_entity"
-        indexes = [models.Index(
-            fields=["finding"], name="idx_finding_entity_finding")]
+        indexes = [models.Index(fields=["finding"], name="idx_finding_entity_finding")]
 
 
 class FindingDocument(UUIDPrimaryKeyModel):
-    finding = models.ForeignKey(
-        Finding, on_delete=models.CASCADE, related_name="document_links")
-    document = models.ForeignKey(
-        Document, on_delete=models.CASCADE, related_name="finding_links")
+    finding = models.ForeignKey(Finding, on_delete=models.CASCADE, related_name="document_links")
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="finding_links")
     page_reference = models.CharField(max_length=100, blank=True, null=True)
     context_note = models.TextField(blank=True, null=True)
 
@@ -464,15 +505,14 @@ class FindingDocument(UUIDPrimaryKeyModel):
         db_table = "finding_document"
         constraints = [
             models.UniqueConstraint(
-                fields=["finding", "document"], name="uniq_finding_document_pair"),
+                fields=["finding", "document"], name="uniq_finding_document_pair"
+            ),
         ]
-        indexes = [models.Index(fields=["document"],
-                                name="idx_finding_document_doc")]
+        indexes = [models.Index(fields=["document"], name="idx_finding_document_doc")]
 
 
 class EntitySignal(UUIDPrimaryKeyModel):
-    signal = models.ForeignKey(
-        Signal, on_delete=models.CASCADE, related_name="entity_links")
+    signal = models.ForeignKey(Signal, on_delete=models.CASCADE, related_name="entity_links")
     entity_id = models.UUIDField()
     entity_type = models.CharField(max_length=50)
 
@@ -480,10 +520,10 @@ class EntitySignal(UUIDPrimaryKeyModel):
         db_table = "entity_signal"
         constraints = [
             models.UniqueConstraint(
-                fields=["signal", "entity_id", "entity_type"], name="uniq_entity_signal"),
+                fields=["signal", "entity_id", "entity_type"], name="uniq_entity_signal"
+            ),
         ]
-        indexes = [models.Index(
-            fields=["signal"], name="idx_entity_signal_signal")]
+        indexes = [models.Index(fields=["signal"], name="idx_entity_signal_signal")]
 
 
 class AuditLog(UUIDPrimaryKeyModel):
@@ -502,34 +542,131 @@ class AuditLog(UUIDPrimaryKeyModel):
         db_table = "audit_log"
         indexes = [
             models.Index(fields=["case_id"], name="idx_audit_log_case_id"),
-            models.Index(fields=["performed_at"],
-                         name="idx_audit_log_performed_at"),
-            models.Index(fields=["table_name", "record_id"],
-                         name="idx_audit_log_record"),
+            models.Index(fields=["performed_at"], name="idx_audit_log_performed_at"),
+            models.Index(fields=["table_name", "record_id"], name="idx_audit_log_record"),
         ]
+
+
+class ReferralStatus(models.TextChoices):
+    DRAFT = "DRAFT", "Draft"
+    SUBMITTED = "SUBMITTED", "Submitted"
+    ACKNOWLEDGED = "ACKNOWLEDGED", "Acknowledged"
+    CLOSED = "CLOSED", "Closed"
 
 
 class GovernmentReferral(models.Model):
     referral_id = models.AutoField(primary_key=True)
+    case = models.ForeignKey(
+        "Case",
+        on_delete=models.CASCADE,
+        related_name="referrals",
+        null=True,
+        blank=True,
+    )
     agency_name = models.CharField(max_length=100, blank=True, null=True)
     submission_id = models.CharField(max_length=255, blank=True, null=True)
     filing_date = models.DateTimeField(default=timezone.now, db_default=Now())
     contact_alias = models.CharField(max_length=100, blank=True, null=True)
     status = models.CharField(
-        max_length=50, default="Submitted", db_default=Value("Submitted"))
+        max_length=50,
+        choices=ReferralStatus.choices,
+        default=ReferralStatus.DRAFT,
+        db_default=Value(ReferralStatus.DRAFT),
+    )
+    notes = models.TextField(blank=True, default="")
 
     class Meta:
         db_table = "government_referrals"
 
     def save(self, *args, **kwargs):
         if self.pk:
-            original = GovernmentReferral.objects.filter(pk=self.pk).values_list(
-                "filing_date", flat=True
-            ).first()
+            original = (
+                GovernmentReferral.objects.filter(pk=self.pk)
+                .values_list("filing_date", flat=True)
+                .first()
+            )
             if original is not None and self.filing_date != original:
-                raise ValidationError(
-                    "filing_date is immutable after creation.")
+                raise ValidationError("filing_date is immutable after creation.")
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"{self.agency_name or 'Unknown Agency'} ({self.status})"
+
+
+class Detection(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    case = models.ForeignKey("Case", on_delete=models.CASCADE, related_name="detections")
+    signal_type = models.CharField(max_length=50, choices=SignalType.choices)
+    severity = models.CharField(max_length=20, choices=Severity.choices)
+    status = models.CharField(
+        max_length=20, choices=DetectionStatus.choices, default=DetectionStatus.OPEN
+    )
+    detection_method = models.CharField(
+        max_length=30, choices=DetectionMethod.choices, default=DetectionMethod.SYSTEM_AUTO
+    )
+
+    # The document(s) that triggered this detection.
+    # primary_document is always required.
+    # secondary_document is used for cross-document signals (e.g. charter conflict
+    # requires both the SOS dissolution doc and the post-dissolution activity doc).
+    primary_document = models.ForeignKey(
+        "Document",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="detections_as_primary",
+    )
+    secondary_document = models.ForeignKey(
+        "Document",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="detections_as_secondary",
+    )
+
+    # Nullable FKs to the entity that is implicated.
+    # Only one of these will be populated per detection row, depending on signal type.
+    person = models.ForeignKey(
+        "Person", on_delete=models.SET_NULL, null=True, blank=True, related_name="detections"
+    )
+    organization = models.ForeignKey(
+        "Organization", on_delete=models.SET_NULL, null=True, blank=True, related_name="detections"
+    )
+    property_record = models.ForeignKey(
+        "Property", on_delete=models.SET_NULL, null=True, blank=True, related_name="detections"
+    )
+    financial_instrument = models.ForeignKey(
+        "FinancialInstrument",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="detections",
+    )
+
+    # Snapshot of the raw evidence values that triggered the flag.
+    # Store as JSON so we never lose what the system saw at detection time,
+    # even if source records are later updated.
+    evidence_snapshot = models.JSONField(default=dict)
+
+    # Confidence is a float 0.0–1.0.
+    # System auto-detections start at defined confidence levels per signal type.
+    # Investigator-confirmed detections get bumped to 1.0.
+    confidence_score = models.FloatField(default=1.0)
+
+    # Free-text note from the investigator when reviewing this detection.
+    investigator_note = models.TextField(blank=True)
+
+    detected_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["-detected_at"]
+        indexes = [
+            models.Index(fields=["case", "status"]),
+            models.Index(fields=["case", "severity"]),
+            models.Index(fields=["signal_type"]),
+        ]
+
+    def __str__(self):
+        return f"{self.signal_type} | {self.severity} | {self.case}"
