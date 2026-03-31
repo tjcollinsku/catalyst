@@ -2,6 +2,8 @@
 
 # Environment variables — CRITICAL, never commit these
 .env
+.env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -12,25 +14,42 @@ __pycache__/
 .mypy_cache/
 .coverage
 coverage.xml
+htmlcov/
 .venv/
 venv/
 *.egg-info/
+dist/
+build/
 
 # Django
 *.sqlite3
+db.sqlite3
 staticfiles/
 media/
 
 # Docker
 *.log
+docker-compose.override.yml
 
 # OS
 .DS_Store
 Thumbs.db
+Desktop.ini
+*.swp
+*~
 
 # IDE
 .vscode/
 .idea/
+*.code-workspace
+
+# Binary documents — keep docs in markdown
+*.docx
+*.doc
+*.xlsx
+*.xls
+*.pptx
+~$*
 
 # Investigation evidence and archives
 Osgood Project Files/
@@ -42,3 +61,4 @@ To The AG/
 # Frontend (Node/Vite)
 frontend/node_modules/
 frontend/dist/
+node_modules/
