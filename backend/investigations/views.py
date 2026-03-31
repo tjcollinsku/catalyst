@@ -1272,3 +1272,59 @@ def api_case_detection_detail(request, pk, detection_id):
         return HttpResponse(status=204)
 
     return JsonResponse(serialize_detection(detection))
+
+
+# ---------------------------------------------------------------------------
+# Signal Re-evaluation API
+# ---------------------------------------------------------------------------
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_case_reevaluate_signals(request, pk):
+    """Re-run all signal rules against every document in a case.
+
+    Useful when:
+      - Bulk-uploaded documents have been OCR-processed after upload
+      - Entities (persons, orgs, properties) were added or corrected manually
+      - The investigator wants to confirm that all signals are up to date
+
+    Deduplication in persist_signals() prevents duplicate detections.
+
+    Response: { "new_detections": [...], "documents_evaluated": N }
+    """
+    case = get_object_or_404(Case, pk=pk)
+
+    from .signal_rules import evaluate_case, evaluate_document, persist_signals
+
+    all_new = []
+
+    documents = list(case.documents.filter(extracted_text__isnull=False).order_by("uploaded_at"))
+
+    for document in documents:
+        try:
+            doc_triggers = evaluate_document(case, document)
+            persist_result = persist_signals(case, doc_triggers)
+            all_new.extend(persist_result)
+        except Exception:
+            logger.exception(
+                "reevaluate_document_signals_failed",
+                extra={"document_id": str(document.pk), "case_id": str(case.pk)},
+            )
+
+    try:
+        case_triggers = evaluate_case(case)
+        persist_result = persist_signals(case, case_triggers)
+        all_new.extend(persist_result)
+    except Exception:
+        logger.exception(
+            "reevaluate_case_signals_failed",
+            extra={"case_id": str(case.pk)},
+        )
+
+    return JsonResponse(
+        {
+            "documents_evaluated": len(documents),
+            "new_detections": [serialize_detection(d) for d in all_new],
+        }
+    )

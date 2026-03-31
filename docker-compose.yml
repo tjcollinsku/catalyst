@@ -1,8 +1,5 @@
 # docker-compose.yml — Catalyst local development environment
 #
-# This file defines the services (containers) that run on your machine.
-# For Phase 1 we only need the database. We'll add more services in Phase 2+.
-#
 # HOW TO USE:
 #   Start:   docker compose up -d
 #   Stop:    docker compose down
@@ -15,36 +12,71 @@ services:
   # db — PostgreSQL database
   # ---------------------------------------------------------------------------
   db:
-    image: postgres:16-alpine # alpine = smaller image, production-grade
+    image: postgres:16-alpine
     container_name: catalyst_db
     restart: unless-stopped
 
     environment:
       POSTGRES_DB: catalyst_db
       POSTGRES_USER: catalyst_user
-      POSTGRES_PASSWORD: ${DB_PASSWORD} # loaded from .env file — never hardcoded
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
 
     ports:
       - "5432:5432"
-        # host:container — lets you connect from your machine
-        # format is "your_machine_port:container_port"
 
     volumes:
-      # Named volume: persists your data between container restarts
       - catalyst_pgdata:/var/lib/postgresql/data
-
-      # Mount the migrations folder so you can run SQL files from inside psql
       - ./database/migrations:/docker-entrypoint-initdb.d
-      # PostgreSQL automatically runs any .sql files in /docker-entrypoint-initdb.d
-      # on FIRST startup only (when the data volume is empty).
-      # This means your 001_initial_schema.sql runs automatically the first time!
 
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U catalyst_user -d catalyst_db" ]
+      test: ["CMD-SHELL", "pg_isready -U catalyst_user -d catalyst_db"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-# Named volumes are managed by Docker — data survives container restarts
+  # ---------------------------------------------------------------------------
+  # backend — Django API server
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: docker/Dockerfile
+    container_name: catalyst_backend
+    restart: unless-stopped
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-True}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      POSTGRES_DB: catalyst_db
+      POSTGRES_USER: catalyst_user
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: db
+      DB_PORT: "5432"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      CHROMA_PATH: /chroma_data
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - chromadb_data:/chroma_data
+    ports:
+      - "8000:8000"
+
+  # ---------------------------------------------------------------------------
+  # frontend — Nginx serving React SPA + reverse proxy to backend API
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: catalyst_frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
 volumes:
   catalyst_pgdata:
+  chromadb_data:

@@ -61,6 +61,11 @@ urlpatterns = [
         views.api_case_detection_detail,
         name="api_case_detection_detail",
     ),
+    path(
+        "api/cases/<uuid:pk>/reevaluate-signals/",
+        views.api_case_reevaluate_signals,
+        name="api_case_reevaluate_signals",
+    ),
     path("", views.case_list, name="case_list"),
     path("cases/new/", views.case_create, name="case_create"),
     path("cases/<uuid:pk>/", views.case_detail, name="case_detail"),
