@@ -24,8 +24,8 @@ Run these tests with:
 """
 
 import unittest
-from datetime import date, datetime, timezone, timedelta
-from unittest.mock import MagicMock, patch, call
+from datetime import date, datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # Shared fixture data — realistic fake CSV content
@@ -86,38 +86,46 @@ def _make_mock_response(csv_text: str, status_code: int = 200) -> MagicMock:
 # ReportType enum tests
 # ---------------------------------------------------------------------------
 
+
 class ReportTypeTests(unittest.TestCase):
     """Make sure the enum values and properties behave correctly."""
 
     def test_nonprofit_corps_url(self):
         from investigations.ohio_sos_connector import ReportType
+
         url = ReportType.NONPROFIT_CORPS.url
         self.assertIn("WI0070R.TXT", url)
         self.assertTrue(url.startswith("https://publicfiles.ohiosos.gov"))
 
     def test_llc_domestic_url(self):
         from investigations.ohio_sos_connector import ReportType
+
         url = ReportType.LLC_DOMESTIC.url
         self.assertIn("WI0100R.TXT", url)
 
     def test_amendments_is_amendment_true(self):
         from investigations.ohio_sos_connector import ReportType
+
         self.assertTrue(ReportType.AMENDMENTS.is_amendment)
 
     def test_dissolutions_is_amendment_true(self):
         from investigations.ohio_sos_connector import ReportType
+
         self.assertTrue(ReportType.DISSOLUTIONS.is_amendment)
 
     def test_nonprofit_corps_is_amendment_false(self):
         from investigations.ohio_sos_connector import ReportType
+
         self.assertFalse(ReportType.NONPROFIT_CORPS.is_amendment)
 
     def test_llc_domestic_is_amendment_false(self):
         from investigations.ohio_sos_connector import ReportType
+
         self.assertFalse(ReportType.LLC_DOMESTIC.is_amendment)
 
     def test_all_report_types_have_urls(self):
         from investigations.ohio_sos_connector import ReportType
+
         for rt in ReportType:
             self.assertTrue(rt.url.startswith("https://"))
 
@@ -126,13 +134,14 @@ class ReportTypeTests(unittest.TestCase):
 # fetch_report — success paths
 # ---------------------------------------------------------------------------
 
-class FetchReportSuccessTests(unittest.TestCase):
 
+class FetchReportSuccessTests(unittest.TestCase):
     @patch("investigations.ohio_sos_connector.requests.get")
     def test_returns_list_of_entity_records(self, mock_get):
         mock_get.return_value = _make_mock_response(NEW_ENTITY_CSV)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType
+        from investigations.ohio_sos_connector import ReportType, fetch_report
+
         records = fetch_report(ReportType.NONPROFIT_CORPS)
 
         self.assertEqual(len(records), 3)
@@ -141,7 +150,8 @@ class FetchReportSuccessTests(unittest.TestCase):
     def test_record_business_name_parsed(self, mock_get):
         mock_get.return_value = _make_mock_response(NEW_ENTITY_CSV)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType
+        from investigations.ohio_sos_connector import ReportType, fetch_report
+
         records = fetch_report(ReportType.NONPROFIT_CORPS)
 
         self.assertEqual(records[0].business_name, "EXAMPLE CHARITY MINISTRIES INC")
@@ -150,7 +160,8 @@ class FetchReportSuccessTests(unittest.TestCase):
     def test_record_charter_number_parsed(self, mock_get):
         mock_get.return_value = _make_mock_response(NEW_ENTITY_CSV)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType
+        from investigations.ohio_sos_connector import ReportType, fetch_report
+
         records = fetch_report(ReportType.NONPROFIT_CORPS)
 
         self.assertEqual(records[0].charter_number, "4567890")
@@ -159,7 +170,8 @@ class FetchReportSuccessTests(unittest.TestCase):
     def test_record_effective_date_parsed(self, mock_get):
         mock_get.return_value = _make_mock_response(NEW_ENTITY_CSV)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType
+        from investigations.ohio_sos_connector import ReportType, fetch_report
+
         records = fetch_report(ReportType.NONPROFIT_CORPS)
 
         self.assertEqual(records[0].effective_date, date(2023, 1, 15))
@@ -168,7 +180,8 @@ class FetchReportSuccessTests(unittest.TestCase):
     def test_record_statutory_agent_parsed(self, mock_get):
         mock_get.return_value = _make_mock_response(NEW_ENTITY_CSV)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType
+        from investigations.ohio_sos_connector import ReportType, fetch_report
+
         records = fetch_report(ReportType.NONPROFIT_CORPS)
 
         self.assertEqual(records[0].statutory_agent, "JOHN A EXAMPLE")
@@ -179,7 +192,8 @@ class FetchReportSuccessTests(unittest.TestCase):
     def test_record_county_parsed(self, mock_get):
         mock_get.return_value = _make_mock_response(NEW_ENTITY_CSV)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType
+        from investigations.ohio_sos_connector import ReportType, fetch_report
+
         records = fetch_report(ReportType.NONPROFIT_CORPS)
 
         self.assertEqual(records[0].county, "WYANDOT")
@@ -188,7 +202,8 @@ class FetchReportSuccessTests(unittest.TestCase):
     def test_report_type_stored_on_record(self, mock_get):
         mock_get.return_value = _make_mock_response(NEW_ENTITY_CSV)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType
+        from investigations.ohio_sos_connector import ReportType, fetch_report
+
         records = fetch_report(ReportType.NONPROFIT_CORPS)
 
         for r in records:
@@ -198,7 +213,8 @@ class FetchReportSuccessTests(unittest.TestCase):
     def test_downloaded_at_is_utc_aware(self, mock_get):
         mock_get.return_value = _make_mock_response(NEW_ENTITY_CSV)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType
+        from investigations.ohio_sos_connector import ReportType, fetch_report
+
         records = fetch_report(ReportType.NONPROFIT_CORPS)
 
         for r in records:
@@ -208,7 +224,8 @@ class FetchReportSuccessTests(unittest.TestCase):
     def test_bad_date_becomes_none(self, mock_get):
         mock_get.return_value = _make_mock_response(BAD_DATE_CSV)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType
+        from investigations.ohio_sos_connector import ReportType, fetch_report
+
         records = fetch_report(ReportType.NONPROFIT_CORPS)
 
         # The record should still be returned — just with effective_date=None
@@ -219,7 +236,8 @@ class FetchReportSuccessTests(unittest.TestCase):
     def test_skips_rows_with_empty_business_name(self, mock_get):
         mock_get.return_value = _make_mock_response(MALFORMED_CSV)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType
+        from investigations.ohio_sos_connector import ReportType, fetch_report
+
         records = fetch_report(ReportType.NONPROFIT_CORPS)
 
         # Row 1: EXAMPLE CHARITY MINISTRIES INC — should be included
@@ -232,13 +250,14 @@ class FetchReportSuccessTests(unittest.TestCase):
 # fetch_report — amendment format
 # ---------------------------------------------------------------------------
 
-class FetchReportAmendmentTests(unittest.TestCase):
 
+class FetchReportAmendmentTests(unittest.TestCase):
     @patch("investigations.ohio_sos_connector.requests.get")
     def test_amendment_records_parsed(self, mock_get):
         mock_get.return_value = _make_mock_response(AMENDMENT_CSV)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType
+        from investigations.ohio_sos_connector import ReportType, fetch_report
+
         records = fetch_report(ReportType.AMENDMENTS)
 
         self.assertEqual(len(records), 2)
@@ -252,7 +271,8 @@ class FetchReportAmendmentTests(unittest.TestCase):
         """
         mock_get.return_value = _make_mock_response(AMENDMENT_CSV)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType
+        from investigations.ohio_sos_connector import ReportType, fetch_report
+
         records = fetch_report(ReportType.AMENDMENTS)
 
         self.assertEqual(records[0].transaction_type, "AMENDED ARTICLES")
@@ -261,7 +281,8 @@ class FetchReportAmendmentTests(unittest.TestCase):
     def test_amendment_records_have_no_statutory_agent(self, mock_get):
         mock_get.return_value = _make_mock_response(AMENDMENT_CSV)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType
+        from investigations.ohio_sos_connector import ReportType, fetch_report
+
         records = fetch_report(ReportType.AMENDMENTS)
 
         for r in records:
@@ -274,7 +295,8 @@ class FetchReportAmendmentTests(unittest.TestCase):
         """Amendment reports use 'COUNTY NAME' not 'COUNTY'."""
         mock_get.return_value = _make_mock_response(AMENDMENT_CSV)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType
+        from investigations.ohio_sos_connector import ReportType, fetch_report
+
         records = fetch_report(ReportType.AMENDMENTS)
 
         self.assertEqual(records[0].county, "WYANDOT")
@@ -284,13 +306,14 @@ class FetchReportAmendmentTests(unittest.TestCase):
 # fetch_report — error paths
 # ---------------------------------------------------------------------------
 
-class FetchReportErrorTests(unittest.TestCase):
 
+class FetchReportErrorTests(unittest.TestCase):
     @patch("investigations.ohio_sos_connector.requests.get")
     def test_raises_ohio_sos_error_on_404(self, mock_get):
         mock_get.return_value = _make_mock_response("", status_code=404)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType, OhioSOSError
+        from investigations.ohio_sos_connector import OhioSOSError, ReportType, fetch_report
+
         with self.assertRaises(OhioSOSError) as ctx:
             fetch_report(ReportType.NONPROFIT_CORPS)
 
@@ -300,7 +323,8 @@ class FetchReportErrorTests(unittest.TestCase):
     def test_raises_ohio_sos_error_on_500(self, mock_get):
         mock_get.return_value = _make_mock_response("", status_code=500)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType, OhioSOSError
+        from investigations.ohio_sos_connector import OhioSOSError, ReportType, fetch_report
+
         with self.assertRaises(OhioSOSError) as ctx:
             fetch_report(ReportType.NONPROFIT_CORPS)
 
@@ -309,18 +333,22 @@ class FetchReportErrorTests(unittest.TestCase):
     @patch("investigations.ohio_sos_connector.requests.get")
     def test_raises_ohio_sos_error_on_connection_error(self, mock_get):
         import requests as req
+
         mock_get.side_effect = req.exceptions.ConnectionError("refused")
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType, OhioSOSError
+        from investigations.ohio_sos_connector import OhioSOSError, ReportType, fetch_report
+
         with self.assertRaises(OhioSOSError):
             fetch_report(ReportType.NONPROFIT_CORPS)
 
     @patch("investigations.ohio_sos_connector.requests.get")
     def test_raises_ohio_sos_error_on_timeout(self, mock_get):
         import requests as req
+
         mock_get.side_effect = req.exceptions.Timeout()
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType, OhioSOSError
+        from investigations.ohio_sos_connector import OhioSOSError, ReportType, fetch_report
+
         with self.assertRaises(OhioSOSError):
             fetch_report(ReportType.NONPROFIT_CORPS)
 
@@ -328,7 +356,8 @@ class FetchReportErrorTests(unittest.TestCase):
     def test_error_carries_report_type(self, mock_get):
         mock_get.return_value = _make_mock_response("", status_code=503)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType, OhioSOSError
+        from investigations.ohio_sos_connector import OhioSOSError, ReportType, fetch_report
+
         with self.assertRaises(OhioSOSError) as ctx:
             fetch_report(ReportType.LLC_DOMESTIC)
 
@@ -344,7 +373,8 @@ class FetchReportErrorTests(unittest.TestCase):
         )
         mock_get.return_value = _make_mock_response(header_only)
 
-        from investigations.ohio_sos_connector import fetch_report, ReportType
+        from investigations.ohio_sos_connector import ReportType, fetch_report
+
         records = fetch_report(ReportType.NONPROFIT_CORPS)
 
         self.assertEqual(records, [])
@@ -354,14 +384,15 @@ class FetchReportErrorTests(unittest.TestCase):
 # load_reports — multiple report types
 # ---------------------------------------------------------------------------
 
-class LoadReportsTests(unittest.TestCase):
 
+class LoadReportsTests(unittest.TestCase):
     @patch("investigations.ohio_sos_connector.requests.get")
     def test_combines_records_from_multiple_reports(self, mock_get):
         # Both calls return the same 3-row CSV — 6 total records expected
         mock_get.return_value = _make_mock_response(NEW_ENTITY_CSV)
 
-        from investigations.ohio_sos_connector import load_reports, ReportType
+        from investigations.ohio_sos_connector import ReportType, load_reports
+
         records = load_reports([ReportType.NONPROFIT_CORPS, ReportType.LLC_DOMESTIC])
 
         self.assertEqual(len(records), 6)
@@ -370,7 +401,8 @@ class LoadReportsTests(unittest.TestCase):
     def test_makes_one_request_per_report_type(self, mock_get):
         mock_get.return_value = _make_mock_response(NEW_ENTITY_CSV)
 
-        from investigations.ohio_sos_connector import load_reports, ReportType
+        from investigations.ohio_sos_connector import ReportType, load_reports
+
         load_reports([ReportType.NONPROFIT_CORPS, ReportType.LLC_DOMESTIC, ReportType.AMENDMENTS])
 
         self.assertEqual(mock_get.call_count, 3)
@@ -387,7 +419,8 @@ class LoadReportsTests(unittest.TestCase):
             _make_mock_response("", status_code=500),  # LLC_DOMESTIC — failure
         ]
 
-        from investigations.ohio_sos_connector import load_reports, ReportType
+        from investigations.ohio_sos_connector import ReportType, load_reports
+
         records = load_reports([ReportType.NONPROFIT_CORPS, ReportType.LLC_DOMESTIC])
 
         # Should still return the 3 records from the successful download
@@ -397,7 +430,8 @@ class LoadReportsTests(unittest.TestCase):
     def test_returns_empty_list_if_all_fail(self, mock_get):
         mock_get.return_value = _make_mock_response("", status_code=500)
 
-        from investigations.ohio_sos_connector import load_reports, ReportType
+        from investigations.ohio_sos_connector import ReportType, load_reports
+
         records = load_reports([ReportType.NONPROFIT_CORPS, ReportType.LLC_DOMESTIC])
 
         self.assertEqual(records, [])
@@ -405,6 +439,7 @@ class LoadReportsTests(unittest.TestCase):
     @patch("investigations.ohio_sos_connector.requests.get")
     def test_empty_report_types_list_returns_empty(self, mock_get):
         from investigations.ohio_sos_connector import load_reports
+
         records = load_reports([])
 
         self.assertEqual(records, [])
@@ -415,11 +450,12 @@ class LoadReportsTests(unittest.TestCase):
 # search_entities — basic matching
 # ---------------------------------------------------------------------------
 
-class SearchEntitiesExactTests(unittest.TestCase):
 
+class SearchEntitiesExactTests(unittest.TestCase):
     def _make_records(self):
         """Build a small list of EntityRecord objects in-memory without HTTP."""
         from investigations.ohio_sos_connector import EntityRecord, ReportType
+
         ts = datetime(2023, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
         return [
             EntityRecord(
@@ -471,6 +507,7 @@ class SearchEntitiesExactTests(unittest.TestCase):
 
     def test_exact_match_case_insensitive(self):
         from investigations.ohio_sos_connector import search_entities
+
         records = self._make_records()
 
         result = search_entities("example charity", records)
@@ -478,6 +515,7 @@ class SearchEntitiesExactTests(unittest.TestCase):
 
     def test_exact_match_partial_name(self):
         from investigations.ohio_sos_connector import search_entities
+
         records = self._make_records()
 
         result = search_entities("VETERANS", records)
@@ -486,6 +524,7 @@ class SearchEntitiesExactTests(unittest.TestCase):
 
     def test_no_match_returns_empty_list(self):
         from investigations.ohio_sos_connector import search_entities
+
         records = self._make_records()
 
         result = search_entities("NONEXISTENT ENTITY", records)
@@ -493,6 +532,7 @@ class SearchEntitiesExactTests(unittest.TestCase):
 
     def test_query_preserved_in_result(self):
         from investigations.ohio_sos_connector import search_entities
+
         records = self._make_records()
 
         result = search_entities("Example Charity", records)
@@ -500,13 +540,15 @@ class SearchEntitiesExactTests(unittest.TestCase):
 
     def test_total_searched_is_full_record_count(self):
         from investigations.ohio_sos_connector import search_entities
+
         records = self._make_records()
 
         result = search_entities("anything", records)
         self.assertEqual(result.total_searched, 3)
 
     def test_raises_on_empty_query(self):
-        from investigations.ohio_sos_connector import search_entities, OhioSOSError
+        from investigations.ohio_sos_connector import OhioSOSError, search_entities
+
         records = self._make_records()
 
         with self.assertRaises(OhioSOSError):
@@ -516,13 +558,14 @@ class SearchEntitiesExactTests(unittest.TestCase):
             search_entities("   ", records)
 
     def test_raises_on_empty_records(self):
-        from investigations.ohio_sos_connector import search_entities, OhioSOSError
+        from investigations.ohio_sos_connector import OhioSOSError, search_entities
 
         with self.assertRaises(OhioSOSError):
             search_entities("Example Charity", [])
 
     def test_result_includes_staleness_warning(self):
         from investigations.ohio_sos_connector import search_entities
+
         records = self._make_records()
 
         result = search_entities("Example Charity", records)
@@ -534,10 +577,11 @@ class SearchEntitiesExactTests(unittest.TestCase):
 # search_entities — fuzzy matching
 # ---------------------------------------------------------------------------
 
-class SearchEntitiesFuzzyTests(unittest.TestCase):
 
+class SearchEntitiesFuzzyTests(unittest.TestCase):
     def _make_records(self):
         from investigations.ohio_sos_connector import EntityRecord, ReportType
+
         ts = datetime(2023, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
         return [
             EntityRecord(
@@ -561,6 +605,7 @@ class SearchEntitiesFuzzyTests(unittest.TestCase):
         should still match "EXAMPLE CHARITY MINISTRIES INC".
         """
         from investigations.ohio_sos_connector import search_entities
+
         records = self._make_records()
 
         result = search_entities("Example Charity Ministries", records, fuzzy=True)
@@ -576,6 +621,7 @@ class SearchEntitiesFuzzyTests(unittest.TestCase):
         so this test verifies the exact mode does case-insensitive substring.
         """
         from investigations.ohio_sos_connector import search_entities
+
         records = self._make_records()
 
         # "example charity ministries" is a substring of "example charity ministries inc" — match expected
@@ -586,6 +632,7 @@ class SearchEntitiesFuzzyTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Staleness warning level calculation
 # ---------------------------------------------------------------------------
+
 
 class StalenessWarningTests(unittest.TestCase):
     """
@@ -599,6 +646,7 @@ class StalenessWarningTests(unittest.TestCase):
 
     def _make_warning(self, days_ago: int):
         from investigations.ohio_sos_connector import _build_staleness_warning
+
         downloaded_at = datetime.now(tz=timezone.utc) - timedelta(days=days_ago)
         return _build_staleness_warning(downloaded_at)
 
@@ -628,6 +676,7 @@ class StalenessWarningTests(unittest.TestCase):
 
     def test_warning_includes_manual_search_url(self):
         from investigations.ohio_sos_connector import MANUAL_SEARCH_URL
+
         warning = self._make_warning(10)
         self.assertIn(MANUAL_SEARCH_URL, warning.message)
         self.assertEqual(warning.manual_search_url, MANUAL_SEARCH_URL)
@@ -651,6 +700,7 @@ class StalenessWarningTests(unittest.TestCase):
         as UTC rather than crashing.
         """
         from investigations.ohio_sos_connector import _build_staleness_warning
+
         naive_ts = datetime(2023, 1, 1, 12, 0, 0)  # no tzinfo
         # Should not raise; should return a StalenessWarning
         warning = _build_staleness_warning(naive_ts)
@@ -664,6 +714,7 @@ class StalenessWarningTests(unittest.TestCase):
         investigator should always be reminded that data has a cutoff.
         """
         from investigations.ohio_sos_connector import EntityRecord, ReportType, search_entities
+
         ts = datetime.now(tz=timezone.utc)
         records = [
             EntityRecord(
@@ -687,30 +738,35 @@ class StalenessWarningTests(unittest.TestCase):
 # OhioSOSError attributes
 # ---------------------------------------------------------------------------
 
-class OhioSOSErrorTests(unittest.TestCase):
 
+class OhioSOSErrorTests(unittest.TestCase):
     def test_error_message_accessible(self):
         from investigations.ohio_sos_connector import OhioSOSError
+
         err = OhioSOSError("something went wrong")
         self.assertEqual(str(err), "something went wrong")
 
     def test_status_code_defaults_to_none(self):
         from investigations.ohio_sos_connector import OhioSOSError
+
         err = OhioSOSError("no status")
         self.assertIsNone(err.status_code)
 
     def test_report_type_defaults_to_none(self):
         from investigations.ohio_sos_connector import OhioSOSError
+
         err = OhioSOSError("no report type")
         self.assertIsNone(err.report_type)
 
     def test_status_code_stored_correctly(self):
         from investigations.ohio_sos_connector import OhioSOSError
+
         err = OhioSOSError("not found", status_code=404)
         self.assertEqual(err.status_code, 404)
 
     def test_report_type_stored_correctly(self):
         from investigations.ohio_sos_connector import OhioSOSError, ReportType
+
         err = OhioSOSError("failed", report_type=ReportType.NONPROFIT_CORPS)
         self.assertEqual(err.report_type, ReportType.NONPROFIT_CORPS)
 

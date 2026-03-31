@@ -4,8 +4,9 @@ Tests for the Ohio Auditor of State connector.
 
 import unittest
 from datetime import date
-from unittest.mock import patch, MagicMock
-from investigations.ohio_aos_connector import search_audit_reports, AuditReport, AOSError
+from unittest.mock import MagicMock, patch
+
+from investigations.ohio_aos_connector import AOSError, search_audit_reports
 
 MOCK_HTML = """
 <html>
@@ -60,8 +61,7 @@ class OhioAOSTests(unittest.TestCase):
         self.assertEqual(results[0].entity_name, "Example Charity Village")
         self.assertFalse(results[0].has_findings_for_recovery)
         self.assertEqual(results[0].release_date, date(2024, 2, 6))
-        self.assertEqual(results[0].pdf_url,
-                         "https://ohioauditor.gov/reports/audit1.pdf")
+        self.assertEqual(results[0].pdf_url, "https://ohioauditor.gov/reports/audit1.pdf")
 
         self.assertEqual(results[1].entity_name, "Franklin Township")
         self.assertTrue(results[1].has_findings_for_recovery)

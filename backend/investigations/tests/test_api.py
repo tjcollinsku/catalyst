@@ -2,9 +2,7 @@ import json
 import unittest
 import uuid
 from datetime import timedelta
-from unittest.mock import patch
 
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -163,8 +161,7 @@ class CaseIntakeApiTests(TestCase):
 
         response = self.client.get(
             reverse("api_case_collection"),
-            data={"created_from": (
-                timezone.now() - timedelta(days=5)).date().isoformat()},
+            data={"created_from": (timezone.now() - timedelta(days=5)).date().isoformat()},
         )
 
         self.assertEqual(response.status_code, 200)
@@ -200,8 +197,7 @@ class CaseIntakeApiTests(TestCase):
     def test_delete_case_returns_204_when_no_related_records(self):
         case = Case.objects.create(name="Deletable Case")
 
-        response = self.client.delete(
-            reverse("api_case_detail", args=[case.pk]))
+        response = self.client.delete(reverse("api_case_detail", args=[case.pk]))
 
         self.assertEqual(response.status_code, 204)
         self.assertFalse(Case.objects.filter(pk=case.pk).exists())
@@ -220,8 +216,7 @@ class CaseIntakeApiTests(TestCase):
             updated_at=timezone.now(),
         )
 
-        response = self.client.delete(
-            reverse("api_case_detail", args=[case.pk]))
+        response = self.client.delete(reverse("api_case_detail", args=[case.pk]))
 
         self.assertEqual(response.status_code, 409)
         payload = response.json()
@@ -229,18 +224,15 @@ class CaseIntakeApiTests(TestCase):
 
     def test_case_list_order_is_deterministic_for_timestamp_ties(self):
         shared_created_at = timezone.now()
-        first = Case.objects.create(
-            name="Tie Case 1", created_at=shared_created_at)
-        second = Case.objects.create(
-            name="Tie Case 2", created_at=shared_created_at)
+        first = Case.objects.create(name="Tie Case 1", created_at=shared_created_at)
+        second = Case.objects.create(name="Tie Case 2", created_at=shared_created_at)
 
         response = self.client.get(reverse("api_case_collection"))
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         expected_ids = sorted([str(first.pk), str(second.pk)], reverse=True)
-        self.assertEqual([item["id"]
-                         for item in payload["results"]], expected_ids)
+        self.assertEqual([item["id"] for item in payload["results"]], expected_ids)
 
     def test_case_list_supports_custom_sort(self):
         z_case = Case.objects.create(name="Zulu Case")
@@ -371,9 +363,7 @@ class CaseIntakeApiTests(TestCase):
             updated_at=timezone.now(),
         )
 
-        response = self.client.get(
-            reverse("api_case_document_collection", args=[case.pk])
-        )
+        response = self.client.get(reverse("api_case_document_collection", args=[case.pk]))
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -535,8 +525,7 @@ class CaseIntakeApiTests(TestCase):
 
         response = self.client.get(
             reverse("api_case_document_collection", args=[case.pk]),
-            data={"uploaded_from": (
-                timezone.now() - timedelta(days=5)).date().isoformat()},
+            data={"uploaded_from": (timezone.now() - timedelta(days=5)).date().isoformat()},
         )
 
         self.assertEqual(response.status_code, 200)

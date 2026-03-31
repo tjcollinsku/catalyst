@@ -20,10 +20,10 @@ Pipeline position:
 import re
 import unicodedata
 
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _strip_unicode(text: str) -> str:
     """
@@ -53,9 +53,7 @@ def _collapse_whitespace(text: str) -> str:
 # so both forms land on the same canonical string.
 # ---------------------------------------------------------------------------
 
-_INVERTED_NAME_RE = re.compile(
-    r"^([A-Za-z\-']+),\s*([A-Za-z].*?)(?:\s+(Jr\.?|Sr\.?|II|III|IV))?$"
-)
+_INVERTED_NAME_RE = re.compile(r"^([A-Za-z\-']+),\s*([A-Za-z].*?)(?:\s+(Jr\.?|Sr\.?|II|III|IV))?$")
 
 
 def _uninvert_name(raw: str) -> str:
@@ -82,6 +80,7 @@ def _uninvert_name(raw: str) -> str:
 # ---------------------------------------------------------------------------
 # Public API — Person name normalization
 # ---------------------------------------------------------------------------
+
 
 def normalize_person_name(raw: str) -> str:
     """
@@ -210,6 +209,7 @@ def normalize_org_name(raw: str) -> str:
 # sources (e.g., manual entry, connector data) and need to be standardized.
 # ---------------------------------------------------------------------------
 
+
 def normalize_date_string(raw: str) -> str | None:
     """
     Attempt to normalize a date string to ISO 8601 (YYYY-MM-DD).
@@ -224,10 +224,10 @@ def normalize_date_string(raw: str) -> str | None:
     from datetime import datetime
 
     formats = [
-        "%Y-%m-%d",   # ISO already
-        "%m/%d/%Y",   # US slash
-        "%m-%d-%Y",   # US dash
-        "%d/%m/%Y",   # European slash (less common in US records)
+        "%Y-%m-%d",  # ISO already
+        "%m/%d/%Y",  # US slash
+        "%m-%d-%Y",  # US dash
+        "%d/%m/%Y",  # European slash (less common in US records)
     ]
     raw = raw.strip()
     for fmt in formats:
@@ -244,6 +244,7 @@ def normalize_date_string(raw: str) -> str | None:
 # Amounts from extraction.py are already floats. This function handles
 # string inputs that may arrive from connector data or manual entry.
 # ---------------------------------------------------------------------------
+
 
 def normalize_amount_string(raw: str) -> float | None:
     """

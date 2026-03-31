@@ -28,10 +28,8 @@ from unittest.mock import MagicMock, patch
 from investigations.irs_connector import (
     EoBmfRecord,
     EoBmfRegion,
-    EoBmfSearchResult,
     IRSError,
     Pub78Record,
-    Pub78SearchResult,
     StalenessLevel,
     StalenessWarning,
     _parse_eo_bmf,
@@ -41,20 +39,20 @@ from investigations.irs_connector import (
     fetch_pub78,
     lookup_ein,
     search_eo_bmf,
-    search_pub78,
     search_ohio_nonprofits,
+    search_pub78,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers — build fake HTTP responses
 # ---------------------------------------------------------------------------
 
+
 def _make_response(content: bytes, status_code: int = 200) -> MagicMock:
     """Build a minimal mock requests.Response."""
     resp = MagicMock()
     resp.status_code = status_code
-    resp.ok = (status_code < 400)
+    resp.ok = status_code < 400
     resp.content = content
     return resp
 
@@ -71,12 +69,34 @@ def _make_pub78_zip(lines: list[str]) -> bytes:
 def _make_eo_bmf_csv(rows: list[dict], extra_fields: list[str] | None = None) -> bytes:
     """Build a minimal EO BMF CSV with the standard header columns."""
     header_fields = [
-        "EIN", "NAME", "ICO", "STREET", "CITY", "STATE", "ZIP",
-        "GROUP", "SUBSECTION", "AFFILIATION", "CLASSIFICATION",
-        "RULING", "DEDUCTIBILITY", "FOUNDATION", "ACTIVITY",
-        "ORGANIZATION", "STATUS", "TAX_PERIOD", "ASSET_CD",
-        "INCOME_CD", "FILING_REQ_CD", "PF_FILING_REQ_CD", "ACCT_PD",
-        "ASSET_AMT", "INCOME_AMT", "REVENUE_AMT", "NTEE_CD", "SORT_NAME",
+        "EIN",
+        "NAME",
+        "ICO",
+        "STREET",
+        "CITY",
+        "STATE",
+        "ZIP",
+        "GROUP",
+        "SUBSECTION",
+        "AFFILIATION",
+        "CLASSIFICATION",
+        "RULING",
+        "DEDUCTIBILITY",
+        "FOUNDATION",
+        "ACTIVITY",
+        "ORGANIZATION",
+        "STATUS",
+        "TAX_PERIOD",
+        "ASSET_CD",
+        "INCOME_CD",
+        "FILING_REQ_CD",
+        "PF_FILING_REQ_CD",
+        "ACCT_PD",
+        "ASSET_AMT",
+        "INCOME_AMT",
+        "REVENUE_AMT",
+        "NTEE_CD",
+        "SORT_NAME",
     ]
     if extra_fields:
         header_fields += extra_fields
@@ -128,6 +148,7 @@ def _sample_pub78_line(
 # EoBmfRegionTests
 # ---------------------------------------------------------------------------
 
+
 class EoBmfRegionTests(unittest.TestCase):
     """Every EoBmfRegion value should produce a well-formed URL."""
 
@@ -156,7 +177,12 @@ class EoBmfRegionTests(unittest.TestCase):
         )
 
     def test_all_four_regions_are_numbered(self):
-        numbered = {EoBmfRegion.NORTHEAST, EoBmfRegion.SOUTHEAST, EoBmfRegion.MIDWEST, EoBmfRegion.SOUTH_WEST}
+        numbered = {
+            EoBmfRegion.NORTHEAST,
+            EoBmfRegion.SOUTHEAST,
+            EoBmfRegion.MIDWEST,
+            EoBmfRegion.SOUTH_WEST,
+        }
         for region in numbered:
             self.assertRegex(region.value, r"^eo\d\.csv$")
 
@@ -165,8 +191,8 @@ class EoBmfRegionTests(unittest.TestCase):
 # StalenessWarningTests
 # ---------------------------------------------------------------------------
 
-class StalenessWarningTests(unittest.TestCase):
 
+class StalenessWarningTests(unittest.TestCase):
     def _warning(self, days_ago: int) -> StalenessWarning:
         dt = datetime.now(tz=timezone.utc) - timedelta(days=days_ago)
         return StalenessWarning.from_download_time(dt)
@@ -219,6 +245,7 @@ class StalenessWarningTests(unittest.TestCase):
 # ParsePub78Tests
 # ---------------------------------------------------------------------------
 
+
 class ParsePub78Tests(unittest.TestCase):
     """Tests for the internal _parse_pub78() function."""
 
@@ -256,11 +283,13 @@ class ParsePub78Tests(unittest.TestCase):
         self.assertEqual(len(records), 1)
 
     def test_parses_multiple_records(self):
-        lines = "\n".join([
-            _sample_pub78_line(ein="341234567", name="ORG A"),
-            _sample_pub78_line(ein="341234568", name="ORG B"),
-            _sample_pub78_line(ein="341234569", name="ORG C"),
-        ])
+        lines = "\n".join(
+            [
+                _sample_pub78_line(ein="341234567", name="ORG A"),
+                _sample_pub78_line(ein="341234568", name="ORG B"),
+                _sample_pub78_line(ein="341234569", name="ORG C"),
+            ]
+        )
         records = _parse_pub78(lines)
         self.assertEqual(len(records), 3)
 
@@ -278,6 +307,7 @@ class ParsePub78Tests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # ParseEoBmfTests
 # ---------------------------------------------------------------------------
+
 
 class ParseEoBmfTests(unittest.TestCase):
     """Tests for the internal _parse_eo_bmf() function."""
@@ -372,6 +402,7 @@ class ParseEoBmfTests(unittest.TestCase):
 # FetchPub78Tests
 # ---------------------------------------------------------------------------
 
+
 class FetchPub78Tests(unittest.TestCase):
     """Tests for fetch_pub78() — mocks HTTP, tests zip extraction."""
 
@@ -380,10 +411,12 @@ class FetchPub78Tests(unittest.TestCase):
 
     @patch("investigations.irs_connector.requests.get")
     def test_successful_fetch_returns_records(self, mock_get):
-        mock_get.return_value = self._make_zip_response([
-            _sample_pub78_line(ein="341234567", name="EXAMPLE CHARITY MINISTRIES INC"),
-            _sample_pub78_line(ein="341234568", name="ANOTHER ORG"),
-        ])
+        mock_get.return_value = self._make_zip_response(
+            [
+                _sample_pub78_line(ein="341234567", name="EXAMPLE CHARITY MINISTRIES INC"),
+                _sample_pub78_line(ein="341234568", name="ANOTHER ORG"),
+            ]
+        )
         records, warning = fetch_pub78()
         self.assertEqual(len(records), 2)
         self.assertIsInstance(warning, StalenessWarning)
@@ -417,6 +450,7 @@ class FetchPub78Tests(unittest.TestCase):
     @patch("investigations.irs_connector.requests.get")
     def test_connection_error_raises_irs_error(self, mock_get):
         import requests as req
+
         mock_get.side_effect = req.exceptions.ConnectionError("refused")
         with self.assertRaises(IRSError) as ctx:
             fetch_pub78()
@@ -425,6 +459,7 @@ class FetchPub78Tests(unittest.TestCase):
     @patch("investigations.irs_connector.requests.get")
     def test_timeout_raises_irs_error(self, mock_get):
         import requests as req
+
         mock_get.side_effect = req.exceptions.Timeout()
         with self.assertRaises(IRSError) as ctx:
             fetch_pub78()
@@ -451,6 +486,7 @@ class FetchPub78Tests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # FetchEoBmfTests
 # ---------------------------------------------------------------------------
+
 
 class FetchEoBmfTests(unittest.TestCase):
     """Tests for fetch_eo_bmf() — mocks HTTP, tests CSV parsing."""
@@ -496,6 +532,7 @@ class FetchEoBmfTests(unittest.TestCase):
     @patch("investigations.irs_connector.requests.get")
     def test_connection_error_raises_irs_error(self, mock_get):
         import requests as req
+
         mock_get.side_effect = req.exceptions.ConnectionError("refused")
         with self.assertRaises(IRSError):
             fetch_eo_bmf()
@@ -503,6 +540,7 @@ class FetchEoBmfTests(unittest.TestCase):
     @patch("investigations.irs_connector.requests.get")
     def test_timeout_raises_irs_error(self, mock_get):
         import requests as req
+
         mock_get.side_effect = req.exceptions.Timeout()
         with self.assertRaises(IRSError):
             fetch_eo_bmf()
@@ -518,16 +556,19 @@ class FetchEoBmfTests(unittest.TestCase):
 # SearchPub78Tests
 # ---------------------------------------------------------------------------
 
+
 class SearchPub78Tests(unittest.TestCase):
     """Tests for search_pub78()."""
 
     def _make_records(self) -> tuple[list[Pub78Record], StalenessWarning]:
-        lines = "\n".join([
-            _sample_pub78_line(ein="111111111", name="EXAMPLE CHARITY MINISTRIES INC", state="OH"),
-            _sample_pub78_line(ein="222222222", name="COMMUNITY IMPROVEMENT CORP", state="OH"),
-            _sample_pub78_line(ein="333333333", name="TOLEDO ARTS COUNCIL", state="OH"),
-            _sample_pub78_line(ein="444444444", name="EXAMPLE CHARITY FOUNDATION", state="IL"),
-        ])
+        lines = "\n".join(
+            [
+                _sample_pub78_line(ein="111111111", name="EXAMPLE CHARITY MINISTRIES INC", state="OH"),
+                _sample_pub78_line(ein="222222222", name="COMMUNITY IMPROVEMENT CORP", state="OH"),
+                _sample_pub78_line(ein="333333333", name="TOLEDO ARTS COUNCIL", state="OH"),
+                _sample_pub78_line(ein="444444444", name="EXAMPLE CHARITY FOUNDATION", state="IL"),
+            ]
+        )
         records = _parse_pub78(lines)
         warning = StalenessWarning.from_download_time(
             datetime.now(tz=timezone.utc) - timedelta(days=2)
@@ -606,16 +647,19 @@ class SearchPub78Tests(unittest.TestCase):
 # SearchEoBmfTests
 # ---------------------------------------------------------------------------
 
+
 class SearchEoBmfTests(unittest.TestCase):
     """Tests for search_eo_bmf()."""
 
     def _make_records(self) -> tuple[list[EoBmfRecord], StalenessWarning]:
-        csv_bytes = _make_eo_bmf_csv([
-            _sample_bmf_row(EIN="111111111", NAME="EXAMPLE CHARITY MINISTRIES INC", STATE="OH"),
-            _sample_bmf_row(EIN="222222222", NAME="EXAMPLE EXAMPLE EXAMPLE VETERANS CENTER INC", STATE="OH"),
-            _sample_bmf_row(EIN="333333333", NAME="EXAMPLE CHARITY FOUNDATION", STATE="IL"),
-            _sample_bmf_row(EIN="444444444", NAME="REVOKED ORG", STATE="OH", STATUS="12"),
-        ])
+        csv_bytes = _make_eo_bmf_csv(
+            [
+                _sample_bmf_row(EIN="111111111", NAME="EXAMPLE CHARITY MINISTRIES INC", STATE="OH"),
+                _sample_bmf_row(EIN="222222222", NAME="EXAMPLE EXAMPLE EXAMPLE VETERANS CENTER INC", STATE="OH"),
+                _sample_bmf_row(EIN="333333333", NAME="EXAMPLE CHARITY FOUNDATION", STATE="IL"),
+                _sample_bmf_row(EIN="444444444", NAME="REVOKED ORG", STATE="OH", STATUS="12"),
+            ]
+        )
         records = _parse_eo_bmf(csv_bytes.decode("utf-8"))
         warning = StalenessWarning.from_download_time(
             datetime.now(tz=timezone.utc) - timedelta(days=2)
@@ -691,14 +735,17 @@ class SearchEoBmfTests(unittest.TestCase):
 # LookupEinTests
 # ---------------------------------------------------------------------------
 
+
 class LookupEinTests(unittest.TestCase):
     """Tests for lookup_ein()."""
 
     def _make_records(self) -> tuple[list[EoBmfRecord], StalenessWarning]:
-        csv_bytes = _make_eo_bmf_csv([
-            _sample_bmf_row(EIN="341234567", NAME="EXAMPLE CHARITY MINISTRIES INC"),
-            _sample_bmf_row(EIN="341234568", NAME="EXAMPLE EXAMPLE EXAMPLE VETERANS CENTER INC", STATUS="12"),
-        ])
+        csv_bytes = _make_eo_bmf_csv(
+            [
+                _sample_bmf_row(EIN="341234567", NAME="EXAMPLE CHARITY MINISTRIES INC"),
+                _sample_bmf_row(EIN="341234568", NAME="EXAMPLE EXAMPLE EXAMPLE VETERANS CENTER INC", STATUS="12"),
+            ]
+        )
         records = _parse_eo_bmf(csv_bytes.decode("utf-8"))
         warning = StalenessWarning.from_download_time(datetime.now(tz=timezone.utc))
         return records, warning
@@ -753,15 +800,18 @@ class LookupEinTests(unittest.TestCase):
 # SearchOhioNonprofitsTests
 # ---------------------------------------------------------------------------
 
+
 class SearchOhioNonprofitsTests(unittest.TestCase):
     """Tests for search_ohio_nonprofits() convenience wrapper."""
 
     @patch("investigations.irs_connector.requests.get")
     def test_returns_matching_records(self, mock_get):
-        csv_bytes = _make_eo_bmf_csv([
-            _sample_bmf_row(EIN="111111111", NAME="EXAMPLE CHARITY MINISTRIES INC", STATE="OH"),
-            _sample_bmf_row(EIN="222222222", NAME="COMMUNITY FOUNDATION", STATE="OH"),
-        ])
+        csv_bytes = _make_eo_bmf_csv(
+            [
+                _sample_bmf_row(EIN="111111111", NAME="EXAMPLE CHARITY MINISTRIES INC", STATE="OH"),
+                _sample_bmf_row(EIN="222222222", NAME="COMMUNITY FOUNDATION", STATE="OH"),
+            ]
+        )
         mock_get.return_value = _make_response(csv_bytes)
         result = search_ohio_nonprofits("example charity")
         self.assertEqual(len(result.matches), 1)
@@ -784,18 +834,22 @@ class SearchOhioNonprofitsTests(unittest.TestCase):
 
     @patch("investigations.irs_connector.requests.get")
     def test_include_revoked_true_by_default(self, mock_get):
-        csv_bytes = _make_eo_bmf_csv([
-            _sample_bmf_row(EIN="111111111", NAME="REVOKED ORG", STATE="OH", STATUS="12"),
-        ])
+        csv_bytes = _make_eo_bmf_csv(
+            [
+                _sample_bmf_row(EIN="111111111", NAME="REVOKED ORG", STATE="OH", STATUS="12"),
+            ]
+        )
         mock_get.return_value = _make_response(csv_bytes)
         result = search_ohio_nonprofits("revoked")
         self.assertEqual(len(result.matches), 1)
 
     @patch("investigations.irs_connector.requests.get")
     def test_include_revoked_false_excludes_revoked(self, mock_get):
-        csv_bytes = _make_eo_bmf_csv([
-            _sample_bmf_row(EIN="111111111", NAME="REVOKED ORG", STATE="OH", STATUS="12"),
-        ])
+        csv_bytes = _make_eo_bmf_csv(
+            [
+                _sample_bmf_row(EIN="111111111", NAME="REVOKED ORG", STATE="OH", STATUS="12"),
+            ]
+        )
         mock_get.return_value = _make_response(csv_bytes)
         result = search_ohio_nonprofits("revoked", include_revoked=False)
         self.assertEqual(result.matches, [])
@@ -803,6 +857,7 @@ class SearchOhioNonprofitsTests(unittest.TestCase):
     @patch("investigations.irs_connector.requests.get")
     def test_network_error_propagates_as_irs_error(self, mock_get):
         import requests as req
+
         mock_get.side_effect = req.exceptions.ConnectionError("down")
         with self.assertRaises(IRSError):
             search_ohio_nonprofits("anything")
@@ -819,8 +874,8 @@ class SearchOhioNonprofitsTests(unittest.TestCase):
 # IRSErrorTests
 # ---------------------------------------------------------------------------
 
-class IRSErrorTests(unittest.TestCase):
 
+class IRSErrorTests(unittest.TestCase):
     def test_status_code_stored(self):
         err = IRSError("not found", status_code=404)
         self.assertEqual(err.status_code, 404)
@@ -850,8 +905,8 @@ class IRSErrorTests(unittest.TestCase):
 # SafeIntTests
 # ---------------------------------------------------------------------------
 
-class SafeIntTests(unittest.TestCase):
 
+class SafeIntTests(unittest.TestCase):
     def test_integer_input(self):
         self.assertEqual(_safe_int(500000), 500000)
 

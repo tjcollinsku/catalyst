@@ -42,32 +42,32 @@ Run:
 import unittest
 
 from investigations.county_recorder_connector import (
-    OhioCounty,
-    RecorderSystem,
-    RecorderError,
-    CountyInfo,
-    SearchUrlResult,
-    RecorderDocument,
-    get_county_info,
-    list_counties,
-    get_search_url,
-    parse_recorder_document,
     _REGISTRY,
+    CountyInfo,
+    OhioCounty,
+    RecorderDocument,
+    RecorderError,
+    RecorderSystem,
+    SearchUrlResult,
     _detect_instrument_type,
-    _extract_consideration,
-    _extract_parcel_id,
-    _extract_recording_date,
-    _extract_instrument_number,
     _extract_book_page,
+    _extract_consideration,
+    _extract_instrument_number,
     _extract_legal_description,
+    _extract_parcel_id,
     _extract_preparer,
+    _extract_recording_date,
     _title_case_name,
+    get_county_info,
+    get_search_url,
+    list_counties,
+    parse_recorder_document,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _deed_text(
     instrument="WARRANTY DEED",
@@ -102,8 +102,8 @@ def _deed_text(
 # OhioCounty enum
 # ---------------------------------------------------------------------------
 
-class OhioCountyEnumTests(unittest.TestCase):
 
+class OhioCountyEnumTests(unittest.TestCase):
     def test_all_88_counties_present(self):
         """OhioCounty must have exactly 88 members."""
         self.assertEqual(len(OhioCounty), 88)
@@ -120,16 +120,31 @@ class OhioCountyEnumTests(unittest.TestCase):
 
     def test_all_values_lowercase(self):
         for county in OhioCounty:
-            self.assertEqual(county.value, county.value.lower(),
-                             f"{county.name} value is not lowercase")
+            self.assertEqual(
+                county.value, county.value.lower(), f"{county.name} value is not lowercase"
+            )
 
     def test_specific_counties_present(self):
         """Spot-check a spread of counties are in the enum."""
         names = {c.name for c in OhioCounty}
         for expected in [
-            "ADAMS", "CUYAHOGA", "FRANKLIN", "HAMILTON", "HOLMES",
-            "LAKE", "MADISON", "MIAMI", "OTTAWA", "PIKE", "RICHLAND",
-            "SENECA", "TUSCARAWAS", "WARREN", "WAYNE", "WOOD", "WYANDOT",
+            "ADAMS",
+            "CUYAHOGA",
+            "FRANKLIN",
+            "HAMILTON",
+            "HOLMES",
+            "LAKE",
+            "MADISON",
+            "MIAMI",
+            "OTTAWA",
+            "PIKE",
+            "RICHLAND",
+            "SENECA",
+            "TUSCARAWAS",
+            "WARREN",
+            "WAYNE",
+            "WOOD",
+            "WYANDOT",
         ]:
             self.assertIn(expected, names, f"OhioCounty.{expected} missing")
 
@@ -138,26 +153,23 @@ class OhioCountyEnumTests(unittest.TestCase):
 # RecorderSystem enum
 # ---------------------------------------------------------------------------
 
-class RecorderSystemEnumTests(unittest.TestCase):
 
+class RecorderSystemEnumTests(unittest.TestCase):
     def test_eleven_systems_present(self):
         """Connector now has 11 RecorderSystem variants after live verification.
         Added COMPILED_TECH (Compiled Technologies IDX) confirmed on Meigs, Crawford."""
         self.assertEqual(len(RecorderSystem), 11)
 
     def test_system_values(self):
-        self.assertEqual(
-            RecorderSystem.GOVOS_COUNTYFUSION.value, "GovOS CountyFusion")
-        self.assertEqual(
-            RecorderSystem.GOVOS_CLOUD_SEARCH.value, "GovOS Cloud Search")
+        self.assertEqual(RecorderSystem.GOVOS_COUNTYFUSION.value, "GovOS CountyFusion")
+        self.assertEqual(RecorderSystem.GOVOS_CLOUD_SEARCH.value, "GovOS Cloud Search")
         self.assertEqual(RecorderSystem.DTS_PAXWORLD.value, "DTS PAXWorld")
         self.assertEqual(RecorderSystem.FIDLAR_AVA.value, "Fidlar AVA")
         self.assertEqual(RecorderSystem.EAGLEWEB.value, "EagleWeb (Tyler)")
         self.assertEqual(RecorderSystem.COTT_SYSTEMS.value, "Cott Systems")
         self.assertEqual(RecorderSystem.COMPILED_TECH.value, "Compiled Technologies")
         self.assertEqual(RecorderSystem.LAREDO.value, "Laredo (Fidlar)")
-        self.assertEqual(RecorderSystem.USLANDRECORDS.value,
-                         "USLandRecords (Avenu)")
+        self.assertEqual(RecorderSystem.USLANDRECORDS.value, "USLandRecords (Avenu)")
         self.assertEqual(RecorderSystem.CUSTOM.value, "Custom/Other")
         self.assertEqual(RecorderSystem.UNAVAILABLE.value, "In-Person Only")
 
@@ -166,56 +178,63 @@ class RecorderSystemEnumTests(unittest.TestCase):
 # Registry completeness
 # ---------------------------------------------------------------------------
 
-class RegistryCompletenessTests(unittest.TestCase):
 
+class RegistryCompletenessTests(unittest.TestCase):
     def test_registry_has_88_entries(self):
         self.assertEqual(len(_REGISTRY), 88)
 
     def test_every_ohio_county_in_registry(self):
         for county in OhioCounty:
-            self.assertIn(county, _REGISTRY,
-                          f"{county.name} missing from _REGISTRY")
+            self.assertIn(county, _REGISTRY, f"{county.name} missing from _REGISTRY")
 
     def test_all_entries_are_county_info(self):
         for county, info in _REGISTRY.items():
-            self.assertIsInstance(
-                info, CountyInfo, f"{county.name} is not a CountyInfo")
+            self.assertIsInstance(info, CountyInfo, f"{county.name} is not a CountyInfo")
 
     def test_all_countyfusion_counties_have_portal_url(self):
         for county, info in _REGISTRY.items():
             if info.system == RecorderSystem.GOVOS_COUNTYFUSION:
-                self.assertIsNotNone(info.portal_url,
-                                     f"{county.name} is CountyFusion but has no portal_url")
+                self.assertIsNotNone(
+                    info.portal_url, f"{county.name} is CountyFusion but has no portal_url"
+                )
                 # GovOS CountyFusion portals use either govos.com or kofiletech.us domains
                 portal = info.portal_url.lower()
                 self.assertTrue(
                     "govos.com" in portal or "kofiletech.us" in portal,
-                    f"{county.name} portal_url doesn't look like a CountyFusion domain: {info.portal_url}"
+                    f"{county.name} portal_url doesn't look like a CountyFusion domain: {info.portal_url}",
                 )
 
     def test_cloud_search_counties_have_portal_url(self):
         for county, info in _REGISTRY.items():
             if info.system == RecorderSystem.GOVOS_CLOUD_SEARCH:
-                self.assertIsNotNone(info.portal_url,
-                                     f"{county.name} Cloud Search county has no portal_url")
+                self.assertIsNotNone(
+                    info.portal_url, f"{county.name} Cloud Search county has no portal_url"
+                )
                 # Most Cloud Search counties use publicsearch.us; some like Franklin
                 # use the county's own domain but still run on GovOS Cloud Search
-                self.assertTrue(len(info.portal_url) > 10,
-                                f"{county.name} portal_url appears empty")
+                self.assertTrue(
+                    len(info.portal_url) > 10, f"{county.name} portal_url appears empty"
+                )
 
     def test_cloud_search_template_counties(self):
         """Carroll, Clark, Ottawa, Butler, Warren, Cuyahoga should have search_url_template.
         Note: Sandusky was removed from this list — it is now CountyFusion, not Cloud Search."""
         template_counties = [
-            OhioCounty.CARROLL, OhioCounty.CLARK,
-            OhioCounty.OTTAWA, OhioCounty.BUTLER,
+            OhioCounty.CARROLL,
+            OhioCounty.CLARK,
+            OhioCounty.OTTAWA,
+            OhioCounty.BUTLER,
         ]
         for county in template_counties:
             info = _REGISTRY[county]
-            self.assertIsNotNone(info.search_url_template,
-                                 f"{county.name} should have search_url_template")
-            self.assertIn("{name}", info.search_url_template,
-                          f"{county.name} template missing {{name}} placeholder")
+            self.assertIsNotNone(
+                info.search_url_template, f"{county.name} should have search_url_template"
+            )
+            self.assertIn(
+                "{name}",
+                info.search_url_template,
+                f"{county.name} template missing {{name}} placeholder",
+            )
 
     def test_all_entries_have_name(self):
         for county, info in _REGISTRY.items():
@@ -233,115 +252,92 @@ class RegistryCompletenessTests(unittest.TestCase):
         """Ohio FIPS codes run 001–175, odd only."""
         for county, info in _REGISTRY.items():
             fips = int(info.fips)
-            self.assertTrue(1 <= fips <= 175,
-                            f"{county.name} FIPS {fips} out of range")
+            self.assertTrue(1 <= fips <= 175, f"{county.name} FIPS {fips} out of range")
             self.assertEqual(fips % 2, 1, f"{county.name} FIPS {fips} is even")
 
     def test_seneca_is_countyfusion(self):
-        self.assertEqual(
-            _REGISTRY[OhioCounty.SENECA].system, RecorderSystem.GOVOS_COUNTYFUSION)
+        self.assertEqual(_REGISTRY[OhioCounty.SENECA].system, RecorderSystem.GOVOS_COUNTYFUSION)
 
     def test_seneca_records_from_1987(self):
         self.assertEqual(_REGISTRY[OhioCounty.SENECA].records_from, 1987)
 
     def test_carroll_is_cloud_search(self):
-        self.assertEqual(
-            _REGISTRY[OhioCounty.CARROLL].system, RecorderSystem.GOVOS_CLOUD_SEARCH)
+        self.assertEqual(_REGISTRY[OhioCounty.CARROLL].system, RecorderSystem.GOVOS_CLOUD_SEARCH)
 
     def test_clark_is_cloud_search(self):
-        self.assertEqual(_REGISTRY[OhioCounty.CLARK].system,
-                         RecorderSystem.GOVOS_CLOUD_SEARCH)
+        self.assertEqual(_REGISTRY[OhioCounty.CLARK].system, RecorderSystem.GOVOS_CLOUD_SEARCH)
 
     def test_ottawa_is_cloud_search(self):
-        self.assertEqual(
-            _REGISTRY[OhioCounty.OTTAWA].system, RecorderSystem.GOVOS_CLOUD_SEARCH)
+        self.assertEqual(_REGISTRY[OhioCounty.OTTAWA].system, RecorderSystem.GOVOS_CLOUD_SEARCH)
 
     def test_sandusky_is_countyfusion(self):
         """Sandusky is on CountyFusion (was incorrectly listed as Cloud Search)."""
-        self.assertEqual(
-            _REGISTRY[OhioCounty.SANDUSKY].system, RecorderSystem.GOVOS_COUNTYFUSION)
+        self.assertEqual(_REGISTRY[OhioCounty.SANDUSKY].system, RecorderSystem.GOVOS_COUNTYFUSION)
 
     def test_franklin_is_cloud_search(self):
-        self.assertEqual(
-            _REGISTRY[OhioCounty.FRANKLIN].system, RecorderSystem.GOVOS_CLOUD_SEARCH)
+        self.assertEqual(_REGISTRY[OhioCounty.FRANKLIN].system, RecorderSystem.GOVOS_CLOUD_SEARCH)
 
     def test_butler_is_cloud_search(self):
         """Butler migrated from CountyFusion to GovOS Cloud Search."""
-        self.assertEqual(
-            _REGISTRY[OhioCounty.BUTLER].system, RecorderSystem.GOVOS_CLOUD_SEARCH)
+        self.assertEqual(_REGISTRY[OhioCounty.BUTLER].system, RecorderSystem.GOVOS_CLOUD_SEARCH)
 
     def test_cuyahoga_is_cloud_search(self):
         """Cuyahoga migrated to GovOS Cloud Search (publicsearch.us)."""
-        self.assertEqual(
-            _REGISTRY[OhioCounty.CUYAHOGA].system, RecorderSystem.GOVOS_CLOUD_SEARCH)
+        self.assertEqual(_REGISTRY[OhioCounty.CUYAHOGA].system, RecorderSystem.GOVOS_CLOUD_SEARCH)
 
     def test_delaware_is_custom(self):
-        self.assertEqual(
-            _REGISTRY[OhioCounty.DELAWARE].system, RecorderSystem.CUSTOM)
+        self.assertEqual(_REGISTRY[OhioCounty.DELAWARE].system, RecorderSystem.CUSTOM)
 
     def test_union_is_custom(self):
-        self.assertEqual(
-            _REGISTRY[OhioCounty.UNION].system, RecorderSystem.CUSTOM)
+        self.assertEqual(_REGISTRY[OhioCounty.UNION].system, RecorderSystem.CUSTOM)
 
     def test_holmes_is_fidlar_ava(self):
         """Holmes migrated from Laredo to Fidlar AVA."""
-        self.assertEqual(
-            _REGISTRY[OhioCounty.HOLMES].system, RecorderSystem.FIDLAR_AVA)
+        self.assertEqual(_REGISTRY[OhioCounty.HOLMES].system, RecorderSystem.FIDLAR_AVA)
 
     def test_warren_is_cloud_search(self):
         """Warren migrated from Laredo to GovOS Cloud Search."""
-        self.assertEqual(
-            _REGISTRY[OhioCounty.WARREN].system, RecorderSystem.GOVOS_CLOUD_SEARCH)
+        self.assertEqual(_REGISTRY[OhioCounty.WARREN].system, RecorderSystem.GOVOS_CLOUD_SEARCH)
 
     def test_wood_is_fidlar_ava(self):
         """Wood migrated from Laredo to Fidlar AVA."""
-        self.assertEqual(
-            _REGISTRY[OhioCounty.WOOD].system, RecorderSystem.FIDLAR_AVA)
+        self.assertEqual(_REGISTRY[OhioCounty.WOOD].system, RecorderSystem.FIDLAR_AVA)
 
     def test_richland_is_countyfusion(self):
         """Richland is on CountyFusion (was incorrectly listed as USLandRecords)."""
-        self.assertEqual(
-            _REGISTRY[OhioCounty.RICHLAND].system, RecorderSystem.GOVOS_COUNTYFUSION)
+        self.assertEqual(_REGISTRY[OhioCounty.RICHLAND].system, RecorderSystem.GOVOS_COUNTYFUSION)
 
     def test_wayne_is_countyfusion(self):
         """Wayne is on CountyFusion (was incorrectly listed as USLandRecords)."""
-        self.assertEqual(
-            _REGISTRY[OhioCounty.WAYNE].system, RecorderSystem.GOVOS_COUNTYFUSION)
+        self.assertEqual(_REGISTRY[OhioCounty.WAYNE].system, RecorderSystem.GOVOS_COUNTYFUSION)
 
     def test_tuscarawas_is_countyfusion(self):
         """Tuscarawas is on CountyFusion (was incorrectly listed as USLandRecords)."""
-        self.assertEqual(
-            _REGISTRY[OhioCounty.TUSCARAWAS].system, RecorderSystem.GOVOS_COUNTYFUSION)
+        self.assertEqual(_REGISTRY[OhioCounty.TUSCARAWAS].system, RecorderSystem.GOVOS_COUNTYFUSION)
 
     def test_madison_is_uslandrecords(self):
         """Madison County remains on USLandRecords (Avenu Insights)."""
-        self.assertEqual(
-            _REGISTRY[OhioCounty.MADISON].system, RecorderSystem.USLANDRECORDS)
+        self.assertEqual(_REGISTRY[OhioCounty.MADISON].system, RecorderSystem.USLANDRECORDS)
 
     def test_paulding_is_fidlar_ava(self):
         """Paulding migrated from USLandRecords to Fidlar AVA."""
-        self.assertEqual(
-            _REGISTRY[OhioCounty.PAULDING].system, RecorderSystem.FIDLAR_AVA)
+        self.assertEqual(_REGISTRY[OhioCounty.PAULDING].system, RecorderSystem.FIDLAR_AVA)
 
     def test_trumbull_is_dts_paxworld(self):
         """Trumbull migrated from CountyFusion to DTS PAXWorld (May 2023)."""
-        self.assertEqual(
-            _REGISTRY[OhioCounty.TRUMBULL].system, RecorderSystem.DTS_PAXWORLD)
+        self.assertEqual(_REGISTRY[OhioCounty.TRUMBULL].system, RecorderSystem.DTS_PAXWORLD)
 
     def test_mercer_is_fidlar_ava(self):
         """Mercer migrated from CountyFusion to Fidlar AVA."""
-        self.assertEqual(
-            _REGISTRY[OhioCounty.MERCER].system, RecorderSystem.FIDLAR_AVA)
+        self.assertEqual(_REGISTRY[OhioCounty.MERCER].system, RecorderSystem.FIDLAR_AVA)
 
     def test_meigs_is_compiled_tech(self):
         """Meigs uses Compiled Technologies IDX — confirmed working by user 2026-03-28."""
-        self.assertEqual(
-            _REGISTRY[OhioCounty.MEIGS].system, RecorderSystem.COMPILED_TECH)
+        self.assertEqual(_REGISTRY[OhioCounty.MEIGS].system, RecorderSystem.COMPILED_TECH)
 
     def test_crawford_is_compiled_tech(self):
         """Crawford uses Compiled Technologies IDX — confirmed via web search 2026-03-28."""
-        self.assertEqual(
-            _REGISTRY[OhioCounty.CRAWFORD].system, RecorderSystem.COMPILED_TECH)
+        self.assertEqual(_REGISTRY[OhioCounty.CRAWFORD].system, RecorderSystem.COMPILED_TECH)
 
     def test_madison_requires_login(self):
         """Madison County Avenu portal requires free registration before searching."""
@@ -353,8 +349,8 @@ class RegistryCompletenessTests(unittest.TestCase):
 # get_county_info()
 # ---------------------------------------------------------------------------
 
-class GetCountyInfoTests(unittest.TestCase):
 
+class GetCountyInfoTests(unittest.TestCase):
     def test_returns_county_info(self):
         info = get_county_info(OhioCounty.SENECA)
         self.assertIsInstance(info, CountyInfo)
@@ -402,8 +398,8 @@ class GetCountyInfoTests(unittest.TestCase):
 # list_counties()
 # ---------------------------------------------------------------------------
 
-class ListCountiesTests(unittest.TestCase):
 
+class ListCountiesTests(unittest.TestCase):
     def test_returns_88_without_filter(self):
         counties = list_counties()
         self.assertEqual(len(counties), 88)
@@ -422,8 +418,7 @@ class ListCountiesTests(unittest.TestCase):
         # Carroll, Clark, Ottawa, Franklin, Butler, Warren, Cuyahoga = at least 7
         self.assertGreaterEqual(len(cloud), 7)
         for county in cloud:
-            self.assertEqual(_REGISTRY[county].system,
-                             RecorderSystem.GOVOS_CLOUD_SEARCH)
+            self.assertEqual(_REGISTRY[county].system, RecorderSystem.GOVOS_CLOUD_SEARCH)
 
     def test_filter_fidlar_ava(self):
         """Fidlar AVA is now a substantial group after the Gemini audit corrected
@@ -445,8 +440,7 @@ class ListCountiesTests(unittest.TestCase):
         uslr = list_counties(system=RecorderSystem.USLANDRECORDS)
         self.assertGreaterEqual(len(uslr), 2)
         for county in uslr:
-            self.assertEqual(_REGISTRY[county].system,
-                             RecorderSystem.USLANDRECORDS)
+            self.assertEqual(_REGISTRY[county].system, RecorderSystem.USLANDRECORDS)
 
     def test_filter_custom(self):
         custom = list_counties(system=RecorderSystem.CUSTOM)
@@ -476,9 +470,7 @@ class ListCountiesTests(unittest.TestCase):
         self.assertIn(OhioCounty.SENECA, cf)
 
     def test_filter_sums_to_88(self):
-        total = sum(
-            len(list_counties(system=s)) for s in RecorderSystem
-        )
+        total = sum(len(list_counties(system=s)) for s in RecorderSystem)
         self.assertEqual(total, 88)
 
 
@@ -486,8 +478,8 @@ class ListCountiesTests(unittest.TestCase):
 # get_search_url()
 # ---------------------------------------------------------------------------
 
-class GetSearchUrlTests(unittest.TestCase):
 
+class GetSearchUrlTests(unittest.TestCase):
     def test_returns_search_url_result(self):
         result = get_search_url(OhioCounty.SENECA)
         self.assertIsInstance(result, SearchUrlResult)
@@ -526,8 +518,7 @@ class GetSearchUrlTests(unittest.TestCase):
         self.assertFalse(result.requires_login)
 
     def test_cloud_search_with_name_builds_direct_url(self):
-        result = get_search_url(
-            OhioCounty.CARROLL, grantor_grantee="SMITH JOHN")
+        result = get_search_url(OhioCounty.CARROLL, grantor_grantee="SMITH JOHN")
         self.assertIn("SMITH JOHN", result.url)
         self.assertIn("carroll", result.url.lower())
 
@@ -578,8 +569,7 @@ class GetSearchUrlTests(unittest.TestCase):
     def test_instructions_not_empty(self):
         for county in list_counties():
             result = get_search_url(county)
-            self.assertTrue(result.instructions,
-                            f"{county.name} has empty instructions")
+            self.assertTrue(result.instructions, f"{county.name} has empty instructions")
 
     def test_url_none_only_for_unavailable(self):
         """Only UNAVAILABLE counties should have url=None."""
@@ -589,16 +579,15 @@ class GetSearchUrlTests(unittest.TestCase):
             if info.system == RecorderSystem.UNAVAILABLE:
                 self.assertIsNone(result.url)
             else:
-                self.assertIsNotNone(
-                    result.url, f"{county.name} has None url unexpectedly")
+                self.assertIsNotNone(result.url, f"{county.name} has None url unexpectedly")
 
 
 # ---------------------------------------------------------------------------
 # parse_recorder_document() — error handling
 # ---------------------------------------------------------------------------
 
-class ParseRecorderDocumentErrorTests(unittest.TestCase):
 
+class ParseRecorderDocumentErrorTests(unittest.TestCase):
     def test_empty_string_raises_recorder_error(self):
         with self.assertRaises(RecorderError):
             parse_recorder_document("")
@@ -616,8 +605,7 @@ class ParseRecorderDocumentErrorTests(unittest.TestCase):
         self.assertIsInstance(result, RecorderDocument)
 
     def test_county_preserved_on_result(self):
-        result = parse_recorder_document(
-            _deed_text(), county=OhioCounty.SENECA)
+        result = parse_recorder_document(_deed_text(), county=OhioCounty.SENECA)
         self.assertEqual(result.county, OhioCounty.SENECA)
 
     def test_county_none_if_not_provided(self):
@@ -640,8 +628,8 @@ class ParseRecorderDocumentErrorTests(unittest.TestCase):
 # _detect_instrument_type()
 # ---------------------------------------------------------------------------
 
-class DetectInstrumentTypeTests(unittest.TestCase):
 
+class DetectInstrumentTypeTests(unittest.TestCase):
     def _check(self, text, expected):
         result = _detect_instrument_type(text.upper())
         self.assertEqual(result, expected, f"Input: {text!r}")
@@ -685,8 +673,7 @@ class DetectInstrumentTypeTests(unittest.TestCase):
         self._check("UCC FINANCING STATEMENT", "UCC FINANCING STATEMENT")
 
     def test_financing_statement_alone(self):
-        self._check("FINANCING STATEMENT per Article 9",
-                    "UCC FINANCING STATEMENT")
+        self._check("FINANCING STATEMENT per Article 9", "UCC FINANCING STATEMENT")
 
     def test_lease(self):
         self._check("This LEASE agreement", "LEASE")
@@ -717,8 +704,8 @@ class DetectInstrumentTypeTests(unittest.TestCase):
 # Grantor / Grantee extraction (via parse_recorder_document)
 # ---------------------------------------------------------------------------
 
-class GrantorGranteeTests(unittest.TestCase):
 
+class GrantorGranteeTests(unittest.TestCase):
     def test_label_format_grantor(self):
         text = "WARRANTY DEED\n\nGRANTOR: EXAMPLE DAVID A\n\nGRANTEE: EXAMPLE PROPERTIES LLC\n\n"
         result = parse_recorder_document(text)
@@ -733,10 +720,7 @@ class GrantorGranteeTests(unittest.TestCase):
 
     def test_primary_grantor_is_first(self):
         text = (
-            "WARRANTY DEED\n\n"
-            "GRANTOR: FIRST PARTY\n"
-            "GRANTOR: SECOND PARTY\n\n"
-            "GRANTEE: BUYER LLC\n"
+            "WARRANTY DEED\n\nGRANTOR: FIRST PARTY\nGRANTOR: SECOND PARTY\n\nGRANTEE: BUYER LLC\n"
         )
         result = parse_recorder_document(text)
         self.assertEqual(result.grantor, result.grantors[0])
@@ -770,16 +754,17 @@ class GrantorGranteeTests(unittest.TestCase):
         result = parse_recorder_document(text)
         # Should not be all-caps
         if result.grantor:
-            self.assertNotEqual(result.grantor, result.grantor.upper(),
-                                "Grantor should not be ALL CAPS")
+            self.assertNotEqual(
+                result.grantor, result.grantor.upper(), "Grantor should not be ALL CAPS"
+            )
 
 
 # ---------------------------------------------------------------------------
 # _extract_consideration()
 # ---------------------------------------------------------------------------
 
-class ExtractConsiderationTests(unittest.TestCase):
 
+class ExtractConsiderationTests(unittest.TestCase):
     def _run(self, text):
         return _extract_consideration(text.upper(), text)
 
@@ -801,9 +786,7 @@ class ExtractConsiderationTests(unittest.TestCase):
         self.assertEqual(amount, 0.0)
 
     def test_dollar_amount_from_consideration_clause(self):
-        amount, text = self._run(
-            "In consideration of the sum of $325,000.00 paid by grantee"
-        )
+        amount, text = self._run("In consideration of the sum of $325,000.00 paid by grantee")
         self.assertAlmostEqual(amount, 325000.0, places=2)
 
     def test_dollar_amount_for_the_sum_of(self):
@@ -815,9 +798,7 @@ class ExtractConsiderationTests(unittest.TestCase):
         self.assertAlmostEqual(amount, 99500.0, places=2)
 
     def test_nominal_ten_dollars_other_consideration(self):
-        amount, text = self._run(
-            "for TEN DOLLARS AND OTHER VALUABLE CONSIDERATION"
-        )
+        amount, text = self._run("for TEN DOLLARS AND OTHER VALUABLE CONSIDERATION")
         self.assertIsNone(amount)
         self.assertIsNotNone(text)
         self.assertIn("VALUABLE", text.upper())
@@ -833,16 +814,13 @@ class ExtractConsiderationTests(unittest.TestCase):
         self.assertIsNotNone(text)
 
     def test_no_consideration_text_returns_none_none(self):
-        amount, text = self._run(
-            "This deed conveys the property described below.")
+        amount, text = self._run("This deed conveys the property described below.")
         self.assertIsNone(amount)
         self.assertIsNone(text)
 
     def test_zero_consideration_takes_priority_over_dollar_amount(self):
         """If both zero-consideration and a dollar amount appear, zero wins."""
-        amount, text = self._run(
-            "WITHOUT CONSIDERATION but also mentions $10.00 somewhere"
-        )
+        amount, text = self._run("WITHOUT CONSIDERATION but also mentions $10.00 somewhere")
         self.assertEqual(amount, 0.0)
 
 
@@ -850,8 +828,8 @@ class ExtractConsiderationTests(unittest.TestCase):
 # _extract_parcel_id()
 # ---------------------------------------------------------------------------
 
-class ExtractParcelIdTests(unittest.TestCase):
 
+class ExtractParcelIdTests(unittest.TestCase):
     def test_ohio_numeric_format(self):
         """Seneca County format: 22-001234.000"""
         result = _extract_parcel_id("PARCEL NO.: 22-001234.000")
@@ -870,15 +848,13 @@ class ExtractParcelIdTests(unittest.TestCase):
         self.assertIsNotNone(result)
 
     def test_numeric_format_standalone(self):
-        result = _extract_parcel_id(
-            "The parcel 22-001234.000 is described below.")
+        result = _extract_parcel_id("The parcel 22-001234.000 is described below.")
         self.assertEqual(result, "22-001234.000")
 
     def test_no_parcel_returns_none(self):
         # Avoid alphanumeric words that might accidentally match; use text with no
         # digits or parcel-adjacent labels
-        result = _extract_parcel_id(
-            "THIS DEED CONTAINS NO PROPERTY IDENTIFIER WHATSOEVER")
+        result = _extract_parcel_id("THIS DEED CONTAINS NO PROPERTY IDENTIFIER WHATSOEVER")
         self.assertIsNone(result)
 
 
@@ -886,8 +862,8 @@ class ExtractParcelIdTests(unittest.TestCase):
 # _extract_recording_date()
 # ---------------------------------------------------------------------------
 
-class ExtractRecordingDateTests(unittest.TestCase):
 
+class ExtractRecordingDateTests(unittest.TestCase):
     def test_recorded_on_date(self):
         result = _extract_recording_date("RECORDED ON March 15, 2018")
         self.assertIsNotNone(result)
@@ -912,8 +888,8 @@ class ExtractRecordingDateTests(unittest.TestCase):
 # _extract_instrument_number()
 # ---------------------------------------------------------------------------
 
-class ExtractInstrumentNumberTests(unittest.TestCase):
 
+class ExtractInstrumentNumberTests(unittest.TestCase):
     def test_instrument_no(self):
         result = _extract_instrument_number("INSTRUMENT NO. 2018-00456")
         self.assertIsNotNone(result)
@@ -932,8 +908,7 @@ class ExtractInstrumentNumberTests(unittest.TestCase):
         self.assertIsNotNone(result)
 
     def test_no_number_returns_none(self):
-        result = _extract_instrument_number(
-            "THIS DOCUMENT HAS NO INSTRUMENT NUMBER")
+        result = _extract_instrument_number("THIS DOCUMENT HAS NO INSTRUMENT NUMBER")
         self.assertIsNone(result)
 
 
@@ -941,8 +916,8 @@ class ExtractInstrumentNumberTests(unittest.TestCase):
 # _extract_book_page()
 # ---------------------------------------------------------------------------
 
-class ExtractBookPageTests(unittest.TestCase):
 
+class ExtractBookPageTests(unittest.TestCase):
     def test_book_page_format(self):
         result = _extract_book_page("recorded in BOOK 312 PAGE 44")
         self.assertIsNotNone(result)
@@ -976,8 +951,8 @@ class ExtractBookPageTests(unittest.TestCase):
 # _extract_legal_description()
 # ---------------------------------------------------------------------------
 
-class ExtractLegalDescriptionTests(unittest.TestCase):
 
+class ExtractLegalDescriptionTests(unittest.TestCase):
     def test_situated_in_township(self):
         text = "Situated in the Township of Pleasant, Seneca County, State of Ohio, being Lot 4"
         result = _extract_legal_description(text, text.upper())
@@ -1008,7 +983,8 @@ class ExtractLegalDescriptionTests(unittest.TestCase):
 
     def test_no_legal_returns_none(self):
         result = _extract_legal_description(
-            "No legal description here.", "NO LEGAL DESCRIPTION HERE.")
+            "No legal description here.", "NO LEGAL DESCRIPTION HERE."
+        )
         self.assertIsNone(result)
 
 
@@ -1016,8 +992,8 @@ class ExtractLegalDescriptionTests(unittest.TestCase):
 # _extract_preparer() — including title search disclaimer
 # ---------------------------------------------------------------------------
 
-class ExtractPreparerTests(unittest.TestCase):
 
+class ExtractPreparerTests(unittest.TestCase):
     def _run(self, text):
         return _extract_preparer(text, text.upper())
 
@@ -1067,8 +1043,7 @@ class ExtractPreparerTests(unittest.TestCase):
         self.assertGreater(len(notes), 10)
 
     def test_no_preparer_no_disclaimer_returns_none_none(self):
-        preparer, notes = self._run(
-            "This deed has no preparer information at all.")
+        preparer, notes = self._run("This deed has no preparer information at all.")
         self.assertIsNone(preparer)
         self.assertIsNone(notes)
 
@@ -1086,8 +1061,8 @@ class ExtractPreparerTests(unittest.TestCase):
 # Integration: parse_recorder_document with full deed text
 # ---------------------------------------------------------------------------
 
-class ParseRecorderDocumentIntegrationTests(unittest.TestCase):
 
+class ParseRecorderDocumentIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.deed_text = _deed_text(
             instrument="WARRANTY DEED",
@@ -1102,8 +1077,7 @@ class ParseRecorderDocumentIntegrationTests(unittest.TestCase):
             preparer="Prepared by: James T. Black, Attorney at Law",
             disclaimer="This instrument was prepared without benefit of title search.",
         )
-        self.result = parse_recorder_document(
-            self.deed_text, county=OhioCounty.SENECA)
+        self.result = parse_recorder_document(self.deed_text, county=OhioCounty.SENECA)
 
     def test_instrument_type_is_warranty_deed(self):
         self.assertEqual(self.result.instrument_type, "WARRANTY DEED")
@@ -1160,7 +1134,6 @@ class ParseRecorderDocumentIntegrationTests(unittest.TestCase):
 
 
 class ParseMortgageDocumentTests(unittest.TestCase):
-
     def test_mortgage_instrument_type(self):
         text = (
             "MORTGAGE\n\n"
@@ -1184,8 +1157,8 @@ class ParseMortgageDocumentTests(unittest.TestCase):
 # RecorderError
 # ---------------------------------------------------------------------------
 
-class RecorderErrorTests(unittest.TestCase):
 
+class RecorderErrorTests(unittest.TestCase):
     def test_message_attribute(self):
         err = RecorderError("Something went wrong")
         self.assertEqual(str(err), "Something went wrong")
@@ -1212,8 +1185,8 @@ class RecorderErrorTests(unittest.TestCase):
 # _title_case_name()
 # ---------------------------------------------------------------------------
 
-class TitleCaseNameTests(unittest.TestCase):
 
+class TitleCaseNameTests(unittest.TestCase):
     def test_all_caps_converted(self):
         result = _title_case_name("EXAMPLE DAVID A")
         self.assertEqual(result, "Example David A")

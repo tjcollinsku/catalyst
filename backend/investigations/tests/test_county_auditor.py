@@ -25,11 +25,12 @@ Run:
     python -m unittest investigations.tests_county_auditor -v
 """
 
-import json
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from investigations.county_auditor_connector import (
+    _AUDITOR_REGISTRY,
+    MAX_RESULTS,
     AuditorError,
     AuditorInfo,
     AuditorPortalSystem,
@@ -37,24 +38,20 @@ from investigations.county_auditor_connector import (
     OhioCounty,
     ParcelRecord,
     ParcelSearchResult,
-    _AUDITOR_REGISTRY,
     _build_result_note,
     _escape_like,
     _parse_parcel_feature,
-    _run_odnr_query,
     get_auditor_info,
     get_auditor_url,
     list_counties,
     search_parcels_by_owner,
     search_parcels_by_pin,
-    ODNR_PARCEL_QUERY_URL,
-    MAX_RESULTS,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_response(
     status_code: int = 200,
@@ -62,7 +59,6 @@ def _make_response(
     raise_for: type | None = None,
 ):
     """Build a mock requests.Response."""
-    import requests
 
     mock = MagicMock()
     mock.status_code = status_code
@@ -113,8 +109,8 @@ def _api_response(features: list | None = None) -> dict:
 # OhioCounty enum
 # ---------------------------------------------------------------------------
 
-class OhioCountyEnumTests(unittest.TestCase):
 
+class OhioCountyEnumTests(unittest.TestCase):
     def test_all_88_counties_present(self):
         self.assertEqual(len(OhioCounty), 88)
 
@@ -139,8 +135,8 @@ class OhioCountyEnumTests(unittest.TestCase):
 # AuditorPortalSystem enum
 # ---------------------------------------------------------------------------
 
-class AuditorPortalSystemEnumTests(unittest.TestCase):
 
+class AuditorPortalSystemEnumTests(unittest.TestCase):
     def test_three_systems(self):
         self.assertEqual(len(AuditorPortalSystem), 3)
 
@@ -158,8 +154,8 @@ class AuditorPortalSystemEnumTests(unittest.TestCase):
 # Registry completeness
 # ---------------------------------------------------------------------------
 
-class RegistryCompletenessTests(unittest.TestCase):
 
+class RegistryCompletenessTests(unittest.TestCase):
     def test_registry_has_88_entries(self):
         self.assertEqual(len(_AUDITOR_REGISTRY), 88)
 
@@ -174,23 +170,28 @@ class RegistryCompletenessTests(unittest.TestCase):
     def test_all_beacon_counties_have_app_code(self):
         for county, info in _AUDITOR_REGISTRY.items():
             if info.system == AuditorPortalSystem.BEACON:
-                self.assertIsNotNone(info.beacon_app,
-                    f"{county.name} is Beacon but has no beacon_app")
-                self.assertIn("OH", info.beacon_app,
-                    f"{county.name} beacon_app should contain 'OH'")
+                self.assertIsNotNone(
+                    info.beacon_app, f"{county.name} is Beacon but has no beacon_app"
+                )
+                self.assertIn(
+                    "OH", info.beacon_app, f"{county.name} beacon_app should contain 'OH'"
+                )
 
     def test_all_county_site_counties_have_no_beacon_app(self):
         for county, info in _AUDITOR_REGISTRY.items():
             if info.system == AuditorPortalSystem.COUNTY_SITE:
-                self.assertIsNone(info.beacon_app,
-                    f"{county.name} is COUNTY_SITE but has beacon_app set")
+                self.assertIsNone(
+                    info.beacon_app, f"{county.name} is COUNTY_SITE but has beacon_app set"
+                )
 
     def test_all_entries_have_portal_url(self):
         for county, info in _AUDITOR_REGISTRY.items():
             if info.system != AuditorPortalSystem.UNAVAILABLE:
                 self.assertIsNotNone(info.portal_url, f"{county.name} missing portal_url")
-                self.assertTrue(info.portal_url.startswith("https://"),
-                    f"{county.name} portal_url should be https")
+                self.assertTrue(
+                    info.portal_url.startswith("https://"),
+                    f"{county.name} portal_url should be https",
+                )
 
     def test_all_entries_have_phone(self):
         for county, info in _AUDITOR_REGISTRY.items():
@@ -218,25 +219,35 @@ class RegistryCompletenessTests(unittest.TestCase):
         self.assertEqual(_AUDITOR_REGISTRY[OhioCounty.DARKE].beacon_app, "DarkeCountyOH")
 
     def test_mercer_is_county_site(self):
-        self.assertEqual(_AUDITOR_REGISTRY[OhioCounty.MERCER].system, AuditorPortalSystem.COUNTY_SITE)
+        self.assertEqual(
+            _AUDITOR_REGISTRY[OhioCounty.MERCER].system, AuditorPortalSystem.COUNTY_SITE
+        )
 
     def test_mercer_portal_url(self):
         self.assertIn("mercercountyohio", _AUDITOR_REGISTRY[OhioCounty.MERCER].portal_url)
 
     def test_seneca_is_county_site(self):
-        self.assertEqual(_AUDITOR_REGISTRY[OhioCounty.SENECA].system, AuditorPortalSystem.COUNTY_SITE)
+        self.assertEqual(
+            _AUDITOR_REGISTRY[OhioCounty.SENECA].system, AuditorPortalSystem.COUNTY_SITE
+        )
 
     def test_seneca_portal_url(self):
         self.assertIn("seneca", _AUDITOR_REGISTRY[OhioCounty.SENECA].portal_url.lower())
 
     def test_franklin_is_county_site(self):
-        self.assertEqual(_AUDITOR_REGISTRY[OhioCounty.FRANKLIN].system, AuditorPortalSystem.COUNTY_SITE)
+        self.assertEqual(
+            _AUDITOR_REGISTRY[OhioCounty.FRANKLIN].system, AuditorPortalSystem.COUNTY_SITE
+        )
 
     def test_hamilton_is_county_site(self):
-        self.assertEqual(_AUDITOR_REGISTRY[OhioCounty.HAMILTON].system, AuditorPortalSystem.COUNTY_SITE)
+        self.assertEqual(
+            _AUDITOR_REGISTRY[OhioCounty.HAMILTON].system, AuditorPortalSystem.COUNTY_SITE
+        )
 
     def test_cuyahoga_is_county_site(self):
-        self.assertEqual(_AUDITOR_REGISTRY[OhioCounty.CUYAHOGA].system, AuditorPortalSystem.COUNTY_SITE)
+        self.assertEqual(
+            _AUDITOR_REGISTRY[OhioCounty.CUYAHOGA].system, AuditorPortalSystem.COUNTY_SITE
+        )
 
     def test_allen_is_beacon(self):
         self.assertEqual(_AUDITOR_REGISTRY[OhioCounty.ALLEN].system, AuditorPortalSystem.BEACON)
@@ -245,13 +256,18 @@ class RegistryCompletenessTests(unittest.TestCase):
         self.assertEqual(_AUDITOR_REGISTRY[OhioCounty.WOOD].system, AuditorPortalSystem.BEACON)
 
     def test_trumbull_is_county_site(self):
-        self.assertEqual(_AUDITOR_REGISTRY[OhioCounty.TRUMBULL].system, AuditorPortalSystem.COUNTY_SITE)
+        self.assertEqual(
+            _AUDITOR_REGISTRY[OhioCounty.TRUMBULL].system, AuditorPortalSystem.COUNTY_SITE
+        )
 
     def test_beacon_counties_use_schneidercorp(self):
         for county, info in _AUDITOR_REGISTRY.items():
             if info.system == AuditorPortalSystem.BEACON:
-                self.assertIn("schneidercorp.com", info.portal_url,
-                    f"{county.name} Beacon URL should use schneidercorp.com")
+                self.assertIn(
+                    "schneidercorp.com",
+                    info.portal_url,
+                    f"{county.name} Beacon URL should use schneidercorp.com",
+                )
 
     def test_majority_are_beacon(self):
         """Most Ohio counties use Beacon."""
@@ -263,8 +279,8 @@ class RegistryCompletenessTests(unittest.TestCase):
 # get_auditor_info()
 # ---------------------------------------------------------------------------
 
-class GetAuditorInfoTests(unittest.TestCase):
 
+class GetAuditorInfoTests(unittest.TestCase):
     def test_returns_auditor_info(self):
         info = get_auditor_info(OhioCounty.DARKE)
         self.assertIsInstance(info, AuditorInfo)
@@ -304,8 +320,8 @@ class GetAuditorInfoTests(unittest.TestCase):
 # list_counties()
 # ---------------------------------------------------------------------------
 
-class ListCountiesTests(unittest.TestCase):
 
+class ListCountiesTests(unittest.TestCase):
     def test_returns_88_without_filter(self):
         self.assertEqual(len(list_counties()), 88)
 
@@ -348,8 +364,8 @@ class ListCountiesTests(unittest.TestCase):
 # get_auditor_url()
 # ---------------------------------------------------------------------------
 
-class GetAuditorUrlTests(unittest.TestCase):
 
+class GetAuditorUrlTests(unittest.TestCase):
     def test_returns_auditor_url_result(self):
         result = get_auditor_url(OhioCounty.DARKE)
         self.assertIsInstance(result, AuditorUrlResult)
@@ -408,13 +424,11 @@ class GetAuditorUrlTests(unittest.TestCase):
 # search_parcels_by_owner() — HTTP mocked
 # ---------------------------------------------------------------------------
 
-class SearchParcelsByOwnerTests(unittest.TestCase):
 
+class SearchParcelsByOwnerTests(unittest.TestCase):
     def _mock_session(self, json_data: dict, status_code: int = 200):
         session = MagicMock()
-        session.get.return_value = _make_response(
-            status_code=status_code, json_data=json_data
-        )
+        session.get.return_value = _make_response(status_code=status_code, json_data=json_data)
         return session
 
     def test_empty_query_raises(self):
@@ -431,7 +445,9 @@ class SearchParcelsByOwnerTests(unittest.TestCase):
         self.assertIsInstance(result, ParcelSearchResult)
 
     def test_success_count(self):
-        session = self._mock_session(_api_response([_sample_feature(), _sample_feature(objectid=2, pin="22-002345.000")]))
+        session = self._mock_session(
+            _api_response([_sample_feature(), _sample_feature(objectid=2, pin="22-002345.000")])
+        )
         result = search_parcels_by_owner("EXAMPLE", session=session)
         self.assertEqual(result.count, 2)
 
@@ -499,6 +515,7 @@ class SearchParcelsByOwnerTests(unittest.TestCase):
 
     def test_timeout_raises_auditor_error(self):
         import requests as req_lib
+
         session = MagicMock()
         session.get.side_effect = req_lib.exceptions.Timeout()
         with self.assertRaises(AuditorError) as cm:
@@ -507,6 +524,7 @@ class SearchParcelsByOwnerTests(unittest.TestCase):
 
     def test_connection_error_raises_auditor_error(self):
         import requests as req_lib
+
         session = MagicMock()
         session.get.side_effect = req_lib.exceptions.ConnectionError()
         with self.assertRaises(AuditorError):
@@ -571,8 +589,8 @@ class SearchParcelsByOwnerTests(unittest.TestCase):
 # search_parcels_by_pin() — HTTP mocked
 # ---------------------------------------------------------------------------
 
-class SearchParcelsByPinTests(unittest.TestCase):
 
+class SearchParcelsByPinTests(unittest.TestCase):
     def _mock_session(self, json_data: dict):
         session = MagicMock()
         session.get.return_value = _make_response(json_data=json_data)
@@ -618,8 +636,8 @@ class SearchParcelsByPinTests(unittest.TestCase):
 # _parse_parcel_feature()
 # ---------------------------------------------------------------------------
 
-class ParseParcelFeatureTests(unittest.TestCase):
 
+class ParseParcelFeatureTests(unittest.TestCase):
     def test_all_fields_populated(self):
         feature = _sample_feature()
         record = _parse_parcel_feature(feature)
@@ -679,8 +697,8 @@ class ParseParcelFeatureTests(unittest.TestCase):
 # _escape_like()
 # ---------------------------------------------------------------------------
 
-class EscapeLikeTests(unittest.TestCase):
 
+class EscapeLikeTests(unittest.TestCase):
     def test_no_quotes_unchanged(self):
         self.assertEqual(_escape_like("EXAMPLE"), "EXAMPLE")
 
@@ -701,8 +719,8 @@ class EscapeLikeTests(unittest.TestCase):
 # _build_result_note()
 # ---------------------------------------------------------------------------
 
-class BuildResultNoteTests(unittest.TestCase):
 
+class BuildResultNoteTests(unittest.TestCase):
     def test_contains_query(self):
         note = _build_result_note("EXAMPLE", None, 5, False)
         self.assertIn("EXAMPLE", note)
@@ -741,8 +759,8 @@ class BuildResultNoteTests(unittest.TestCase):
 # AuditorError
 # ---------------------------------------------------------------------------
 
-class AuditorErrorTests(unittest.TestCase):
 
+class AuditorErrorTests(unittest.TestCase):
     def test_message_attribute(self):
         err = AuditorError("Something went wrong")
         self.assertEqual(str(err), "Something went wrong")
@@ -777,8 +795,8 @@ class AuditorErrorTests(unittest.TestCase):
 # ParcelRecord dataclass
 # ---------------------------------------------------------------------------
 
-class ParcelRecordTests(unittest.TestCase):
 
+class ParcelRecordTests(unittest.TestCase):
     def test_default_fields_are_none(self):
         record = ParcelRecord()
         self.assertIsNone(record.object_id)
@@ -801,8 +819,8 @@ class ParcelRecordTests(unittest.TestCase):
 # ParcelSearchResult dataclass
 # ---------------------------------------------------------------------------
 
-class ParcelSearchResultTests(unittest.TestCase):
 
+class ParcelSearchResultTests(unittest.TestCase):
     def test_fields(self):
         result = ParcelSearchResult(
             query="EXAMPLE",
