@@ -15,6 +15,11 @@ select = ["E", "F", "I"]
 
 [tool.ruff.lint.per-file-ignores]
 "backend/**/tests/*.py" = ["E501"]
+"backend/investigations/county_auditor_connector.py" = ["E501"]
+"backend/investigations/county_recorder_connector.py" = ["E501"]
+"backend/investigations/irs_connector.py" = ["E501"]
+"backend/investigations/propublica_connector.py" = ["E501"]
+"backend/investigations/verify_recorder_portals.py" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"

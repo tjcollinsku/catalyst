@@ -61,6 +61,7 @@ FUZZY_HIGH_CONFIDENCE_THRESHOLD = 0.92
 # Result data structures
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PersonResolutionResult:
     """
@@ -72,6 +73,7 @@ class PersonResolutionResult:
         matched_alias:    If matched via an alias, the alias that matched.
         fuzzy_candidates: List of near-matches found (but not merged).
     """
+
     person: "Person"
     created: bool
     matched_alias: str | None = None
@@ -83,6 +85,7 @@ class OrgResolutionResult:
     """
     Returned by resolve_org() for each candidate org name.
     """
+
     org: "Organization"
     created: bool
     matched_alias: str | None = None
@@ -104,6 +107,7 @@ class FuzzyCandidate:
         similarity:         SequenceMatcher ratio (0.0 – 1.0).
         entity_type:        "person" or "org"
     """
+
     incoming_raw: str
     incoming_normalized: str
     existing_id: str
@@ -116,6 +120,7 @@ class FuzzyCandidate:
 # ---------------------------------------------------------------------------
 # Similarity helper
 # ---------------------------------------------------------------------------
+
 
 def _similarity(a: str, b: str) -> float:
     """
@@ -135,6 +140,7 @@ def _similarity(a: str, b: str) -> float:
 # ---------------------------------------------------------------------------
 # Person resolution
 # ---------------------------------------------------------------------------
+
 
 def resolve_person(
     raw_name: str,
@@ -171,7 +177,7 @@ def resolve_person(
     Returns:
         PersonResolutionResult with .person, .created, and .fuzzy_candidates.
     """
-    from .models import Person, PersonDocument
+    from .models import Person
 
     incoming_norm = normalize_person_name(raw_name)
 
@@ -193,7 +199,8 @@ def resolve_person(
             _maybe_link_person_document(existing, document, context_note)
             logger.debug(
                 "resolve_person: exact match on full_name — %r → id=%s",
-                raw_name, existing.id,
+                raw_name,
+                existing.id,
             )
             return PersonResolutionResult(
                 person=existing,
@@ -201,12 +208,14 @@ def resolve_person(
                 matched_alias=None,
             )
         # Check aliases
-        for alias in (existing.aliases or []):
+        for alias in existing.aliases or []:
             if normalize_person_name(alias) == incoming_norm:
                 _maybe_link_person_document(existing, document, context_note)
                 logger.debug(
                     "resolve_person: exact match on alias %r — %r → id=%s",
-                    alias, raw_name, existing.id,
+                    alias,
+                    raw_name,
+                    existing.id,
                 )
                 return PersonResolutionResult(
                     person=existing,
@@ -233,7 +242,10 @@ def resolve_person(
             level = "HIGH-CONFIDENCE" if sim >= FUZZY_HIGH_CONFIDENCE_THRESHOLD else "review"
             logger.info(
                 "resolve_person: fuzzy candidate [%s, sim=%.3f] %r ~ %r",
-                level, sim, raw_name, existing.full_name,
+                level,
+                sim,
+                raw_name,
+                existing.full_name,
             )
 
     # Sort fuzzy candidates by similarity descending (best match first)
@@ -266,6 +278,7 @@ def _maybe_link_person_document(
     if document is None:
         return
     from .models import PersonDocument
+
     PersonDocument.objects.get_or_create(
         person=person,
         document=document,
@@ -276,6 +289,7 @@ def _maybe_link_person_document(
 # ---------------------------------------------------------------------------
 # Organization resolution
 # ---------------------------------------------------------------------------
+
 
 def resolve_org(
     raw_name: str,
@@ -296,7 +310,7 @@ def resolve_org(
     Returns:
         OrgResolutionResult with .org, .created, and .fuzzy_candidates.
     """
-    from .models import OrgDocument, Organization
+    from .models import Organization
 
     incoming_norm = normalize_org_name(raw_name)
 
@@ -316,7 +330,8 @@ def resolve_org(
             _maybe_link_org_document(existing, document, context_note)
             logger.debug(
                 "resolve_org: exact match — %r → id=%s",
-                raw_name, existing.id,
+                raw_name,
+                existing.id,
             )
             return OrgResolutionResult(
                 org=existing,
@@ -342,7 +357,9 @@ def resolve_org(
             fuzzy_candidates.append(candidate)
             logger.info(
                 "resolve_org: fuzzy candidate [sim=%.3f] %r ~ %r",
-                sim, raw_name, existing.name,
+                sim,
+                raw_name,
+                existing.name,
             )
 
     fuzzy_candidates.sort(key=lambda c: c.similarity, reverse=True)
@@ -371,6 +388,7 @@ def _maybe_link_org_document(
     if document is None:
         return
     from .models import OrgDocument
+
     OrgDocument.objects.get_or_create(
         org=org,
         document=document,
@@ -386,6 +404,7 @@ def _maybe_link_org_document(
 # and what fuzzy candidates need investigator review.
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ResolutionSummary:
     """
@@ -399,6 +418,7 @@ class ResolutionSummary:
         fuzzy_candidates:    All fuzzy candidates across persons and orgs,
                              sorted by similarity descending.
     """
+
     persons_created: int = 0
     persons_matched: int = 0
     orgs_created: int = 0
@@ -455,10 +475,11 @@ def resolve_all_entities(
     summary.fuzzy_candidates.sort(key=lambda c: c.similarity, reverse=True)
 
     logger.info(
-        "resolve_all_entities: persons +%d matched=%d | orgs +%d matched=%d | "
-        "fuzzy_candidates=%d",
-        summary.persons_created, summary.persons_matched,
-        summary.orgs_created, summary.orgs_matched,
+        "resolve_all_entities: persons +%d matched=%d | orgs +%d matched=%d | fuzzy_candidates=%d",
+        summary.persons_created,
+        summary.persons_matched,
+        summary.orgs_created,
+        summary.orgs_matched,
         len(summary.fuzzy_candidates),
     )
 

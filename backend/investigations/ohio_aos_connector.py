@@ -25,8 +25,6 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime
-import urllib.parse
-from typing import Optional
 
 import requests
 
@@ -50,6 +48,7 @@ class AOSError(Exception):
 @dataclass
 class AuditReport:
     """A single audit report from the Ohio Auditor of State."""
+
     entity_name: str
     county: str
     report_type: str
@@ -109,8 +108,7 @@ def _parse_aos_html(html: str) -> list[AuditReport]:
     # and is sufficient for a targeted scraper where we control the mock.
 
     row_pattern = re.compile(r"<tr[^>]*>(.*?)</tr>", re.IGNORECASE | re.DOTALL)
-    cell_pattern = re.compile(
-        r"<td[^>]*>(.*?)</td>", re.IGNORECASE | re.DOTALL)
+    cell_pattern = re.compile(r"<td[^>]*>(.*?)</td>", re.IGNORECASE | re.DOTALL)
     link_pattern = re.compile(r"href=['\"]([^'\"]+\.pdf)['\"]", re.IGNORECASE)
 
     for row_match in row_pattern.finditer(html):
@@ -147,8 +145,7 @@ def _parse_aos_html(html: str) -> list[AuditReport]:
         if release_date_str:
             try:
                 # typically MM/DD/YYYY
-                release_date = datetime.strptime(
-                    release_date_str, "%m/%d/%Y").date()
+                release_date = datetime.strptime(release_date_str, "%m/%d/%Y").date()
             except ValueError:
                 pass
 
@@ -160,15 +157,17 @@ def _parse_aos_html(html: str) -> list[AuditReport]:
             if pdf_url.startswith("/"):
                 pdf_url = "https://ohioauditor.gov" + pdf_url
 
-        reports.append(AuditReport(
-            entity_name=entity_name_raw,
-            county=county,
-            report_type=report_type,
-            entity_type=entity_type,
-            report_period=report_period,
-            release_date=release_date,
-            has_findings_for_recovery=has_findings,
-            pdf_url=pdf_url,
-        ))
+        reports.append(
+            AuditReport(
+                entity_name=entity_name_raw,
+                county=county,
+                report_type=report_type,
+                entity_type=entity_type,
+                report_period=report_period,
+                release_date=release_date,
+                has_findings_for_recovery=has_findings,
+                pdf_url=pdf_url,
+            )
+        )
 
     return reports

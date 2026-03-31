@@ -78,7 +78,6 @@ import logging
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +85,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Error type
 # ---------------------------------------------------------------------------
+
 
 class RecorderError(Exception):
     """
@@ -104,6 +104,7 @@ class RecorderError(Exception):
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
+
 
 class RecorderSystem(Enum):
     """
@@ -159,6 +160,7 @@ class RecorderSystem(Enum):
 
     UNAVAILABLE:         No online search available. In-person visit required.
     """
+
     GOVOS_COUNTYFUSION = "GovOS CountyFusion"
     GOVOS_CLOUD_SEARCH = "GovOS Cloud Search"
     DTS_PAXWORLD = "DTS PAXWorld"
@@ -175,6 +177,7 @@ class RecorderSystem(Enum):
 # ---------------------------------------------------------------------------
 # County registry
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class CountyInfo:
@@ -198,6 +201,7 @@ class CountyInfo:
         address:        Physical address of the recorder's office.
         records_from:   Earliest year of online records (None if unknown).
     """
+
     name: str
     fips: str
     seat: str
@@ -226,6 +230,7 @@ class SearchUrlResult:
         requires_login: True if the system requires a login/guest session before
                         searching. The investigator must complete this manually.
     """
+
     county: "OhioCounty"
     county_name: str
     url: str | None
@@ -237,6 +242,7 @@ class SearchUrlResult:
 # ---------------------------------------------------------------------------
 # Parsed document structure
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class RecorderDocument:
@@ -268,6 +274,7 @@ class RecorderDocument:
         county:              Ohio county where document was recorded.
         raw_text_snippet:    First 1000 chars of the extracted text, for audit.
     """
+
     instrument_type: str | None = None
     grantor: str | None = None
     grantors: list[str] = field(default_factory=list)
@@ -290,12 +297,14 @@ class RecorderDocument:
 # Ohio County enum — all 88 counties
 # ---------------------------------------------------------------------------
 
+
 class OhioCounty(Enum):
     """
     All 88 Ohio counties by name.
 
     Values are lowercase slugs used as keys in the registry.
     """
+
     ADAMS = "adams"
     ALLEN = "allen"
     ASHLAND = "ashland"
@@ -401,99 +410,130 @@ class OhioCounty(Enum):
 # ---------------------------------------------------------------------------
 
 _REGISTRY: dict[OhioCounty, CountyInfo] = {
-
     OhioCounty.ADAMS: CountyInfo(
-        name="Adams", fips="001", seat="West Union",
+        name="Adams",
+        fips="001",
+        seat="West Union",
         system=RecorderSystem.CUSTOM,
         portal_url="https://adamscountyoh.gov/recorder/",
         search_url_template=None,
         portal_notes="Adams County uses a local search portal independent of major vendor platforms. No login required. Verified working.",
-        phone="937-544-2364", address="110 W Main St, West Union, OH 45693",
+        phone="937-544-2364",
+        address="110 W Main St, West Union, OH 45693",
         records_from=1987,
     ),
     OhioCounty.ALLEN: CountyInfo(
-        name="Allen", fips="003", seat="Lima",
+        name="Allen",
+        fips="003",
+        seat="Lima",
         system=RecorderSystem.DTS_PAXWORLD,
         portal_url="https://recorderexternal.allencountyohio.com/paxworld/",
         search_url_template=None,
         portal_notes="Allen County uses DTS PAXWorld hosted on county infrastructure. No login required. Search by grantor/grantee name, last name first. Confirmed accessible without VPN.",
-        phone="419-228-3700", address="301 N Main St, Lima, OH 45801",
+        phone="419-228-3700",
+        address="301 N Main St, Lima, OH 45801",
         records_from=1987,
     ),
     OhioCounty.ASHLAND: CountyInfo(
-        name="Ashland", fips="005", seat="Ashland",
+        name="Ashland",
+        fips="005",
+        seat="Ashland",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion10.kofiletech.us/countyweb/loginDisplay.action?countyname=AshlandOH",
         search_url_template=None,
         portal_notes="Ashland County uses legacy CountyFusion (kofiletech.us domain). Guest access. Search by grantor/grantee last name first. NOTE: Platform-wide outage confirmed 2026-03-28.",
-        phone="419-282-4235", address="142 W 2nd St, Ashland, OH 44805",
+        phone="419-282-4235",
+        address="142 W 2nd St, Ashland, OH 44805",
         records_from=1987,
     ),
     OhioCounty.ASHTABULA: CountyInfo(
-        name="Ashtabula", fips="007", seat="Jefferson",
+        name="Ashtabula",
+        fips="007",
+        seat="Jefferson",
         system=RecorderSystem.COTT_SYSTEMS,
         portal_url="https://cotthosting.com/ohashtabula/User/Login.aspx",
         search_url_template=None,
         portal_notes="Ashtabula County uses Cott Systems cloud platform. Not affected by GovOS outage. Free public access. Verified working.",
-        phone="440-576-3789", address="25 W Jefferson St, Jefferson, OH 44047",
+        phone="440-576-3789",
+        address="25 W Jefferson St, Jefferson, OH 44047",
         records_from=1987,
     ),
     OhioCounty.ATHENS: CountyInfo(
-        name="Athens", fips="009", seat="Athens",
+        name="Athens",
+        fips="009",
+        seat="Athens",
         system=RecorderSystem.FIDLAR_AVA,
         portal_url="https://ohathens.fidlar.com/OHAthens/AvaWeb/",
         search_url_template=None,
         portal_notes="Athens County migrated to Fidlar AVA. Free public index search. No login required. Verified working.",
-        phone="740-592-3242", address="15 S Court St, Athens, OH 45701",
+        phone="740-592-3242",
+        address="15 S Court St, Athens, OH 45701",
         records_from=1987,
     ),
     OhioCounty.AUGLAIZE: CountyInfo(
-        name="Auglaize", fips="011", seat="Wapakoneta",
+        name="Auglaize",
+        fips="011",
+        seat="Wapakoneta",
         system=RecorderSystem.CUSTOM,
         portal_url="http://gis.auglaizecounty.org/scanneddrawings/",
         search_url_template=None,
         portal_notes="Auglaize County uses a custom GIS/Scanned Drawings portal for public record access. Not a standard vendor platform. Verified working.",
-        phone="419-738-3612", address="201 Willipie St, Wapakoneta, OH 45895",
+        phone="419-738-3612",
+        address="201 Willipie St, Wapakoneta, OH 45895",
         records_from=1987,
     ),
     OhioCounty.BELMONT: CountyInfo(
-        name="Belmont", fips="013", seat="St. Clairsville",
+        name="Belmont",
+        fips="013",
+        seat="St. Clairsville",
         system=RecorderSystem.CUSTOM,
         portal_url="https://belmontcountyrecorder.org/",
         search_url_template=None,
         portal_notes="Belmont County uses a new custom site independent of major vendor platforms. Verified working.",
-        phone="740-695-2121", address="101 W Main St, St. Clairsville, OH 43950",
+        phone="740-695-2121",
+        address="101 W Main St, St. Clairsville, OH 43950",
         records_from=1987,
     ),
     OhioCounty.BROWN: CountyInfo(
-        name="Brown", fips="015", seat="Georgetown",
+        name="Brown",
+        fips="015",
+        seat="Georgetown",
         system=RecorderSystem.CUSTOM,
         portal_url="https://www.browncountyohio.gov/index.php/recorder44",
         search_url_template=None,
         portal_notes="Brown County uses a custom county portal. Verified working and stable.",
-        phone="937-378-3956", address="800 Mt Orab Pike, Georgetown, OH 45121",
+        phone="937-378-3956",
+        address="800 Mt Orab Pike, Georgetown, OH 45121",
         records_from=1987,
     ),
     OhioCounty.BUTLER: CountyInfo(
-        name="Butler", fips="017", seat="Hamilton",
+        name="Butler",
+        fips="017",
+        seat="Hamilton",
         system=RecorderSystem.GOVOS_CLOUD_SEARCH,
         portal_url="https://butler.oh.publicsearch.us/",
         search_url_template="https://butler.oh.publicsearch.us/results?search=OwnerSearch&query={name}",
         portal_notes="Butler County uses GovOS Cloud Search (publicsearch.us). No login required. Verified working and independent of CF outage.",
-        phone="513-887-3192", address="130 High St, Hamilton, OH 45011",
+        phone="513-887-3192",
+        address="130 High St, Hamilton, OH 45011",
         records_from=1985,
     ),
     OhioCounty.CARROLL: CountyInfo(
-        name="Carroll", fips="019", seat="Carrollton",
+        name="Carroll",
+        fips="019",
+        seat="Carrollton",
         system=RecorderSystem.GOVOS_CLOUD_SEARCH,
         portal_url="https://carroll.oh.publicsearch.us/",
         search_url_template="https://carroll.oh.publicsearch.us/results?search=OwnerSearch&query={name}",
         portal_notes="GovOS Cloud Search — no login required. Enter name directly in the search box. Results include instrument type, date, and parties.",
-        phone="330-627-2250", address="119 S Lisbon St, Carrollton, OH 44615",
+        phone="330-627-2250",
+        address="119 S Lisbon St, Carrollton, OH 44615",
         records_from=1818,
     ),
     OhioCounty.CHAMPAIGN: CountyInfo(
-        name="Champaign", fips="021", seat="Urbana",
+        name="Champaign",
+        fips="021",
+        seat="Urbana",
         system=RecorderSystem.CUSTOM,
         portal_url="https://champaigncountyrecorder.us/",
         search_url_template=None,
@@ -503,191 +543,254 @@ _REGISTRY: dict[OhioCounty, CountyInfo] = {
             "⚠️ URL CORRECTED 2026-03-28: previous ava.fidlar.com URL returned HTTP 404. "
             "Official site champaigncountyrecorder.us confirmed via county government path."
         ),
-        phone="937-484-1627", address="200 N Main St, Urbana, OH 43078",
+        phone="937-484-1627",
+        address="200 N Main St, Urbana, OH 43078",
         records_from=1987,
     ),
     OhioCounty.CLARK: CountyInfo(
-        name="Clark", fips="023", seat="Springfield",
+        name="Clark",
+        fips="023",
+        seat="Springfield",
         system=RecorderSystem.GOVOS_CLOUD_SEARCH,
         portal_url="https://clark.oh.publicsearch.us/",
         search_url_template="https://clark.oh.publicsearch.us/results?search=OwnerSearch&query={name}",
         portal_notes="GovOS Cloud Search — no login required. Records dating back to 1818.",
-        phone="937-521-1680", address="31 N Limestone St, Springfield, OH 45502",
+        phone="937-521-1680",
+        address="31 N Limestone St, Springfield, OH 45502",
         records_from=1818,
     ),
     OhioCounty.CLERMONT: CountyInfo(
-        name="Clermont", fips="025", seat="Batavia",
+        name="Clermont",
+        fips="025",
+        seat="Batavia",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://clermontoh-recorder.govos.com/",
         search_url_template=None,
         portal_notes="Clermont County uses GovOS CountyFusion on a dedicated county subdomain. Guest access. NOTE: Platform-wide outage confirmed 2026-03-28.",
-        phone="513-732-7243", address="101 E Main St, Batavia, OH 45103",
+        phone="513-732-7243",
+        address="101 E Main St, Batavia, OH 45103",
         records_from=1987,
     ),
     OhioCounty.CLINTON: CountyInfo(
-        name="Clinton", fips="027", seat="Wilmington",
+        name="Clinton",
+        fips="027",
+        seat="Wilmington",
         system=RecorderSystem.CUSTOM,
         portal_url="https://co.clinton.oh.us/ClintonCountyRecordersOnlineRecordsSystem",
         search_url_template=None,
         portal_notes="Clinton County hosts its own records search portal via the county website. No login required for public index. Verify URL is current — county website links here from the Recorder page.",
-        phone="937-382-2316", address="46 S South St, Wilmington, OH 45177",
+        phone="937-382-2316",
+        address="46 S South St, Wilmington, OH 45177",
         records_from=1987,
     ),
     OhioCounty.COLUMBIANA: CountyInfo(
-        name="Columbiana", fips="029", seat="Lisbon",
+        name="Columbiana",
+        fips="029",
+        seat="Lisbon",
         system=RecorderSystem.CUSTOM,
         portal_url="https://www.columbianacountyrecorder.org/",
         search_url_template=None,
         portal_notes="Columbiana County uses an independent web database. Not a standard vendor platform. Verified working.",
-        phone="330-424-9515", address="105 S Market St, Lisbon, OH 44432",
+        phone="330-424-9515",
+        address="105 S Market St, Lisbon, OH 44432",
         records_from=1987,
     ),
     OhioCounty.COSHOCTON: CountyInfo(
-        name="Coshocton", fips="031", seat="Coshocton",
+        name="Coshocton",
+        fips="031",
+        seat="Coshocton",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion1.kofiletech.us/",
         search_url_template=None,
         portal_notes="Coshocton County uses legacy CountyFusion (kofiletech.us domain). Guest access. NOTE: Platform-wide outage confirmed 2026-03-28.",
-        phone="740-622-1766", address="349 Main St, Coshocton, OH 43812",
+        phone="740-622-1766",
+        address="349 Main St, Coshocton, OH 43812",
         records_from=1987,
     ),
     OhioCounty.CRAWFORD: CountyInfo(
-        name="Crawford", fips="033", seat="Bucyrus",
+        name="Crawford",
+        fips="033",
+        seat="Bucyrus",
         system=RecorderSystem.COMPILED_TECH,
         portal_url="https://crawfordoh.compiled-technologies.com/Default.aspx",
         search_url_template=None,
         portal_notes="Crawford County uses Compiled Technologies IDX platform (same as Meigs). URL confirmed via web search 2026-03-28. Prior URL (crawfordohrecorder.com) was a redirect — this is the actual search portal. No login required.",
-        phone="419-562-2766", address="112 E Mansfield St, Bucyrus, OH 44820",
+        phone="419-562-2766",
+        address="112 E Mansfield St, Bucyrus, OH 44820",
         records_from=1987,
     ),
     OhioCounty.CUYAHOGA: CountyInfo(
-        name="Cuyahoga", fips="035", seat="Cleveland",
+        name="Cuyahoga",
+        fips="035",
+        seat="Cleveland",
         system=RecorderSystem.GOVOS_CLOUD_SEARCH,
         portal_url="https://cuyahoga.oh.publicsearch.us/",
         search_url_template="https://cuyahoga.oh.publicsearch.us/results?search=OwnerSearch&query={name}",
         portal_notes="Cuyahoga County uses GovOS Cloud Search. Records from 1810 to present. No login required. Verified working and independent of CF outage.",
-        phone="216-443-7300", address="2079 E 9th St, Cleveland, OH 44115",
+        phone="216-443-7300",
+        address="2079 E 9th St, Cleveland, OH 44115",
         records_from=1980,
     ),
     OhioCounty.DARKE: CountyInfo(
-        name="Darke", fips="037", seat="Greenville",
+        name="Darke",
+        fips="037",
+        seat="Greenville",
         system=RecorderSystem.FIDLAR_AVA,
         portal_url="https://rep2laredo.fidlar.com/OHDarke/AvaWeb/",
         search_url_template=None,
         portal_notes="Darke County migrated to Fidlar AVA. Free public index search. No login required. Verified working. Key county for Osgood investigation.",
-        phone="937-547-7360", address="300 Garst Ave, Greenville, OH 45331",
+        phone="937-547-7360",
+        address="300 Garst Ave, Greenville, OH 45331",
         records_from=1987,
     ),
     OhioCounty.DEFIANCE: CountyInfo(
-        name="Defiance", fips="039", seat="Defiance",
+        name="Defiance",
+        fips="039",
+        seat="Defiance",
         system=RecorderSystem.FIDLAR_AVA,
         portal_url="https://defiance-county.com/recorder/index.php",
         search_url_template=None,
         portal_notes="Defiance County confirmed on Fidlar AVA (index search via county website). Verified working.",
-        phone="419-782-4761", address="221 Clinton St, Defiance, OH 43512",
+        phone="419-782-4761",
+        address="221 Clinton St, Defiance, OH 43512",
         records_from=1987,
     ),
     OhioCounty.DELAWARE: CountyInfo(
-        name="Delaware", fips="041", seat="Delaware",
+        name="Delaware",
+        fips="041",
+        seat="Delaware",
         system=RecorderSystem.CUSTOM,
         portal_url="https://recorder.co.delaware.oh.us/records-search-page/",
         search_url_template=None,
         portal_notes="Delaware County has its own search portal. Free public access for grantor/grantee name searches.",
-        phone="740-833-2350", address="91 N Sandusky St, Delaware, OH 43015",
+        phone="740-833-2350",
+        address="91 N Sandusky St, Delaware, OH 43015",
         records_from=1987,
     ),
     OhioCounty.ERIE: CountyInfo(
-        name="Erie", fips="043", seat="Sandusky",
+        name="Erie",
+        fips="043",
+        seat="Sandusky",
         system=RecorderSystem.EAGLEWEB,
         portal_url="https://eriecountyoh-selfservice.tylerhost.net/web/",
         search_url_template=None,
         portal_notes="Erie County uses Tyler Technologies EagleWeb (tylerhost.net). Free public index search. No login required. Verified working.",
-        phone="419-627-7686", address="323 Columbus Ave, Sandusky, OH 44870",
+        phone="419-627-7686",
+        address="323 Columbus Ave, Sandusky, OH 44870",
         records_from=1987,
     ),
     OhioCounty.FAIRFIELD: CountyInfo(
-        name="Fairfield", fips="045", seat="Lancaster",
+        name="Fairfield",
+        fips="045",
+        seat="Lancaster",
         system=RecorderSystem.FIDLAR_AVA,
         portal_url="https://ava.fidlar.com/OHFairfield/AvaWeb/",
         search_url_template=None,
         portal_notes="Fairfield County uses Fidlar AVA (includes legacy deed index). Verified working.",
-        phone="740-687-7030", address="210 E Main St, Lancaster, OH 43130",
+        phone="740-687-7030",
+        address="210 E Main St, Lancaster, OH 43130",
         records_from=1987,
     ),
     OhioCounty.FAYETTE: CountyInfo(
-        name="Fayette", fips="047", seat="Washington Court House",
+        name="Fayette",
+        fips="047",
+        seat="Washington Court House",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=FayetteOH",
         search_url_template=None,
         portal_notes="Guest access available. Search by grantor/grantee last name first.",
-        phone="740-335-0440", address="110 E Court St, Washington Court House, OH 43160",
+        phone="740-335-0440",
+        address="110 E Court St, Washington Court House, OH 43160",
         records_from=1987,
     ),
     OhioCounty.FRANKLIN: CountyInfo(
-        name="Franklin", fips="049", seat="Columbus",
+        name="Franklin",
+        fips="049",
+        seat="Columbus",
         system=RecorderSystem.GOVOS_CLOUD_SEARCH,
         portal_url="https://franklin.oh.publicsearch.us/",
         search_url_template="https://franklin.oh.publicsearch.us/results?search=OwnerSearch&query={name}",
         portal_notes="Franklin County uses GovOS Cloud Search. Free public access. Records from 1800s. Verified working.",
-        phone="614-525-3930", address="373 S High St, Columbus, OH 43215",
+        phone="614-525-3930",
+        address="373 S High St, Columbus, OH 43215",
         records_from=1800,
     ),
     OhioCounty.FULTON: CountyInfo(
-        name="Fulton", fips="051", seat="Wauseon",
+        name="Fulton",
+        fips="051",
+        seat="Wauseon",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=FultonOH",
         search_url_template=None,
         portal_notes="Guest access available. Search by grantor/grantee last name first.",
-        phone="419-337-9232", address="152 S Fulton St, Wauseon, OH 43567",
+        phone="419-337-9232",
+        address="152 S Fulton St, Wauseon, OH 43567",
         records_from=1987,
     ),
     OhioCounty.GALLIA: CountyInfo(
-        name="Gallia", fips="053", seat="Gallipolis",
+        name="Gallia",
+        fips="053",
+        seat="Gallipolis",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=GalliaOH",
         search_url_template=None,
         portal_notes="Guest access available. Search by grantor/grantee last name first.",
-        phone="740-446-4612", address="18 Locust St, Gallipolis, OH 45631",
+        phone="740-446-4612",
+        address="18 Locust St, Gallipolis, OH 45631",
         records_from=1987,
     ),
     OhioCounty.GEAUGA: CountyInfo(
-        name="Geauga", fips="055", seat="Chardon",
+        name="Geauga",
+        fips="055",
+        seat="Chardon",
         system=RecorderSystem.FIDLAR_AVA,
         portal_url="https://ava.fidlar.com/OHGeauga/AvaWeb/",
         search_url_template=None,
         portal_notes="Geauga County migrated to Fidlar AVA. Verified working.",
-        phone="440-285-2222", address="231 Main St, Chardon, OH 44024",
+        phone="440-285-2222",
+        address="231 Main St, Chardon, OH 44024",
         records_from=1987,
     ),
     OhioCounty.GREENE: CountyInfo(
-        name="Greene", fips="057", seat="Xenia",
+        name="Greene",
+        fips="057",
+        seat="Xenia",
         system=RecorderSystem.GOVOS_CLOUD_SEARCH,
         portal_url="https://greene.oh.publicsearch.us/",
         search_url_template="https://greene.oh.publicsearch.us/results?search=OwnerSearch&query={name}",
         portal_notes="Greene County uses GovOS Cloud Search. Verified working.",
-        phone="937-562-5270", address="45 N Detroit St, Xenia, OH 45385",
+        phone="937-562-5270",
+        address="45 N Detroit St, Xenia, OH 45385",
         records_from=1987,
     ),
     OhioCounty.GUERNSEY: CountyInfo(
-        name="Guernsey", fips="059", seat="Cambridge",
+        name="Guernsey",
+        fips="059",
+        seat="Cambridge",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion9.kofiletech.us/countyweb/loginDisplay.action?countyname=GuernseyOH",
         search_url_template=None,
         portal_notes="Guernsey County uses legacy CountyFusion (kofiletech.us domain). Guest access. NOTE: Platform-wide outage confirmed 2026-03-28.",
-        phone="740-432-9270", address="627 Wheeling Ave, Cambridge, OH 43725",
+        phone="740-432-9270",
+        address="627 Wheeling Ave, Cambridge, OH 43725",
         records_from=1987,
     ),
     OhioCounty.HAMILTON: CountyInfo(
-        name="Hamilton", fips="061", seat="Cincinnati",
+        name="Hamilton",
+        fips="061",
+        seat="Cincinnati",
         system=RecorderSystem.CUSTOM,
         portal_url="https://acclaim-web.hamiltoncountyohio.gov/AcclaimWebLive/",
         search_url_template=None,
         portal_notes="Hamilton County uses Acclaim-Web (custom system). Unaffected by GovOS outage. Verified working.",
-        phone="513-946-4570", address="138 E Court St, Cincinnati, OH 45202",
+        phone="513-946-4570",
+        address="138 E Court St, Cincinnati, OH 45202",
         records_from=1987,
     ),
     OhioCounty.HANCOCK: CountyInfo(
-        name="Hancock", fips="063", seat="Findlay",
+        name="Hancock",
+        fips="063",
+        seat="Findlay",
         system=RecorderSystem.CUSTOM,
         portal_url="https://www.co.hancock.oh.us/196/Record-Search",
         search_url_template=None,
@@ -697,38 +800,50 @@ _REGISTRY: dict[OhioCounty, CountyInfo] = {
             "Parcel number searches NOT supported in the Recorder's system. "
             "⚠️ URL CORRECTED 2026-03-28: previous recorder.co.hancock.oh.us returned connection error."
         ),
-        phone="419-424-7091", address="300 S Main St Room 23, Findlay, OH 45840",
+        phone="419-424-7091",
+        address="300 S Main St Room 23, Findlay, OH 45840",
         records_from=1985,
     ),
     OhioCounty.HARDIN: CountyInfo(
-        name="Hardin", fips="065", seat="Kenton",
+        name="Hardin",
+        fips="065",
+        seat="Kenton",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion10.kofiletech.us/countyweb/loginDisplay.action?countyname=HardinOH",
         search_url_template=None,
         portal_notes="Hardin County uses legacy CountyFusion (kofiletech.us domain). Guest access. NOTE: Platform-wide outage confirmed 2026-03-28.",
-        phone="419-674-2246", address="One Courthouse Square, Kenton, OH 43326",
+        phone="419-674-2246",
+        address="One Courthouse Square, Kenton, OH 43326",
         records_from=1987,
     ),
     OhioCounty.HARRISON: CountyInfo(
-        name="Harrison", fips="067", seat="Cadiz",
+        name="Harrison",
+        fips="067",
+        seat="Cadiz",
         system=RecorderSystem.GOVOS_CLOUD_SEARCH,
         portal_url="https://harrison.oh.publicsearch.us/",
         search_url_template="https://harrison.oh.publicsearch.us/results?search=OwnerSearch&query={name}",
         portal_notes="Harrison County migrated to GovOS Cloud Search. Images from 2008–present. Verified working.",
-        phone="740-942-8861", address="100 W Market St, Cadiz, OH 43907",
+        phone="740-942-8861",
+        address="100 W Market St, Cadiz, OH 43907",
         records_from=1987,
     ),
     OhioCounty.HENRY: CountyInfo(
-        name="Henry", fips="069", seat="Napoleon",
+        name="Henry",
+        fips="069",
+        seat="Napoleon",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=HenryOH",
         search_url_template=None,
         portal_notes="Guest access available. Search by grantor/grantee last name first.",
-        phone="419-592-4876", address="660 State Rt 424, Napoleon, OH 43545",
+        phone="419-592-4876",
+        address="660 State Rt 424, Napoleon, OH 43545",
         records_from=1987,
     ),
     OhioCounty.HIGHLAND: CountyInfo(
-        name="Highland", fips="071", seat="Hillsboro",
+        name="Highland",
+        fips="071",
+        seat="Hillsboro",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=HighlandOH",
         search_url_template=None,
@@ -739,56 +854,74 @@ _REGISTRY: dict[OhioCounty, CountyInfo] = {
             "notification when a document is recorded in their name. Investigative note: "
             "subjects with FraudSleuth active may become aware of new recordings quickly."
         ),
-        phone="937-393-9954", address="105 N High St, Hillsboro, OH 45133",
+        phone="937-393-9954",
+        address="105 N High St, Hillsboro, OH 45133",
         records_from=1987,
     ),
     OhioCounty.HOCKING: CountyInfo(
-        name="Hocking", fips="073", seat="Logan",
+        name="Hocking",
+        fips="073",
+        seat="Logan",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=HockingOH",
         search_url_template=None,
         portal_notes="Guest access available. Search by grantor/grantee last name first.",
-        phone="740-385-2127", address="1 E Main St, Logan, OH 43138",
+        phone="740-385-2127",
+        address="1 E Main St, Logan, OH 43138",
         records_from=1987,
     ),
     OhioCounty.HOLMES: CountyInfo(
-        name="Holmes", fips="075", seat="Millersburg",
+        name="Holmes",
+        fips="075",
+        seat="Millersburg",
         system=RecorderSystem.FIDLAR_AVA,
         portal_url="https://ohholmes.fidlar.com/OHHolmes/AvaWeb/",
         search_url_template=None,
         portal_notes="Holmes County uses Fidlar AVA (county-specific subdomain). Free public index search. Document images may require subscription. URL confirmed via official county site 2026-03-28.",
-        phone="330-674-1876", address="1 E Jackson St, Millersburg, OH 44654",
+        phone="330-674-1876",
+        address="1 E Jackson St, Millersburg, OH 44654",
         records_from=1987,
     ),
     OhioCounty.HURON: CountyInfo(
-        name="Huron", fips="077", seat="Norwalk",
+        name="Huron",
+        fips="077",
+        seat="Norwalk",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=HuronOH",
         search_url_template=None,
         portal_notes="Guest access available. Search by grantor/grantee last name first.",
-        phone="419-668-5113", address="2 Courthouse Square, Norwalk, OH 44857",
+        phone="419-668-5113",
+        address="2 Courthouse Square, Norwalk, OH 44857",
         records_from=1987,
     ),
     OhioCounty.JACKSON: CountyInfo(
-        name="Jackson", fips="079", seat="Jackson",
+        name="Jackson",
+        fips="079",
+        seat="Jackson",
         system=RecorderSystem.CUSTOM,
         portal_url="https://www.jacksoncountyohio.us/elected-officials/recorder/",
         search_url_template=None,
         portal_notes="Jackson County uses a custom county portal. Registration required for document images. Verified working.",
-        phone="740-286-4591", address="226 E Main St, Jackson, OH 45640",
+        phone="740-286-4591",
+        address="226 E Main St, Jackson, OH 45640",
         records_from=1987,
     ),
     OhioCounty.JEFFERSON: CountyInfo(
-        name="Jefferson", fips="081", seat="Steubenville",
+        name="Jefferson",
+        fips="081",
+        seat="Steubenville",
         system=RecorderSystem.GOVOS_CLOUD_SEARCH,
         portal_url="https://jefferson.oh.publicsearch.us/",
         search_url_template="https://jefferson.oh.publicsearch.us/results?search=OwnerSearch&query={name}",
         portal_notes="Jefferson County migrated to GovOS Cloud Search. Images from 2008–present. Verified working.",
-        phone="740-283-8572", address="301 Market St, Steubenville, OH 43952",
+        phone="740-283-8572",
+        address="301 Market St, Steubenville, OH 43952",
         records_from=1987,
     ),
     OhioCounty.KNOX: CountyInfo(
-        name="Knox", fips="083", seat="Mount Vernon",
+        name="Knox",
+        fips="083",
+        seat="Mount Vernon",
         system=RecorderSystem.COTT_SYSTEMS,
         portal_url="https://cotthosting.com/OHKnoxLANExternal/LandRecords/protected/v4/SrchName.aspx",
         search_url_template=None,
@@ -798,112 +931,148 @@ _REGISTRY: dict[OhioCounty, CountyInfo] = {
             "⚠️ URL CORRECTED 2026-03-28: previous knoxoh.compiled-technologies.com had "
             "an invalid/expired TLS certificate. Switched to Cott Systems alternative."
         ),
-        phone="740-393-6788", address="117 E High St, Mount Vernon, OH 43050",
+        phone="740-393-6788",
+        address="117 E High St, Mount Vernon, OH 43050",
         records_from=1987,
     ),
     OhioCounty.LAKE: CountyInfo(
-        name="Lake", fips="085", seat="Painesville",
+        name="Lake",
+        fips="085",
+        seat="Painesville",
         system=RecorderSystem.FIDLAR_AVA,
         portal_url="https://rep2laredo.fidlar.com/OHLake/AvaWeb/#/search",
         search_url_template=None,
         portal_notes="Lake County uses Fidlar AVA (rep2laredo subdomain) for free public index search — grantor/grantee, instrument type, book/page. Index available from 1986. No login required for index. "
-                     "NOTE: Document IMAGES require a separate Laredo Select account (paid subscription) — form at lakecountyohiorecorder.com. "
-                     "Prior URL (ava.fidlar.com/OHLake/AvaWeb/) was stale — corrected to rep2laredo instance confirmed by user 2026-03-28.",
-        phone="440-350-2519", address="105 Main St, Painesville, OH 44077",
+        "NOTE: Document IMAGES require a separate Laredo Select account (paid subscription) — form at lakecountyohiorecorder.com. "
+        "Prior URL (ava.fidlar.com/OHLake/AvaWeb/) was stale — corrected to rep2laredo instance confirmed by user 2026-03-28.",
+        phone="440-350-2519",
+        address="105 Main St, Painesville, OH 44077",
         records_from=1986,
     ),
     OhioCounty.LAWRENCE: CountyInfo(
-        name="Lawrence", fips="087", seat="Ironton",
+        name="Lawrence",
+        fips="087",
+        seat="Ironton",
         system=RecorderSystem.COTT_SYSTEMS,
         portal_url="https://cotthosting.com/OHLawrenceExternal/LandRecords/protected/v4/SrchName.aspx",
         search_url_template=None,
         portal_notes="Lawrence County uses Cott Systems. Not affected by GovOS outage. Verified working.",
-        phone="740-533-4354", address="111 S 4th St, Ironton, OH 45638",
+        phone="740-533-4354",
+        address="111 S 4th St, Ironton, OH 45638",
         records_from=1987,
     ),
     OhioCounty.LICKING: CountyInfo(
-        name="Licking", fips="089", seat="Newark",
+        name="Licking",
+        fips="089",
+        seat="Newark",
         system=RecorderSystem.DTS_PAXWORLD,
         portal_url="https://apps.lickingcounty.gov/recorder/paxworld/",
         search_url_template=None,
         portal_notes="Licking County uses DTS PAXWorld hosted on county infrastructure. No login required. Search by grantor/grantee name, last name first.",
-        phone="740-670-5110", address="20 S 2nd St, Newark, OH 43055",
+        phone="740-670-5110",
+        address="20 S 2nd St, Newark, OH 43055",
         records_from=1987,
     ),
     OhioCounty.LOGAN: CountyInfo(
-        name="Logan", fips="091", seat="Bellefontaine",
+        name="Logan",
+        fips="091",
+        seat="Bellefontaine",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=LoganOH",
         search_url_template=None,
         portal_notes="Guest access available. Search by grantor/grantee last name first.",
-        phone="937-599-7209", address="101 S Main St, Bellefontaine, OH 43311",
+        phone="937-599-7209",
+        address="101 S Main St, Bellefontaine, OH 43311",
         records_from=1987,
     ),
     OhioCounty.LORAIN: CountyInfo(
-        name="Lorain", fips="093", seat="Elyria",
+        name="Lorain",
+        fips="093",
+        seat="Elyria",
         system=RecorderSystem.DTS_PAXWORLD,
         portal_url="https://recorder.dts-oh-lorain.com/paxworld/",
         search_url_template=None,
         portal_notes="Lorain County uses DTS PAXWorld on a dedicated DTS subdomain. No login required. Search by grantor/grantee name, last name first.",
-        phone="440-329-5148", address="226 Middle Ave, Elyria, OH 44035",
+        phone="440-329-5148",
+        address="226 Middle Ave, Elyria, OH 44035",
         records_from=1987,
     ),
     OhioCounty.LUCAS: CountyInfo(
-        name="Lucas", fips="095", seat="Toledo",
+        name="Lucas",
+        fips="095",
+        seat="Toledo",
         system=RecorderSystem.DTS_PAXWORLD,
         portal_url="https://lucas.dts-oh.com/PaxWorld5/",
         search_url_template=None,
         portal_notes="Lucas County uses DTS PAXWorld5 (newer version). No login required. Search by grantor/grantee name, last name first.",
-        phone="419-213-4400", address="One Government Center, Toledo, OH 43604",
+        phone="419-213-4400",
+        address="One Government Center, Toledo, OH 43604",
         records_from=1987,
     ),
     OhioCounty.MADISON: CountyInfo(
-        name="Madison", fips="097", seat="London",
+        name="Madison",
+        fips="097",
+        seat="London",
         system=RecorderSystem.USLANDRECORDS,
         portal_url="https://madisonoh.avenuinsights.com/Home/index.html",
         search_url_template=None,
         portal_notes="⚠️ REQUIRES REGISTRATION — Madison County uses Avenu Insights platform but requires the investigator to register for a free account before searching. Landing page confirmed 2026-03-28 by user. Click 'Search Land Records' → 'Sign Up' to register. Recorder: Rachel Fisher. Phone corrected from 740-852-9717 to 740-852-1854 per landing page.",
-        phone="740-852-1854", address="1 N Main St Room 40, London, OH 43140",
+        phone="740-852-1854",
+        address="1 N Main St Room 40, London, OH 43140",
         records_from=1987,
     ),
     OhioCounty.MAHONING: CountyInfo(
-        name="Mahoning", fips="099", seat="Youngstown",
+        name="Mahoning",
+        fips="099",
+        seat="Youngstown",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=MahoningOH",
         search_url_template=None,
         portal_notes="Guest access available. Search by grantor/grantee last name first.",
-        phone="330-740-2061", address="120 Market St, Youngstown, OH 44503",
+        phone="330-740-2061",
+        address="120 Market St, Youngstown, OH 44503",
         records_from=1987,
     ),
     OhioCounty.MARION: CountyInfo(
-        name="Marion", fips="101", seat="Marion",
+        name="Marion",
+        fips="101",
+        seat="Marion",
         system=RecorderSystem.FIDLAR_AVA,
         portal_url="https://rep3laredo.fidlar.com/OHMarion/AvaWeb/",
         search_url_template=None,
         portal_notes="Marion County uses Fidlar AVA (rep3laredo subdomain). Free public index search. URL confirmed 2026-03-28 — previous ava.fidlar.com URL returned HTTP 404.",
-        phone="740-223-4270", address="222 W Center St, Marion, OH 43302",
+        phone="740-223-4270",
+        address="222 W Center St, Marion, OH 43302",
         records_from=1987,
     ),
     OhioCounty.MEDINA: CountyInfo(
-        name="Medina", fips="103", seat="Medina",
+        name="Medina",
+        fips="103",
+        seat="Medina",
         system=RecorderSystem.CUSTOM,
         portal_url="https://recorder.co.medina.oh.us/",
         search_url_template=None,
         portal_notes="Medina County uses a custom county-hosted portal. Not affected by platform outages. Verified working.",
-        phone="330-725-9754", address="144 N Broadway St, Medina, OH 44256",
+        phone="330-725-9754",
+        address="144 N Broadway St, Medina, OH 44256",
         records_from=1987,
     ),
     OhioCounty.MEIGS: CountyInfo(
-        name="Meigs", fips="105", seat="Pomeroy",
+        name="Meigs",
+        fips="105",
+        seat="Pomeroy",
         system=RecorderSystem.COMPILED_TECH,
         portal_url="https://meigsoh.compiled-technologies.com/Default.aspx",
         search_url_template=None,
         portal_notes="Meigs County uses Compiled Technologies IDX platform. Full-featured: grantor/grantee name search, instrument type filter, book/page, image links, date range. No login required. Records from 1994. Confirmed working and functional by user 2026-03-28.",
-        phone="740-992-5290", address="100 E 2nd St, Pomeroy, OH 45769",
+        phone="740-992-5290",
+        address="100 E 2nd St, Pomeroy, OH 45769",
         records_from=1994,
     ),
     OhioCounty.MERCER: CountyInfo(
-        name="Mercer", fips="107", seat="Celina",
+        name="Mercer",
+        fips="107",
+        seat="Celina",
         system=RecorderSystem.CUSTOM,
         portal_url="https://recorder.mercercountyoh.gov/LandmarkWeb/",
         search_url_template=None,
@@ -915,155 +1084,206 @@ _REGISTRY: dict[OhioCounty, CountyInfo] = {
             "⚠️ URL CORRECTED 2026-03-28: previous ava.fidlar.com URL returned HTTP 404. "
             "Updated again to recorder.mercercountyoh.gov/LandmarkWeb based on direct user confirmation."
         ),
-        phone="419-586-6402", address="101 N Main St, Celina, OH 45822",
+        phone="419-586-6402",
+        address="101 N Main St, Celina, OH 45822",
         records_from=1987,
     ),
     OhioCounty.MIAMI: CountyInfo(
-        name="Miami", fips="109", seat="Troy",
+        name="Miami",
+        fips="109",
+        seat="Troy",
         system=RecorderSystem.LAREDO,
         portal_url="https://rep4laredo.fidlar.com/OHMiami/DirectSearch/#/search",
         search_url_template=None,
         portal_notes="Miami County migrated from Fidlar AVA to Fidlar Laredo (rep4laredo.fidlar.com). Direct name search available without login at the portal URL. Documents from 1998-present by name; 1980-1998 by book/page only. For in-depth remote access email recorder@miamicountyohio.gov. Confirmed working 2026-03-28. NOTE: Prior AVA URL (ava.fidlar.com/OHMiami/AvaWeb/) returns 404.",
-        phone="937-440-6040", address="201 W Main St, Troy, OH 45373",
+        phone="937-440-6040",
+        address="201 W Main St, Troy, OH 45373",
         records_from=1980,
     ),
     OhioCounty.MONROE: CountyInfo(
-        name="Monroe", fips="111", seat="Woodsfield",
+        name="Monroe",
+        fips="111",
+        seat="Woodsfield",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=MonroeOH",
         search_url_template=None,
         portal_notes="Guest access available. Search by grantor/grantee last name first.",
-        phone="740-472-0873", address="101 N Main St, Woodsfield, OH 43793",
+        phone="740-472-0873",
+        address="101 N Main St, Woodsfield, OH 43793",
         records_from=1987,
     ),
     OhioCounty.MONTGOMERY: CountyInfo(
-        name="Montgomery", fips="113", seat="Dayton",
+        name="Montgomery",
+        fips="113",
+        seat="Dayton",
         system=RecorderSystem.CUSTOM,
         portal_url="https://riss.mcrecorder.org/",
         search_url_template=None,
         portal_notes="Montgomery County uses RISS (Regional Information Systems) portal. Stable and independent of vendor outages. Verified working.",
-        phone="937-496-6670", address="451 W Third St, Dayton, OH 45422",
+        phone="937-496-6670",
+        address="451 W Third St, Dayton, OH 45422",
         records_from=1987,
     ),
     OhioCounty.MORGAN: CountyInfo(
-        name="Morgan", fips="115", seat="McConnelsville",
+        name="Morgan",
+        fips="115",
+        seat="McConnelsville",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=MorganOH",
         search_url_template=None,
         portal_notes="Guest access available. Search by grantor/grantee last name first.",
-        phone="740-962-4475", address="19 E Main St, McConnelsville, OH 43756",
+        phone="740-962-4475",
+        address="19 E Main St, McConnelsville, OH 43756",
         records_from=1987,
     ),
     OhioCounty.MORROW: CountyInfo(
-        name="Morrow", fips="117", seat="Mount Gilead",
+        name="Morrow",
+        fips="117",
+        seat="Mount Gilead",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=MorrowOH",
         search_url_template=None,
         portal_notes="Guest access available. Search by grantor/grantee last name first.",
-        phone="419-947-4085", address="48 E High St, Mount Gilead, OH 43338",
+        phone="419-947-4085",
+        address="48 E High St, Mount Gilead, OH 43338",
         records_from=1987,
     ),
     OhioCounty.MUSKINGUM: CountyInfo(
-        name="Muskingum", fips="119", seat="Zanesville",
+        name="Muskingum",
+        fips="119",
+        seat="Zanesville",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=MuskingumOH",
         search_url_template=None,
         portal_notes="Guest access available. Search by grantor/grantee last name first.",
-        phone="740-455-7109", address="401 Main St, Zanesville, OH 43701",
+        phone="740-455-7109",
+        address="401 Main St, Zanesville, OH 43701",
         records_from=1987,
     ),
     OhioCounty.NOBLE: CountyInfo(
-        name="Noble", fips="121", seat="Caldwell",
+        name="Noble",
+        fips="121",
+        seat="Caldwell",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=NobleOH",
         search_url_template=None,
         portal_notes="Guest access available. Search by grantor/grantee last name first.",
-        phone="740-732-4045", address="260 Courthouse, Caldwell, OH 43724",
+        phone="740-732-4045",
+        address="260 Courthouse, Caldwell, OH 43724",
         records_from=1987,
     ),
     OhioCounty.OTTAWA: CountyInfo(
-        name="Ottawa", fips="123", seat="Port Clinton",
+        name="Ottawa",
+        fips="123",
+        seat="Port Clinton",
         system=RecorderSystem.GOVOS_CLOUD_SEARCH,
         portal_url="https://ottawa.oh.publicsearch.us/",
         search_url_template="https://ottawa.oh.publicsearch.us/results?search=OwnerSearch&query={name}",
         portal_notes="Ottawa was the first Ohio county to launch GovOS Cloud Search. No login required.",
-        phone="419-734-6740", address="315 Madison St, Port Clinton, OH 43452",
+        phone="419-734-6740",
+        address="315 Madison St, Port Clinton, OH 43452",
         records_from=1987,
     ),
     OhioCounty.PAULDING: CountyInfo(
-        name="Paulding", fips="125", seat="Paulding",
+        name="Paulding",
+        fips="125",
+        seat="Paulding",
         system=RecorderSystem.FIDLAR_AVA,
         portal_url="https://ava.fidlar.com/OHPaulding/AvaWeb/",
         search_url_template=None,
         portal_notes="Paulding County uses Fidlar AVA. Verified working.",
-        phone="419-399-8215", address="115 N Williams St, Paulding, OH 45879",
+        phone="419-399-8215",
+        address="115 N Williams St, Paulding, OH 45879",
         records_from=1987,
     ),
     OhioCounty.PERRY: CountyInfo(
-        name="Perry", fips="127", seat="New Lexington",
+        name="Perry",
+        fips="127",
+        seat="New Lexington",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=PerryOH",
         search_url_template=None,
         portal_notes="Guest access available. Search by grantor/grantee last name first.",
-        phone="740-342-1508", address="121 W Brown St, New Lexington, OH 43764",
+        phone="740-342-1508",
+        address="121 W Brown St, New Lexington, OH 43764",
         records_from=1987,
     ),
     OhioCounty.PICKAWAY: CountyInfo(
-        name="Pickaway", fips="129", seat="Circleville",
+        name="Pickaway",
+        fips="129",
+        seat="Circleville",
         system=RecorderSystem.CUSTOM,
         portal_url="https://pickawaycountyrecorder.com/",
         search_url_template=None,
         portal_notes="Pickaway County migrated to a new independent custom portal. Verified working.",
-        phone="740-474-6005", address="207 S Court St, Circleville, OH 43113",
+        phone="740-474-6005",
+        address="207 S Court St, Circleville, OH 43113",
         records_from=1987,
     ),
     OhioCounty.PIKE: CountyInfo(
-        name="Pike", fips="131", seat="Waverly",
+        name="Pike",
+        fips="131",
+        seat="Waverly",
         system=RecorderSystem.CUSTOM,
         portal_url="https://pikeohpublic.avenuinsights.com/",
         search_url_template=None,
         portal_notes="⚠️ UNVERIFIED — Pike County's official recorder page (pikecountyohcommissioners.gov/offices/recorder.html) does not link to a direct search portal. The pikeohpublic.avenuinsights.com URL loads but may not be the correct recorder search. The USLandRecords ohlr3 portal only lists Madison County — Pike has been removed. Investigator should call recorder at (740) 947-2622 or visit recorder@pikecounty.oh.gov to confirm current online access method.",
-        phone="740-947-2622", address="230 Waverly Plaza Suite 500, Waverly, OH 45690",
+        phone="740-947-2622",
+        address="230 Waverly Plaza Suite 500, Waverly, OH 45690",
         records_from=1987,
     ),
     OhioCounty.PORTAGE: CountyInfo(
-        name="Portage", fips="133", seat="Ravenna",
+        name="Portage",
+        fips="133",
+        seat="Ravenna",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=PortageOH",
         search_url_template=None,
         portal_notes="Guest access available. Grantor/grantee index available online; images may require subscription.",
-        phone="330-297-3571", address="449 S Meridian St, Ravenna, OH 44266",
+        phone="330-297-3571",
+        address="449 S Meridian St, Ravenna, OH 44266",
         records_from=1987,
     ),
     OhioCounty.PREBLE: CountyInfo(
-        name="Preble", fips="135", seat="Eaton",
+        name="Preble",
+        fips="135",
+        seat="Eaton",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion9.kofiletech.us/countyweb/loginDisplay.action?countyname=PrebleOH",
         search_url_template=None,
         portal_notes="Preble County uses legacy CountyFusion (kofiletech.us). Guest access. NOTE: Platform-wide outage confirmed 2026-03-28.",
-        phone="937-456-8160", address="101 E Main St, Eaton, OH 45320",
+        phone="937-456-8160",
+        address="101 E Main St, Eaton, OH 45320",
         records_from=1987,
     ),
     OhioCounty.PUTNAM: CountyInfo(
-        name="Putnam", fips="137", seat="Ottawa",
+        name="Putnam",
+        fips="137",
+        seat="Ottawa",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion14.kofiletech.us/countyweb/loginDisplay.action?countyname=PutnamOH",
         search_url_template=None,
         portal_notes="Putnam County uses legacy CountyFusion (kofiletech.us). Guest access. NOTE: Platform-wide outage confirmed 2026-03-28.",
-        phone="419-523-3659", address="245 E Main St, Ottawa, OH 45875",
+        phone="419-523-3659",
+        address="245 E Main St, Ottawa, OH 45875",
         records_from=1987,
     ),
     OhioCounty.RICHLAND: CountyInfo(
-        name="Richland", fips="139", seat="Mansfield",
+        name="Richland",
+        fips="139",
+        seat="Mansfield",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion13.kofiletech.us/countyweb/loginDisplay.action?countyname=RichlandOH",
         search_url_template=None,
         portal_notes="Richland County uses legacy CountyFusion (countyfusion13, kofiletech.us). Guest access. NOTE: Platform-wide outage confirmed 2026-03-28.",
-        phone="419-774-5599", address="50 Park Ave E, Mansfield, OH 44902",
+        phone="419-774-5599",
+        address="50 Park Ave E, Mansfield, OH 44902",
         records_from=1987,
     ),
     OhioCounty.ROSS: CountyInfo(
-        name="Ross", fips="141", seat="Chillicothe",
+        name="Ross",
+        fips="141",
+        seat="Chillicothe",
         system=RecorderSystem.CUSTOM,
         portal_url="https://www.rossrecords.us/",
         search_url_template=None,
@@ -1072,29 +1292,38 @@ _REGISTRY: dict[OhioCounty, CountyInfo] = {
             "⚠️ URL CORRECTED 2026-03-28: previous co.ross.oh.us URL returned connection error. "
             "Switched to rossrecords.us as named in documentation."
         ),
-        phone="740-702-3080", address="2 N Paint St, Chillicothe, OH 45601",
+        phone="740-702-3080",
+        address="2 N Paint St, Chillicothe, OH 45601",
         records_from=1974,
     ),
     OhioCounty.SANDUSKY: CountyInfo(
-        name="Sandusky", fips="143", seat="Fremont",
+        name="Sandusky",
+        fips="143",
+        seat="Fremont",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion14.kofiletech.us/countyweb/loginDisplay.action?countyname=SanduskyOH",
         search_url_template=None,
         portal_notes="Sandusky County uses legacy CountyFusion (countyfusion14, kofiletech.us). Guest access. NOTE: Platform-wide outage confirmed 2026-03-28.",
-        phone="419-334-6174", address="100 N Park Ave, Fremont, OH 43420",
+        phone="419-334-6174",
+        address="100 N Park Ave, Fremont, OH 43420",
         records_from=1987,
     ),
     OhioCounty.SCIOTO: CountyInfo(
-        name="Scioto", fips="145", seat="Portsmouth",
+        name="Scioto",
+        fips="145",
+        seat="Portsmouth",
         system=RecorderSystem.FIDLAR_AVA,
         portal_url="https://ohscioto.fidlar.com/OHScioto/AvaWeb/",
         search_url_template=None,
         portal_notes="Scioto County migrated to Fidlar AVA. Verified working.",
-        phone="740-355-8278", address="602 7th St, Portsmouth, OH 45662",
+        phone="740-355-8278",
+        address="602 7th St, Portsmouth, OH 45662",
         records_from=1987,
     ),
     OhioCounty.SENECA: CountyInfo(
-        name="Seneca", fips="147", seat="Tiffin",
+        name="Seneca",
+        fips="147",
+        seat="Tiffin",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion13.govos.com/countyweb/loginDisplay.action?countyname=Seneca",
         search_url_template=None,
@@ -1110,16 +1339,21 @@ _REGISTRY: dict[OhioCounty, CountyInfo] = {
         records_from=1987,
     ),
     OhioCounty.SHELBY: CountyInfo(
-        name="Shelby", fips="149", seat="Sidney",
+        name="Shelby",
+        fips="149",
+        seat="Sidney",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=ShelbyOH",
         search_url_template=None,
         portal_notes="Guest access available. Search by grantor/grantee last name first.",
-        phone="937-498-7226", address="129 E Court St, Sidney, OH 45365",
+        phone="937-498-7226",
+        address="129 E Court St, Sidney, OH 45365",
         records_from=1987,
     ),
     OhioCounty.STARK: CountyInfo(
-        name="Stark", fips="151", seat="Canton",
+        name="Stark",
+        fips="151",
+        seat="Canton",
         system=RecorderSystem.CUSTOM,
         portal_url="https://starkcountyohio.gov/government/offices/recorder/",
         search_url_template=None,
@@ -1129,20 +1363,26 @@ _REGISTRY: dict[OhioCounty, CountyInfo] = {
             "instructions. Search endpoint availability may vary. "
             "⚠️ UPDATED 2026-03-28: previous direct DTS PAXWorld URL timed out repeatedly."
         ),
-        phone="330-451-7443", address="110 Central Plaza S, Canton, OH 44702",
+        phone="330-451-7443",
+        address="110 Central Plaza S, Canton, OH 44702",
         records_from=1987,
     ),
     OhioCounty.SUMMIT: CountyInfo(
-        name="Summit", fips="153", seat="Akron",
+        name="Summit",
+        fips="153",
+        seat="Akron",
         system=RecorderSystem.EAGLEWEB,
         portal_url="https://summitcountyoh-web.tylerhost.net/web/search/DOCSEARCH236S2",
         search_url_template=None,
         portal_notes="Summit County uses Tyler Technologies EagleWeb hosted on tylerhost.net. No login required for public index search. Confirmed working URL 2026-03-28. Prior URL (eagleweb.summitoh.net) was dead.",
-        phone="330-643-2712", address="175 S Main St, Akron, OH 44308",
+        phone="330-643-2712",
+        address="175 S Main St, Akron, OH 44308",
         records_from=1987,
     ),
     OhioCounty.TRUMBULL: CountyInfo(
-        name="Trumbull", fips="155", seat="Warren",
+        name="Trumbull",
+        fips="155",
+        seat="Warren",
         system=RecorderSystem.DTS_PAXWORLD,
         portal_url="https://records.co.trumbull.oh.us/PAXWorld/views/search",
         search_url_template=None,
@@ -1154,47 +1394,62 @@ _REGISTRY: dict[OhioCounty, CountyInfo] = {
             "NOTE: Prior recorder's DTS contract is under investigation by the "
             "Ohio Auditor (as of 2026)."
         ),
-        phone="330-675-2401", address="160 High St NW, Warren, OH 44481",
+        phone="330-675-2401",
+        address="160 High St NW, Warren, OH 44481",
         records_from=1987,
     ),
     OhioCounty.TUSCARAWAS: CountyInfo(
-        name="Tuscarawas", fips="157", seat="New Philadelphia",
+        name="Tuscarawas",
+        fips="157",
+        seat="New Philadelphia",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion10.kofiletech.us/countyweb/loginDisplay.action?countyname=TuscarawasOH",
         search_url_template=None,
         portal_notes="Tuscarawas County uses legacy CountyFusion (countyfusion10, kofiletech.us). Guest access. NOTE: Platform-wide outage confirmed 2026-03-28.",
-        phone="330-365-3243", address="125 E High Ave, New Philadelphia, OH 44663",
+        phone="330-365-3243",
+        address="125 E High Ave, New Philadelphia, OH 44663",
         records_from=1987,
     ),
     OhioCounty.UNION: CountyInfo(
-        name="Union", fips="159", seat="Marysville",
+        name="Union",
+        fips="159",
+        seat="Marysville",
         system=RecorderSystem.CUSTOM,
         portal_url="https://www.unioncountyohio.gov/recorder-disclaimer",
         search_url_template=None,
         portal_notes="Union County hosts its own search portal. Index records from 1875 to current. Accept disclaimer before searching.",
-        phone="937-645-3006", address="233 W 6th St, Marysville, OH 43040",
+        phone="937-645-3006",
+        address="233 W 6th St, Marysville, OH 43040",
         records_from=1875,
     ),
     OhioCounty.VAN_WERT: CountyInfo(
-        name="Van Wert", fips="161", seat="Van Wert",
+        name="Van Wert",
+        fips="161",
+        seat="Van Wert",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=VanWertOH",
         search_url_template=None,
         portal_notes="Guest access available. Search by grantor/grantee last name first.",
-        phone="419-238-0843", address="121 E Main St, Van Wert, OH 45891",
+        phone="419-238-0843",
+        address="121 E Main St, Van Wert, OH 45891",
         records_from=1987,
     ),
     OhioCounty.VINTON: CountyInfo(
-        name="Vinton", fips="163", seat="McArthur",
+        name="Vinton",
+        fips="163",
+        seat="McArthur",
         system=RecorderSystem.FIDLAR_AVA,
         portal_url="https://ohvinton.fidlar.com/OHVinton/AvaWeb/",
         search_url_template=None,
         portal_notes="Vinton County migrated to Fidlar AVA. Verified working.",
-        phone="740-596-3001", address="100 E Main St, McArthur, OH 45651",
+        phone="740-596-3001",
+        address="100 E Main St, McArthur, OH 45651",
         records_from=1987,
     ),
     OhioCounty.WARREN: CountyInfo(
-        name="Warren", fips="165", seat="Lebanon",
+        name="Warren",
+        fips="165",
+        seat="Lebanon",
         system=RecorderSystem.FIDLAR_AVA,
         portal_url="https://ohwarren.fidlar.com/OHWarren/AvaWeb/",
         search_url_template=None,
@@ -1204,38 +1459,50 @@ _REGISTRY: dict[OhioCounty, CountyInfo] = {
             "Official portal at recorder.warrencountyohio.gov links to ohwarren.fidlar.com. "
             "⚠️ SYSTEM CORRECTED 2026-03-28: previous warren.oh.publicsearch.us URL returned connection error."
         ),
-        phone="513-695-1382", address="406 Justice Dr, Lebanon, OH 45036",
+        phone="513-695-1382",
+        address="406 Justice Dr, Lebanon, OH 45036",
         records_from=1797,
     ),
     OhioCounty.WASHINGTON: CountyInfo(
-        name="Washington", fips="167", seat="Marietta",
+        name="Washington",
+        fips="167",
+        seat="Marietta",
         system=RecorderSystem.GOVOS_CLOUD_SEARCH,
         portal_url="https://washington.oh.publicsearch.us/",
         search_url_template="https://washington.oh.publicsearch.us/results?search=OwnerSearch&query={name}",
         portal_notes="Washington County migrated to GovOS Cloud Search. Verified working.",
-        phone="740-373-6623", address="205 Putnam St, Marietta, OH 45750",
+        phone="740-373-6623",
+        address="205 Putnam St, Marietta, OH 45750",
         records_from=1987,
     ),
     OhioCounty.WAYNE: CountyInfo(
-        name="Wayne", fips="169", seat="Wooster",
+        name="Wayne",
+        fips="169",
+        seat="Wooster",
         system=RecorderSystem.GOVOS_COUNTYFUSION,
         portal_url="https://countyfusion4.govos.com/countyweb/loginDisplay.action?countyname=WayneOH",
         search_url_template=None,
         portal_notes="Wayne County uses CountyFusion. Guest access. NOTE: Platform-wide outage confirmed 2026-03-28.",
-        phone="330-287-5480", address="428 W Liberty St, Wooster, OH 44691",
+        phone="330-287-5480",
+        address="428 W Liberty St, Wooster, OH 44691",
         records_from=1987,
     ),
     OhioCounty.WILLIAMS: CountyInfo(
-        name="Williams", fips="171", seat="Bryan",
+        name="Williams",
+        fips="171",
+        seat="Bryan",
         system=RecorderSystem.FIDLAR_AVA,
         portal_url="https://ohwilliams.fidlar.com/OHWilliams/AvaWeb/",
         search_url_template=None,
         portal_notes="Williams County uses Fidlar AVA. Verified working.",
-        phone="419-636-5639", address="One Courthouse Square, Bryan, OH 43506",
+        phone="419-636-5639",
+        address="One Courthouse Square, Bryan, OH 43506",
         records_from=1987,
     ),
     OhioCounty.WOOD: CountyInfo(
-        name="Wood", fips="173", seat="Bowling Green",
+        name="Wood",
+        fips="173",
+        seat="Bowling Green",
         system=RecorderSystem.FIDLAR_AVA,
         portal_url="https://ohwood.fidlar.com/OHWood/AvaWeb/",
         search_url_template=None,
@@ -1245,16 +1512,20 @@ _REGISTRY: dict[OhioCounty, CountyInfo] = {
             "Document IMAGES require Laredo Select subscription (contact office for account form). "
             "URL confirmed via official county site co.wood.oh.us/recorder/ 2026-03-28."
         ),
-        phone="419-354-9150", address="One Courthouse Square, Bowling Green, OH 43402",
+        phone="419-354-9150",
+        address="One Courthouse Square, Bowling Green, OH 43402",
         records_from=1985,
     ),
     OhioCounty.WYANDOT: CountyInfo(
-        name="Wyandot", fips="175", seat="Upper Sandusky",
+        name="Wyandot",
+        fips="175",
+        seat="Upper Sandusky",
         system=RecorderSystem.FIDLAR_AVA,
         portal_url="https://ava.fidlar.com/OHWyandot/AvaWeb/",
         search_url_template=None,
         portal_notes="Wyandot County migrated to Fidlar AVA. Verified working.",
-        phone="419-294-1442", address="109 S Sandusky Ave, Upper Sandusky, OH 43351",
+        phone="419-294-1442",
+        address="109 S Sandusky Ave, Upper Sandusky, OH 43351",
         records_from=1987,
     ),
 }
@@ -1263,6 +1534,7 @@ _REGISTRY: dict[OhioCounty, CountyInfo] = {
 # ---------------------------------------------------------------------------
 # Public API — registry
 # ---------------------------------------------------------------------------
+
 
 def get_county_info(county: OhioCounty) -> CountyInfo:
     """
@@ -1313,6 +1585,7 @@ def list_counties(
 # Public API — URL builder
 # ---------------------------------------------------------------------------
 
+
 def get_search_url(
     county: OhioCounty,
     grantor_grantee: str | None = None,
@@ -1357,8 +1630,7 @@ def get_search_url(
         and info.search_url_template
         and grantor_grantee
     ):
-        url = info.search_url_template.replace(
-            "{name}", grantor_grantee.strip())
+        url = info.search_url_template.replace("{name}", grantor_grantee.strip())
         instructions = (
             f"Direct search URL generated for '{grantor_grantee}' in "
             f"{info.name} County. No login required — results load directly. "
@@ -1372,14 +1644,20 @@ def get_search_url(
         and info.portal_notes
         and "REQUIRES REGISTRATION" in info.portal_notes
     )
-    requires_login = info.system in (
-        RecorderSystem.GOVOS_COUNTYFUSION,
-        RecorderSystem.LAREDO,
-    ) or avenu_requires_login
+    requires_login = (
+        info.system
+        in (
+            RecorderSystem.GOVOS_COUNTYFUSION,
+            RecorderSystem.LAREDO,
+        )
+        or avenu_requires_login
+    )
 
     logger.info(
         "county_recorder get_search_url: county=%s system=%s requires_login=%s",
-        county.value, info.system.value, requires_login,
+        county.value,
+        info.system.value,
+        requires_login,
     )
 
     return SearchUrlResult(
@@ -1395,6 +1673,7 @@ def get_search_url(
 # ---------------------------------------------------------------------------
 # Public API — document parser
 # ---------------------------------------------------------------------------
+
 
 def parse_recorder_document(
     extracted_text: str,
@@ -1437,8 +1716,7 @@ def parse_recorder_document(
             print("SIGNAL: Title search disclaimer present")
     """
     if not extracted_text or not extracted_text.strip():
-        raise RecorderError(
-            "Extracted text is empty — cannot parse recorder document.")
+        raise RecorderError("Extracted text is empty — cannot parse recorder document.")
 
     text = extracted_text
     text_upper = text.upper()
@@ -1460,8 +1738,7 @@ def parse_recorder_document(
         result.grantee = result.grantees[0]
 
     # --- Consideration ----------------------------------------------------
-    result.consideration, result.consideration_text = _extract_consideration(
-        text_upper, text)
+    result.consideration, result.consideration_text = _extract_consideration(text_upper, text)
 
     # --- Parcel ID --------------------------------------------------------
     result.parcel_id = _extract_parcel_id(text_upper)
@@ -1479,14 +1756,16 @@ def parse_recorder_document(
     result.legal_description = _extract_legal_description(text, text_upper)
 
     # --- Preparer ---------------------------------------------------------
-    result.preparer, result.preparer_notes = _extract_preparer(
-        text, text_upper)
+    result.preparer, result.preparer_notes = _extract_preparer(text, text_upper)
 
     logger.info(
         "county_recorder parse_recorder_document: type=%s grantor=%r grantee=%r "
         "consideration=%s parcel=%r",
-        result.instrument_type, result.grantor, result.grantee,
-        result.consideration, result.parcel_id,
+        result.instrument_type,
+        result.grantor,
+        result.grantee,
+        result.consideration,
+        result.parcel_id,
     )
     return result
 
@@ -1495,26 +1774,27 @@ def parse_recorder_document(
 # Parsing helpers (internal)
 # ---------------------------------------------------------------------------
 
+
 def _detect_instrument_type(text_upper: str) -> str | None:
     """Detect the instrument type from document text."""
     patterns = [
-        (r"\bWARRANTY DEED\b",          "WARRANTY DEED"),
-        (r"\bQUITCLAIM DEED\b",          "QUITCLAIM DEED"),
-        (r"\bTRANSFER ON DEATH\b",       "TRANSFER ON DEATH DEED"),
-        (r"\bSHERIFF.S DEED\b",          "SHERIFF'S DEED"),
-        (r"\bEXECUTOR.S DEED\b",         "EXECUTOR'S DEED"),
-        (r"\bFIDUCIARY DEED\b",          "FIDUCIARY DEED"),
-        (r"\bDEED OF TRUST\b",           "DEED OF TRUST"),
+        (r"\bWARRANTY DEED\b", "WARRANTY DEED"),
+        (r"\bQUITCLAIM DEED\b", "QUITCLAIM DEED"),
+        (r"\bTRANSFER ON DEATH\b", "TRANSFER ON DEATH DEED"),
+        (r"\bSHERIFF.S DEED\b", "SHERIFF'S DEED"),
+        (r"\bEXECUTOR.S DEED\b", "EXECUTOR'S DEED"),
+        (r"\bFIDUCIARY DEED\b", "FIDUCIARY DEED"),
+        (r"\bDEED OF TRUST\b", "DEED OF TRUST"),
         (r"\bSATISFACTION OF MORTGAGE\b", "SATISFACTION OF MORTGAGE"),
-        (r"\bRELEASE OF MORTGAGE\b",     "RELEASE OF MORTGAGE"),
-        (r"\bMORTGAGE\b",                "MORTGAGE"),
-        (r"\bEASEMENT\b",                "EASEMENT"),
+        (r"\bRELEASE OF MORTGAGE\b", "RELEASE OF MORTGAGE"),
+        (r"\bMORTGAGE\b", "MORTGAGE"),
+        (r"\bEASEMENT\b", "EASEMENT"),
         (r"\bUCC.{0,5}FINANCING STATEMENT\b", "UCC FINANCING STATEMENT"),
-        (r"\bFINANCING STATEMENT\b",     "UCC FINANCING STATEMENT"),
-        (r"\bLEASE\b",                   "LEASE"),
-        (r"\bAFFIDAVIT\b",               "AFFIDAVIT"),
-        (r"\bDECLARATION\b",             "DECLARATION"),
-        (r"\bSURVEY\b",                  "SURVEY/PLAT"),
+        (r"\bFINANCING STATEMENT\b", "UCC FINANCING STATEMENT"),
+        (r"\bLEASE\b", "LEASE"),
+        (r"\bAFFIDAVIT\b", "AFFIDAVIT"),
+        (r"\bDECLARATION\b", "DECLARATION"),
+        (r"\bSURVEY\b", "SURVEY/PLAT"),
         (r"\b(?:WARRANTY |QUIT.?CLAIM )?DEED\b", "DEED"),
     ]
     for pattern, label in patterns:
@@ -1523,9 +1803,7 @@ def _detect_instrument_type(text_upper: str) -> str | None:
     return None
 
 
-def _extract_party(
-    role: str, text_upper: str, text: str
-) -> list[str]:
+def _extract_party(role: str, text_upper: str, text: str) -> list[str]:
     """
     Extract party names for a given role (GRANTOR or GRANTEE).
 
@@ -1559,9 +1837,7 @@ def _extract_party(
     return names[:5]  # cap at 5 to avoid runaway parsing
 
 
-def _extract_consideration(
-    text_upper: str, text: str
-) -> tuple[float | None, str | None]:
+def _extract_consideration(text_upper: str, text: str) -> tuple[float | None, str | None]:
     """
     Extract the consideration amount.
 
@@ -1614,7 +1890,7 @@ def _extract_consideration(
         if m:
             # Return a snippet of the actual text
             start = m.start()
-            snippet = text_upper[max(0, start - 20):start + 60].strip()
+            snippet = text_upper[max(0, start - 20) : start + 60].strip()
             return None, snippet  # amount unknown but consideration text captured
 
     return None, None
@@ -1704,14 +1980,12 @@ def _extract_legal_description(text: str, text_upper: str) -> str | None:
         m = re.search(pattern, text_upper)
         if m:
             start = m.start()
-            snippet = text[start:start + 500].strip()
+            snippet = text[start : start + 500].strip()
             return snippet
     return None
 
 
-def _extract_preparer(
-    text: str, text_upper: str
-) -> tuple[str | None, str | None]:
+def _extract_preparer(text: str, text_upper: str) -> tuple[str | None, str | None]:
     """
     Extract preparer name and any disclaimer language.
 
@@ -1748,7 +2022,7 @@ def _extract_preparer(
         if m:
             start = m.start()
             # Capture a window around the disclaimer
-            preparer_notes = text[max(0, start - 30):start + 100].strip()
+            preparer_notes = text[max(0, start - 30) : start + 100].strip()
             break
 
     return preparer, preparer_notes

@@ -73,11 +73,8 @@ Sources:
 from __future__ import annotations
 
 import logging
-import re
-import urllib.parse
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 import requests
 
@@ -117,6 +114,7 @@ MAX_RESULTS = 100
 # Error type
 # ---------------------------------------------------------------------------
 
+
 class AuditorError(Exception):
     """
     Raised when the county auditor connector cannot complete an operation.
@@ -126,6 +124,7 @@ class AuditorError(Exception):
         county:      OhioCounty enum value involved, if applicable.
         status_code: HTTP status code, if the error came from an HTTP call.
     """
+
     def __init__(
         self,
         message: str,
@@ -140,6 +139,7 @@ class AuditorError(Exception):
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
+
 
 class AuditorPortalSystem(Enum):
     """
@@ -156,14 +156,16 @@ class AuditorPortalSystem(Enum):
 
     UNAVAILABLE: No online access. In-person or phone only.
     """
-    BEACON       = "Beacon (Schneider)"
-    COUNTY_SITE  = "County-Hosted Portal"
-    UNAVAILABLE  = "In-Person/Phone Only"
+
+    BEACON = "Beacon (Schneider)"
+    COUNTY_SITE = "County-Hosted Portal"
+    UNAVAILABLE = "In-Person/Phone Only"
 
 
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class AuditorInfo:
@@ -182,6 +184,7 @@ class AuditorInfo:
         phone:         Auditor's office phone number.
         address:       Physical address.
     """
+
     name: str
     fips: str
     seat: str
@@ -213,6 +216,7 @@ class ParcelRecord:
         aud_link:       Direct URL to this parcel on the county auditor site.
         raw:            Full raw dict from the ArcGIS response attributes.
     """
+
     object_id: int | None = None
     pin: str | None = None
     statewide_pin: str | None = None
@@ -239,6 +243,7 @@ class ParcelSearchResult:
         note:           A plain-English note for the investigator, e.g.
                         about data currency or what to do next.
     """
+
     query: str
     county_filter: str | None
     records: list[ParcelRecord]
@@ -261,6 +266,7 @@ class AuditorUrlResult:
         requires_login: True if the portal requires a login (rare for Ohio
                         county auditors; most are free public access).
     """
+
     county: "OhioCounty"
     county_name: str
     url: str | None
@@ -273,6 +279,7 @@ class AuditorUrlResult:
 # Ohio County enum — all 88 counties
 # ---------------------------------------------------------------------------
 
+
 class OhioCounty(Enum):
     """
     All 88 Ohio counties by name. Values are lowercase slugs.
@@ -281,94 +288,95 @@ class OhioCounty(Enum):
     (county_recorder_connector, county_auditor_connector) to keep modules
     stateless and importable without cross-module dependencies.
     """
-    ADAMS       = "adams"
-    ALLEN       = "allen"
-    ASHLAND     = "ashland"
-    ASHTABULA   = "ashtabula"
-    ATHENS      = "athens"
-    AUGLAIZE    = "auglaize"
-    BELMONT     = "belmont"
-    BROWN       = "brown"
-    BUTLER      = "butler"
-    CARROLL     = "carroll"
-    CHAMPAIGN   = "champaign"
-    CLARK       = "clark"
-    CLERMONT    = "clermont"
-    CLINTON     = "clinton"
-    COLUMBIANA  = "columbiana"
-    COSHOCTON   = "coshocton"
-    CRAWFORD    = "crawford"
-    CUYAHOGA    = "cuyahoga"
-    DARKE       = "darke"
-    DEFIANCE    = "defiance"
-    DELAWARE    = "delaware"
-    ERIE        = "erie"
-    FAIRFIELD   = "fairfield"
-    FAYETTE     = "fayette"
-    FRANKLIN    = "franklin"
-    FULTON      = "fulton"
-    GALLIA      = "gallia"
-    GEAUGA      = "geauga"
-    GREENE      = "greene"
-    GUERNSEY    = "guernsey"
-    HAMILTON    = "hamilton"
-    HANCOCK     = "hancock"
-    HARDIN      = "hardin"
-    HARRISON    = "harrison"
-    HENRY       = "henry"
-    HIGHLAND    = "highland"
-    HOCKING     = "hocking"
-    HOLMES      = "holmes"
-    HURON       = "huron"
-    JACKSON     = "jackson"
-    JEFFERSON   = "jefferson"
-    KNOX        = "knox"
-    LAKE        = "lake"
-    LAWRENCE    = "lawrence"
-    LICKING     = "licking"
-    LOGAN       = "logan"
-    LORAIN      = "lorain"
-    LUCAS       = "lucas"
-    MADISON     = "madison"
-    MAHONING    = "mahoning"
-    MARION      = "marion"
-    MEDINA      = "medina"
-    MEIGS       = "meigs"
-    MERCER      = "mercer"
-    MIAMI       = "miami"
-    MONROE      = "monroe"
-    MONTGOMERY  = "montgomery"
-    MORGAN      = "morgan"
-    MORROW      = "morrow"
-    MUSKINGUM   = "muskingum"
-    NOBLE       = "noble"
-    OTTAWA      = "ottawa"
-    PAULDING    = "paulding"
-    PERRY       = "perry"
-    PICKAWAY    = "pickaway"
-    PIKE        = "pike"
-    PORTAGE     = "portage"
-    PREBLE      = "preble"
-    PUTNAM      = "putnam"
-    RICHLAND    = "richland"
-    ROSS        = "ross"
-    SANDUSKY    = "sandusky"
-    SCIOTO      = "scioto"
-    SENECA      = "seneca"
-    SHELBY      = "shelby"
-    STARK       = "stark"
-    SUMMIT      = "summit"
-    TRUMBULL    = "trumbull"
-    TUSCARAWAS  = "tuscarawas"
-    UNION       = "union"
-    VAN_WERT    = "van_wert"
-    VINTON      = "vinton"
-    WARREN      = "warren"
-    WASHINGTON  = "washington"
-    WAYNE       = "wayne"
-    WILLIAMS    = "williams"
-    WOOD        = "wood"
-    WYANDOT     = "wyandot"
+
+    ADAMS = "adams"
+    ALLEN = "allen"
+    ASHLAND = "ashland"
+    ASHTABULA = "ashtabula"
+    ATHENS = "athens"
+    AUGLAIZE = "auglaize"
+    BELMONT = "belmont"
+    BROWN = "brown"
+    BUTLER = "butler"
+    CARROLL = "carroll"
+    CHAMPAIGN = "champaign"
+    CLARK = "clark"
+    CLERMONT = "clermont"
+    CLINTON = "clinton"
+    COLUMBIANA = "columbiana"
+    COSHOCTON = "coshocton"
+    CRAWFORD = "crawford"
+    CUYAHOGA = "cuyahoga"
+    DARKE = "darke"
+    DEFIANCE = "defiance"
+    DELAWARE = "delaware"
+    ERIE = "erie"
+    FAIRFIELD = "fairfield"
+    FAYETTE = "fayette"
+    FRANKLIN = "franklin"
+    FULTON = "fulton"
+    GALLIA = "gallia"
+    GEAUGA = "geauga"
+    GREENE = "greene"
+    GUERNSEY = "guernsey"
+    HAMILTON = "hamilton"
+    HANCOCK = "hancock"
+    HARDIN = "hardin"
+    HARRISON = "harrison"
+    HENRY = "henry"
+    HIGHLAND = "highland"
+    HOCKING = "hocking"
+    HOLMES = "holmes"
+    HURON = "huron"
+    JACKSON = "jackson"
+    JEFFERSON = "jefferson"
+    KNOX = "knox"
+    LAKE = "lake"
+    LAWRENCE = "lawrence"
+    LICKING = "licking"
+    LOGAN = "logan"
+    LORAIN = "lorain"
+    LUCAS = "lucas"
+    MADISON = "madison"
+    MAHONING = "mahoning"
+    MARION = "marion"
+    MEDINA = "medina"
+    MEIGS = "meigs"
+    MERCER = "mercer"
+    MIAMI = "miami"
+    MONROE = "monroe"
+    MONTGOMERY = "montgomery"
+    MORGAN = "morgan"
+    MORROW = "morrow"
+    MUSKINGUM = "muskingum"
+    NOBLE = "noble"
+    OTTAWA = "ottawa"
+    PAULDING = "paulding"
+    PERRY = "perry"
+    PICKAWAY = "pickaway"
+    PIKE = "pike"
+    PORTAGE = "portage"
+    PREBLE = "preble"
+    PUTNAM = "putnam"
+    RICHLAND = "richland"
+    ROSS = "ross"
+    SANDUSKY = "sandusky"
+    SCIOTO = "scioto"
+    SENECA = "seneca"
+    SHELBY = "shelby"
+    STARK = "stark"
+    SUMMIT = "summit"
+    TRUMBULL = "trumbull"
+    TUSCARAWAS = "tuscarawas"
+    UNION = "union"
+    VAN_WERT = "van_wert"
+    VINTON = "vinton"
+    WARREN = "warren"
+    WASHINGTON = "washington"
+    WAYNE = "wayne"
+    WILLIAMS = "williams"
+    WOOD = "wood"
+    WYANDOT = "wyandot"
 
 
 # ---------------------------------------------------------------------------
@@ -385,153 +393,208 @@ class OhioCounty(Enum):
 # ---------------------------------------------------------------------------
 
 _AUDITOR_REGISTRY: dict[OhioCounty, AuditorInfo] = {
-
     OhioCounty.ADAMS: AuditorInfo(
-        name="Adams", fips="001", seat="West Union",
+        name="Adams",
+        fips="001",
+        seat="West Union",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=AdamsCountyOH&PageType=Search",
         beacon_app="AdamsCountyOH",
         portal_notes="Beacon portal — free public access. Search by owner name, parcel ID, or address. Shows assessed value, sale history, and tax info.",
-        phone="937-544-2364", address="110 W Main St, West Union, OH 45693",
+        phone="937-544-2364",
+        address="110 W Main St, West Union, OH 45693",
     ),
     OhioCounty.ALLEN: AuditorInfo(
-        name="Allen", fips="003", seat="Lima",
+        name="Allen",
+        fips="003",
+        seat="Lima",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=AllenCountyOH&PageType=Search",
         beacon_app="AllenCountyOH",
         portal_notes="Beacon portal — free public access. Search by owner name, parcel ID, or address.",
-        phone="419-228-3700", address="301 N Main St, Lima, OH 45801",
+        phone="419-228-3700",
+        address="301 N Main St, Lima, OH 45801",
     ),
     OhioCounty.ASHLAND: AuditorInfo(
-        name="Ashland", fips="005", seat="Ashland",
+        name="Ashland",
+        fips="005",
+        seat="Ashland",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=AshlandCountyOH&PageType=Search",
         beacon_app="AshlandCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-282-4235", address="142 W 2nd St, Ashland, OH 44805",
+        phone="419-282-4235",
+        address="142 W 2nd St, Ashland, OH 44805",
     ),
     OhioCounty.ASHTABULA: AuditorInfo(
-        name="Ashtabula", fips="007", seat="Jefferson",
+        name="Ashtabula",
+        fips="007",
+        seat="Jefferson",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=AshtabulaCountyOH&PageType=Search",
         beacon_app="AshtabulaCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="440-576-3789", address="25 W Jefferson St, Jefferson, OH 44047",
+        phone="440-576-3789",
+        address="25 W Jefferson St, Jefferson, OH 44047",
     ),
     OhioCounty.ATHENS: AuditorInfo(
-        name="Athens", fips="009", seat="Athens",
+        name="Athens",
+        fips="009",
+        seat="Athens",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=AthensCountyOH&PageType=Search",
         beacon_app="AthensCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-592-3242", address="15 S Court St, Athens, OH 45701",
+        phone="740-592-3242",
+        address="15 S Court St, Athens, OH 45701",
     ),
     OhioCounty.AUGLAIZE: AuditorInfo(
-        name="Auglaize", fips="011", seat="Wapakoneta",
+        name="Auglaize",
+        fips="011",
+        seat="Wapakoneta",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=AuglaizeCountyOH&PageType=Search",
         beacon_app="AuglaizeCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-738-3612", address="201 Willipie St, Wapakoneta, OH 45895",
+        phone="419-738-3612",
+        address="201 Willipie St, Wapakoneta, OH 45895",
     ),
     OhioCounty.BELMONT: AuditorInfo(
-        name="Belmont", fips="013", seat="St. Clairsville",
+        name="Belmont",
+        fips="013",
+        seat="St. Clairsville",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=BelmontCountyOH&PageType=Search",
         beacon_app="BelmontCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-695-2121", address="101 W Main St, St. Clairsville, OH 43950",
+        phone="740-695-2121",
+        address="101 W Main St, St. Clairsville, OH 43950",
     ),
     OhioCounty.BROWN: AuditorInfo(
-        name="Brown", fips="015", seat="Georgetown",
+        name="Brown",
+        fips="015",
+        seat="Georgetown",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=BrownCountyOH&PageType=Search",
         beacon_app="BrownCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="937-378-3956", address="800 Mt Orab Pike, Georgetown, OH 45121",
+        phone="937-378-3956",
+        address="800 Mt Orab Pike, Georgetown, OH 45121",
     ),
     OhioCounty.BUTLER: AuditorInfo(
-        name="Butler", fips="017", seat="Hamilton",
+        name="Butler",
+        fips="017",
+        seat="Hamilton",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://auditor.bcohio.gov/real_estate/index.php",
         beacon_app=None,
         portal_notes="Butler County Auditor hosts its own portal. Free public search by owner name, address, or parcel ID. Shows assessed value, sale history.",
-        phone="513-887-3411", address="130 High St, Hamilton, OH 45011",
+        phone="513-887-3411",
+        address="130 High St, Hamilton, OH 45011",
     ),
     OhioCounty.CARROLL: AuditorInfo(
-        name="Carroll", fips="019", seat="Carrollton",
+        name="Carroll",
+        fips="019",
+        seat="Carrollton",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=CarrollCountyOH&PageType=Search",
         beacon_app="CarrollCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="330-627-2250", address="119 S Lisbon St, Carrollton, OH 44615",
+        phone="330-627-2250",
+        address="119 S Lisbon St, Carrollton, OH 44615",
     ),
     OhioCounty.CHAMPAIGN: AuditorInfo(
-        name="Champaign", fips="021", seat="Urbana",
+        name="Champaign",
+        fips="021",
+        seat="Urbana",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=ChampaignCountyOH&PageType=Search",
         beacon_app="ChampaignCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="937-484-1627", address="200 N Main St, Urbana, OH 43078",
+        phone="937-484-1627",
+        address="200 N Main St, Urbana, OH 43078",
     ),
     OhioCounty.CLARK: AuditorInfo(
-        name="Clark", fips="023", seat="Springfield",
+        name="Clark",
+        fips="023",
+        seat="Springfield",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=ClarkCountyOH&PageType=Search",
         beacon_app="ClarkCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="937-521-1680", address="31 N Limestone St, Springfield, OH 45502",
+        phone="937-521-1680",
+        address="31 N Limestone St, Springfield, OH 45502",
     ),
     OhioCounty.CLERMONT: AuditorInfo(
-        name="Clermont", fips="025", seat="Batavia",
+        name="Clermont",
+        fips="025",
+        seat="Batavia",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=ClermontCountyOH&PageType=Search",
         beacon_app="ClermontCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="513-732-7243", address="101 E Main St, Batavia, OH 45103",
+        phone="513-732-7243",
+        address="101 E Main St, Batavia, OH 45103",
     ),
     OhioCounty.CLINTON: AuditorInfo(
-        name="Clinton", fips="027", seat="Wilmington",
+        name="Clinton",
+        fips="027",
+        seat="Wilmington",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=ClintonCountyOH&PageType=Search",
         beacon_app="ClintonCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="937-382-2316", address="46 S South St, Wilmington, OH 45177",
+        phone="937-382-2316",
+        address="46 S South St, Wilmington, OH 45177",
     ),
     OhioCounty.COLUMBIANA: AuditorInfo(
-        name="Columbiana", fips="029", seat="Lisbon",
+        name="Columbiana",
+        fips="029",
+        seat="Lisbon",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=ColumbianaCountyOH&PageType=Search",
         beacon_app="ColumbianaCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="330-424-9515", address="105 S Market St, Lisbon, OH 44432",
+        phone="330-424-9515",
+        address="105 S Market St, Lisbon, OH 44432",
     ),
     OhioCounty.COSHOCTON: AuditorInfo(
-        name="Coshocton", fips="031", seat="Coshocton",
+        name="Coshocton",
+        fips="031",
+        seat="Coshocton",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=CoshoctonCountyOH&PageType=Search",
         beacon_app="CoshoctonCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-622-1766", address="349 Main St, Coshocton, OH 43812",
+        phone="740-622-1766",
+        address="349 Main St, Coshocton, OH 43812",
     ),
     OhioCounty.CRAWFORD: AuditorInfo(
-        name="Crawford", fips="033", seat="Bucyrus",
+        name="Crawford",
+        fips="033",
+        seat="Bucyrus",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=CrawfordCountyOH&PageType=Search",
         beacon_app="CrawfordCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-562-2766", address="112 E Mansfield St, Bucyrus, OH 44820",
+        phone="419-562-2766",
+        address="112 E Mansfield St, Bucyrus, OH 44820",
     ),
     OhioCounty.CUYAHOGA: AuditorInfo(
-        name="Cuyahoga", fips="035", seat="Cleveland",
+        name="Cuyahoga",
+        fips="035",
+        seat="Cleveland",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://fiscaloffice.cuyahogacounty.gov/en-US/PropertySearch.aspx",
         beacon_app=None,
         portal_notes="Cuyahoga County Fiscal Officer hosts its own portal. Free public search. Shows full transfer history, assessed value, and sale price.",
-        phone="216-443-7010", address="2079 E 9th St, Cleveland, OH 44115",
+        phone="216-443-7010",
+        address="2079 E 9th St, Cleveland, OH 44115",
     ),
     OhioCounty.DARKE: AuditorInfo(
-        name="Darke", fips="037", seat="Greenville",
+        name="Darke",
+        fips="037",
+        seat="Greenville",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?AppID=1134&LayerID=28746&PageTypeID=2&PageID=11945",
         beacon_app="DarkeCountyOH",
@@ -542,282 +605,387 @@ _AUDITOR_REGISTRY: dict[OhioCounty, AuditorInfo] = {
             "Darke County is a key investigation county — use this portal to verify "
             "transfer chains and compare sale price to assessed value."
         ),
-        phone="937-547-7310", address="504 S Broadway, Greenville, OH 45331",
+        phone="937-547-7310",
+        address="504 S Broadway, Greenville, OH 45331",
     ),
     OhioCounty.DEFIANCE: AuditorInfo(
-        name="Defiance", fips="039", seat="Defiance",
+        name="Defiance",
+        fips="039",
+        seat="Defiance",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=DefianceCountyOH&PageType=Search",
         beacon_app="DefianceCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-782-4761", address="221 Clinton St, Defiance, OH 43512",
+        phone="419-782-4761",
+        address="221 Clinton St, Defiance, OH 43512",
     ),
     OhioCounty.DELAWARE: AuditorInfo(
-        name="Delaware", fips="041", seat="Delaware",
+        name="Delaware",
+        fips="041",
+        seat="Delaware",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://auditor.delawarecountyohio.gov/real-estate/",
         beacon_app=None,
         portal_notes="Delaware County Auditor hosts its own portal. Free public search.",
-        phone="740-833-2350", address="91 N Sandusky St, Delaware, OH 43015",
+        phone="740-833-2350",
+        address="91 N Sandusky St, Delaware, OH 43015",
     ),
     OhioCounty.ERIE: AuditorInfo(
-        name="Erie", fips="043", seat="Sandusky",
+        name="Erie",
+        fips="043",
+        seat="Sandusky",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=ErieCountyOH&PageType=Search",
         beacon_app="ErieCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-627-7686", address="323 Columbus Ave, Sandusky, OH 44870",
+        phone="419-627-7686",
+        address="323 Columbus Ave, Sandusky, OH 44870",
     ),
     OhioCounty.FAIRFIELD: AuditorInfo(
-        name="Fairfield", fips="045", seat="Lancaster",
+        name="Fairfield",
+        fips="045",
+        seat="Lancaster",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?AppID=1131&LayerID=28628&PageTypeID=2&PageID=11899",
         beacon_app="FairfieldCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-687-7030", address="210 E Main St, Lancaster, OH 43130",
+        phone="740-687-7030",
+        address="210 E Main St, Lancaster, OH 43130",
     ),
     OhioCounty.FAYETTE: AuditorInfo(
-        name="Fayette", fips="047", seat="Washington Court House",
+        name="Fayette",
+        fips="047",
+        seat="Washington Court House",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=FayetteCountyOH&PageType=Search",
         beacon_app="FayetteCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-335-0440", address="110 E Court St, Washington Court House, OH 43160",
+        phone="740-335-0440",
+        address="110 E Court St, Washington Court House, OH 43160",
     ),
     OhioCounty.FRANKLIN: AuditorInfo(
-        name="Franklin", fips="049", seat="Columbus",
+        name="Franklin",
+        fips="049",
+        seat="Columbus",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://property.franklincountyauditor.com/",
         beacon_app=None,
         portal_notes="Franklin County Auditor hosts its own portal (property.franklincountyauditor.com). Free public access. Shows full transfer history, sales, and assessed value. One of the most feature-rich county portals in Ohio.",
-        phone="614-525-3230", address="373 S High St, Columbus, OH 43215",
+        phone="614-525-3230",
+        address="373 S High St, Columbus, OH 43215",
     ),
     OhioCounty.FULTON: AuditorInfo(
-        name="Fulton", fips="051", seat="Wauseon",
+        name="Fulton",
+        fips="051",
+        seat="Wauseon",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=FultonCountyOH&PageType=Search",
         beacon_app="FultonCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-337-9200", address="152 S Fulton St, Wauseon, OH 43567",
+        phone="419-337-9200",
+        address="152 S Fulton St, Wauseon, OH 43567",
     ),
     OhioCounty.GALLIA: AuditorInfo(
-        name="Gallia", fips="053", seat="Gallipolis",
+        name="Gallia",
+        fips="053",
+        seat="Gallipolis",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=GalliaCountyOH&PageType=Search",
         beacon_app="GalliaCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-446-4612", address="18 Locust St, Gallipolis, OH 45631",
+        phone="740-446-4612",
+        address="18 Locust St, Gallipolis, OH 45631",
     ),
     OhioCounty.GEAUGA: AuditorInfo(
-        name="Geauga", fips="055", seat="Chardon",
+        name="Geauga",
+        fips="055",
+        seat="Chardon",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=GeaugaCountyOH&PageType=Search",
         beacon_app="GeaugaCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="440-279-1600", address="231 Main St, Chardon, OH 44024",
+        phone="440-279-1600",
+        address="231 Main St, Chardon, OH 44024",
     ),
     OhioCounty.GREENE: AuditorInfo(
-        name="Greene", fips="057", seat="Xenia",
+        name="Greene",
+        fips="057",
+        seat="Xenia",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=GreeneCountyOH&PageType=Search",
         beacon_app="GreeneCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="937-562-5065", address="69 Greene St, Xenia, OH 45385",
+        phone="937-562-5065",
+        address="69 Greene St, Xenia, OH 45385",
     ),
     OhioCounty.GUERNSEY: AuditorInfo(
-        name="Guernsey", fips="059", seat="Cambridge",
+        name="Guernsey",
+        fips="059",
+        seat="Cambridge",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=GuernseyCountyOH&PageType=Search",
         beacon_app="GuernseyCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-432-9200", address="627 Wheeling Ave, Cambridge, OH 43725",
+        phone="740-432-9200",
+        address="627 Wheeling Ave, Cambridge, OH 43725",
     ),
     OhioCounty.HAMILTON: AuditorInfo(
-        name="Hamilton", fips="061", seat="Cincinnati",
+        name="Hamilton",
+        fips="061",
+        seat="Cincinnati",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://wedge.hcauditor.org/",
         beacon_app=None,
         portal_notes="Hamilton County Auditor uses WEDGE portal (wedge.hcauditor.org). Free public access. One of Ohio's busiest auditor portals.",
-        phone="513-946-4000", address="138 E Court St, Cincinnati, OH 45202",
+        phone="513-946-4000",
+        address="138 E Court St, Cincinnati, OH 45202",
     ),
     OhioCounty.HANCOCK: AuditorInfo(
-        name="Hancock", fips="063", seat="Findlay",
+        name="Hancock",
+        fips="063",
+        seat="Findlay",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?AppID=1128&LayerID=28484&PageTypeID=2&PageID=11858",
         beacon_app="HancockCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-424-7015", address="300 S Main St, Findlay, OH 45840",
+        phone="419-424-7015",
+        address="300 S Main St, Findlay, OH 45840",
     ),
     OhioCounty.HARDIN: AuditorInfo(
-        name="Hardin", fips="065", seat="Kenton",
+        name="Hardin",
+        fips="065",
+        seat="Kenton",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=HardinCountyOH&PageType=Search",
         beacon_app="HardinCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-674-2239", address="1 Courthouse Square, Kenton, OH 43326",
+        phone="419-674-2239",
+        address="1 Courthouse Square, Kenton, OH 43326",
     ),
     OhioCounty.HARRISON: AuditorInfo(
-        name="Harrison", fips="067", seat="Cadiz",
+        name="Harrison",
+        fips="067",
+        seat="Cadiz",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=HarrisonCountyOH&PageType=Search",
         beacon_app="HarrisonCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-942-8861", address="100 W Market St, Cadiz, OH 43907",
+        phone="740-942-8861",
+        address="100 W Market St, Cadiz, OH 43907",
     ),
     OhioCounty.HENRY: AuditorInfo(
-        name="Henry", fips="069", seat="Napoleon",
+        name="Henry",
+        fips="069",
+        seat="Napoleon",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=HenryCountyOH&PageType=Search",
         beacon_app="HenryCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-592-1956", address="660 N Perry St, Napoleon, OH 43545",
+        phone="419-592-1956",
+        address="660 N Perry St, Napoleon, OH 43545",
     ),
     OhioCounty.HIGHLAND: AuditorInfo(
-        name="Highland", fips="071", seat="Hillsboro",
+        name="Highland",
+        fips="071",
+        seat="Hillsboro",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=HighlandCountyOH&PageType=Search",
         beacon_app="HighlandCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="937-393-1910", address="114 Governor Foraker Pl, Hillsboro, OH 45133",
+        phone="937-393-1910",
+        address="114 Governor Foraker Pl, Hillsboro, OH 45133",
     ),
     OhioCounty.HOCKING: AuditorInfo(
-        name="Hocking", fips="073", seat="Logan",
+        name="Hocking",
+        fips="073",
+        seat="Logan",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?AppID=1111&LayerID=28082&PageTypeID=2&PageID=11471",
         beacon_app="HockingCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-385-2127", address="1 E Main St, Logan, OH 43138",
+        phone="740-385-2127",
+        address="1 E Main St, Logan, OH 43138",
     ),
     OhioCounty.HOLMES: AuditorInfo(
-        name="Holmes", fips="075", seat="Millersburg",
+        name="Holmes",
+        fips="075",
+        seat="Millersburg",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=HolmesCountyOH&PageType=Search",
         beacon_app="HolmesCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="330-674-1896", address="1 E Jackson St, Millersburg, OH 44654",
+        phone="330-674-1896",
+        address="1 E Jackson St, Millersburg, OH 44654",
     ),
     OhioCounty.HURON: AuditorInfo(
-        name="Huron", fips="077", seat="Norwalk",
+        name="Huron",
+        fips="077",
+        seat="Norwalk",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=HuronCountyOH&PageType=Search",
         beacon_app="HuronCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-668-3092", address="12 E Main St, Norwalk, OH 44857",
+        phone="419-668-3092",
+        address="12 E Main St, Norwalk, OH 44857",
     ),
     OhioCounty.JACKSON: AuditorInfo(
-        name="Jackson", fips="079", seat="Jackson",
+        name="Jackson",
+        fips="079",
+        seat="Jackson",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=JacksonCountyOH&PageType=Search",
         beacon_app="JacksonCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-286-2006", address="226 E Main St, Jackson, OH 45640",
+        phone="740-286-2006",
+        address="226 E Main St, Jackson, OH 45640",
     ),
     OhioCounty.JEFFERSON: AuditorInfo(
-        name="Jefferson", fips="081", seat="Steubenville",
+        name="Jefferson",
+        fips="081",
+        seat="Steubenville",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=JeffersonCountyOH&PageType=Search",
         beacon_app="JeffersonCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-283-8520", address="301 Market St, Steubenville, OH 43952",
+        phone="740-283-8520",
+        address="301 Market St, Steubenville, OH 43952",
     ),
     OhioCounty.KNOX: AuditorInfo(
-        name="Knox", fips="083", seat="Mount Vernon",
+        name="Knox",
+        fips="083",
+        seat="Mount Vernon",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=KnoxCountyOH&PageType=Search",
         beacon_app="KnoxCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-393-6747", address="117 E High St, Mount Vernon, OH 43050",
+        phone="740-393-6747",
+        address="117 E High St, Mount Vernon, OH 43050",
     ),
     OhioCounty.LAKE: AuditorInfo(
-        name="Lake", fips="085", seat="Painesville",
+        name="Lake",
+        fips="085",
+        seat="Painesville",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://www.lakecountyohio.gov/auditor/real-estate/",
         beacon_app=None,
         portal_notes="Lake County Auditor uses its own portal. Free public access.",
-        phone="440-350-2532", address="105 Main St, Painesville, OH 44077",
+        phone="440-350-2532",
+        address="105 Main St, Painesville, OH 44077",
     ),
     OhioCounty.LAWRENCE: AuditorInfo(
-        name="Lawrence", fips="087", seat="Ironton",
+        name="Lawrence",
+        fips="087",
+        seat="Ironton",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=LawrenceCountyOH&PageType=Search",
         beacon_app="LawrenceCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-533-4310", address="111 S 4th St, Ironton, OH 45638",
+        phone="740-533-4310",
+        address="111 S 4th St, Ironton, OH 45638",
     ),
     OhioCounty.LICKING: AuditorInfo(
-        name="Licking", fips="089", seat="Newark",
+        name="Licking",
+        fips="089",
+        seat="Newark",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=LickingCountyOH&PageType=Search",
         beacon_app="LickingCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-670-5040", address="20 S 2nd St, Newark, OH 43055",
+        phone="740-670-5040",
+        address="20 S 2nd St, Newark, OH 43055",
     ),
     OhioCounty.LOGAN: AuditorInfo(
-        name="Logan", fips="091", seat="Bellefontaine",
+        name="Logan",
+        fips="091",
+        seat="Bellefontaine",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=LoganCountyOH&PageType=Search",
         beacon_app="LoganCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="937-599-7209", address="101 S Main St, Bellefontaine, OH 43311",
+        phone="937-599-7209",
+        address="101 S Main St, Bellefontaine, OH 43311",
     ),
     OhioCounty.LORAIN: AuditorInfo(
-        name="Lorain", fips="093", seat="Elyria",
+        name="Lorain",
+        fips="093",
+        seat="Elyria",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://auditor.loraincounty.com/",
         beacon_app=None,
         portal_notes="Lorain County Auditor hosts its own portal. Free public access.",
-        phone="440-329-5207", address="226 Middle Ave, Elyria, OH 44035",
+        phone="440-329-5207",
+        address="226 Middle Ave, Elyria, OH 44035",
     ),
     OhioCounty.LUCAS: AuditorInfo(
-        name="Lucas", fips="095", seat="Toledo",
+        name="Lucas",
+        fips="095",
+        seat="Toledo",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://www.co.lucas.oh.us/index.aspx?nid=566",
         beacon_app=None,
         portal_notes="Lucas County Auditor uses its own portal. Free public access.",
-        phone="419-213-4406", address="1 Government Center, Toledo, OH 43604",
+        phone="419-213-4406",
+        address="1 Government Center, Toledo, OH 43604",
     ),
     OhioCounty.MADISON: AuditorInfo(
-        name="Madison", fips="097", seat="London",
+        name="Madison",
+        fips="097",
+        seat="London",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=MadisonCountyOH&PageType=Search",
         beacon_app="MadisonCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-852-9717", address="1 N Main St, London, OH 43140",
+        phone="740-852-9717",
+        address="1 N Main St, London, OH 43140",
     ),
     OhioCounty.MAHONING: AuditorInfo(
-        name="Mahoning", fips="099", seat="Youngstown",
+        name="Mahoning",
+        fips="099",
+        seat="Youngstown",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://mahoningcountyauditor.org/search/",
         beacon_app=None,
         portal_notes="Mahoning County Auditor hosts its own portal. Free public access.",
-        phone="330-740-2010", address="120 Market St, Youngstown, OH 44503",
+        phone="330-740-2010",
+        address="120 Market St, Youngstown, OH 44503",
     ),
     OhioCounty.MARION: AuditorInfo(
-        name="Marion", fips="101", seat="Marion",
+        name="Marion",
+        fips="101",
+        seat="Marion",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://propertysearch.marioncountyohio.gov/",
         beacon_app=None,
         portal_notes="Marion County Auditor hosts its own portal. Free public access.",
-        phone="740-223-4000", address="222 W Center St, Marion, OH 43302",
+        phone="740-223-4000",
+        address="222 W Center St, Marion, OH 43302",
     ),
     OhioCounty.MEDINA: AuditorInfo(
-        name="Medina", fips="103", seat="Medina",
+        name="Medina",
+        fips="103",
+        seat="Medina",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://auditor.medinacounty.gov/",
         beacon_app=None,
         portal_notes="Medina County Auditor hosts its own portal. Free public access.",
-        phone="330-725-9754", address="144 N Broadway, Medina, OH 44256",
+        phone="330-725-9754",
+        address="144 N Broadway, Medina, OH 44256",
     ),
     OhioCounty.MEIGS: AuditorInfo(
-        name="Meigs", fips="105", seat="Pomeroy",
+        name="Meigs",
+        fips="105",
+        seat="Pomeroy",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=MeigsCountyOH&PageType=Search",
         beacon_app="MeigsCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-992-2698", address="100 E Second St, Pomeroy, OH 45769",
+        phone="740-992-2698",
+        address="100 E Second St, Pomeroy, OH 45769",
     ),
     OhioCounty.MERCER: AuditorInfo(
-        name="Mercer", fips="107", seat="Celina",
+        name="Mercer",
+        fips="107",
+        seat="Celina",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://auditor.mercercountyohio.gov/Search",
         beacon_app=None,
@@ -828,162 +996,222 @@ _AUDITOR_REGISTRY: dict[OhioCounty, AuditorInfo] = {
             "Mercer County is a key investigation county — use this portal to verify "
             "transfer chains and compare sale price to assessed value."
         ),
-        phone="419-586-6402", address="105 N Main St, Celina, OH 45822",
+        phone="419-586-6402",
+        address="105 N Main St, Celina, OH 45822",
     ),
     OhioCounty.MIAMI: AuditorInfo(
-        name="Miami", fips="109", seat="Troy",
+        name="Miami",
+        fips="109",
+        seat="Troy",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=MiamiCountyOH&PageType=Search",
         beacon_app="MiamiCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="937-440-5925", address="201 W Main St, Troy, OH 45373",
+        phone="937-440-5925",
+        address="201 W Main St, Troy, OH 45373",
     ),
     OhioCounty.MONROE: AuditorInfo(
-        name="Monroe", fips="111", seat="Woodsfield",
+        name="Monroe",
+        fips="111",
+        seat="Woodsfield",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=MonroeCountyOH&PageType=Search",
         beacon_app="MonroeCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-472-0873", address="101 N Main St, Woodsfield, OH 43793",
+        phone="740-472-0873",
+        address="101 N Main St, Woodsfield, OH 43793",
     ),
     OhioCounty.MONTGOMERY: AuditorInfo(
-        name="Montgomery", fips="113", seat="Dayton",
+        name="Montgomery",
+        fips="113",
+        seat="Dayton",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://www.mcrealestate.org/",
         beacon_app=None,
         portal_notes="Montgomery County Auditor uses mcrealestate.org. Free public access.",
-        phone="937-225-4326", address="451 W Third St, Dayton, OH 45422",
+        phone="937-225-4326",
+        address="451 W Third St, Dayton, OH 45422",
     ),
     OhioCounty.MORGAN: AuditorInfo(
-        name="Morgan", fips="115", seat="McConnelsville",
+        name="Morgan",
+        fips="115",
+        seat="McConnelsville",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=MorganCountyOH&PageType=Search",
         beacon_app="MorganCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-962-4475", address="19 E Main St, McConnelsville, OH 43756",
+        phone="740-962-4475",
+        address="19 E Main St, McConnelsville, OH 43756",
     ),
     OhioCounty.MORROW: AuditorInfo(
-        name="Morrow", fips="117", seat="Mount Gilead",
+        name="Morrow",
+        fips="117",
+        seat="Mount Gilead",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=MorrowCountyOH&PageType=Search",
         beacon_app="MorrowCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-946-4060", address="48 E High St, Mount Gilead, OH 43338",
+        phone="419-946-4060",
+        address="48 E High St, Mount Gilead, OH 43338",
     ),
     OhioCounty.MUSKINGUM: AuditorInfo(
-        name="Muskingum", fips="119", seat="Zanesville",
+        name="Muskingum",
+        fips="119",
+        seat="Zanesville",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=MuskingumCountyOH&PageType=Search",
         beacon_app="MuskingumCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-455-7109", address="401 Main St, Zanesville, OH 43701",
+        phone="740-455-7109",
+        address="401 Main St, Zanesville, OH 43701",
     ),
     OhioCounty.NOBLE: AuditorInfo(
-        name="Noble", fips="121", seat="Caldwell",
+        name="Noble",
+        fips="121",
+        seat="Caldwell",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=NobleCountyOH&PageType=Search",
         beacon_app="NobleCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-732-4045", address="260 Courthouse, Caldwell, OH 43724",
+        phone="740-732-4045",
+        address="260 Courthouse, Caldwell, OH 43724",
     ),
     OhioCounty.OTTAWA: AuditorInfo(
-        name="Ottawa", fips="123", seat="Port Clinton",
+        name="Ottawa",
+        fips="123",
+        seat="Port Clinton",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=OttawaCountyOH&PageType=Search",
         beacon_app="OttawaCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-734-6740", address="315 Madison St, Port Clinton, OH 43452",
+        phone="419-734-6740",
+        address="315 Madison St, Port Clinton, OH 43452",
     ),
     OhioCounty.PAULDING: AuditorInfo(
-        name="Paulding", fips="125", seat="Paulding",
+        name="Paulding",
+        fips="125",
+        seat="Paulding",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=PauldingCountyOH&PageType=Search",
         beacon_app="PauldingCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-399-8215", address="115 N Williams St, Paulding, OH 45879",
+        phone="419-399-8215",
+        address="115 N Williams St, Paulding, OH 45879",
     ),
     OhioCounty.PERRY: AuditorInfo(
-        name="Perry", fips="127", seat="New Lexington",
+        name="Perry",
+        fips="127",
+        seat="New Lexington",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=PerryCountyOH&PageType=Search",
         beacon_app="PerryCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-342-1508", address="121 W Brown St, New Lexington, OH 43764",
+        phone="740-342-1508",
+        address="121 W Brown St, New Lexington, OH 43764",
     ),
     OhioCounty.PICKAWAY: AuditorInfo(
-        name="Pickaway", fips="129", seat="Circleville",
+        name="Pickaway",
+        fips="129",
+        seat="Circleville",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=PickawayCountyOH&PageType=Search",
         beacon_app="PickawayCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-474-6005", address="207 S Court St, Circleville, OH 43113",
+        phone="740-474-6005",
+        address="207 S Court St, Circleville, OH 43113",
     ),
     OhioCounty.PIKE: AuditorInfo(
-        name="Pike", fips="131", seat="Waverly",
+        name="Pike",
+        fips="131",
+        seat="Waverly",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=PikeCountyOH&PageType=Search",
         beacon_app="PikeCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-947-4125", address="100 E 2nd St, Waverly, OH 45690",
+        phone="740-947-4125",
+        address="100 E 2nd St, Waverly, OH 45690",
     ),
     OhioCounty.PORTAGE: AuditorInfo(
-        name="Portage", fips="133", seat="Ravenna",
+        name="Portage",
+        fips="133",
+        seat="Ravenna",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=PortageCountyOH&PageType=Search",
         beacon_app="PortageCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="330-297-3571", address="449 S Meridian St, Ravenna, OH 44266",
+        phone="330-297-3571",
+        address="449 S Meridian St, Ravenna, OH 44266",
     ),
     OhioCounty.PREBLE: AuditorInfo(
-        name="Preble", fips="135", seat="Eaton",
+        name="Preble",
+        fips="135",
+        seat="Eaton",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=PrebleCountyOH&PageType=Search",
         beacon_app="PrebleCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="937-456-8160", address="101 E Main St, Eaton, OH 45320",
+        phone="937-456-8160",
+        address="101 E Main St, Eaton, OH 45320",
     ),
     OhioCounty.PUTNAM: AuditorInfo(
-        name="Putnam", fips="137", seat="Ottawa",
+        name="Putnam",
+        fips="137",
+        seat="Ottawa",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=PutnamCountyOH&PageType=Search",
         beacon_app="PutnamCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-523-3659", address="245 E Main St, Ottawa, OH 45875",
+        phone="419-523-3659",
+        address="245 E Main St, Ottawa, OH 45875",
     ),
     OhioCounty.RICHLAND: AuditorInfo(
-        name="Richland", fips="139", seat="Mansfield",
+        name="Richland",
+        fips="139",
+        seat="Mansfield",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?AppID=1067&LayerID=25465&PageTypeID=2&PageID=10347",
         beacon_app="RichlandCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-774-5599", address="50 Park Ave E, Mansfield, OH 44902",
+        phone="419-774-5599",
+        address="50 Park Ave E, Mansfield, OH 44902",
     ),
     OhioCounty.ROSS: AuditorInfo(
-        name="Ross", fips="141", seat="Chillicothe",
+        name="Ross",
+        fips="141",
+        seat="Chillicothe",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=RossCountyOH&PageType=Search",
         beacon_app="RossCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-702-3080", address="2 N Paint St, Chillicothe, OH 45601",
+        phone="740-702-3080",
+        address="2 N Paint St, Chillicothe, OH 45601",
     ),
     OhioCounty.SANDUSKY: AuditorInfo(
-        name="Sandusky", fips="143", seat="Fremont",
+        name="Sandusky",
+        fips="143",
+        seat="Fremont",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=SanduskyCountyOH&PageType=Search",
         beacon_app="SanduskyCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-334-6174", address="100 N Park Ave, Fremont, OH 43420",
+        phone="419-334-6174",
+        address="100 N Park Ave, Fremont, OH 43420",
     ),
     OhioCounty.SCIOTO: AuditorInfo(
-        name="Scioto", fips="145", seat="Portsmouth",
+        name="Scioto",
+        fips="145",
+        seat="Portsmouth",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=SciotoCountyOH&PageType=Search",
         beacon_app="SciotoCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-355-8278", address="602 7th St, Portsmouth, OH 45662",
+        phone="740-355-8278",
+        address="602 7th St, Portsmouth, OH 45662",
     ),
     OhioCounty.SENECA: AuditorInfo(
-        name="Seneca", fips="147", seat="Tiffin",
+        name="Seneca",
+        fips="147",
+        seat="Tiffin",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://senecacountyauditoroh.gov/",
         beacon_app=None,
@@ -993,119 +1221,162 @@ _AUDITOR_REGISTRY: dict[OhioCounty, AuditorInfo] = {
             "Seneca County is the primary investigation county for the founding case — "
             "use this portal to verify assessed value vs. sale price and track transfer history."
         ),
-        phone="419-447-4520", address="109 S Washington St, Tiffin, OH 44883",
+        phone="419-447-4520",
+        address="109 S Washington St, Tiffin, OH 44883",
     ),
     OhioCounty.SHELBY: AuditorInfo(
-        name="Shelby", fips="149", seat="Sidney",
+        name="Shelby",
+        fips="149",
+        seat="Sidney",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=ShelbyCountyOH&PageType=Search",
         beacon_app="ShelbyCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="937-498-7226", address="129 E Court St, Sidney, OH 45365",
+        phone="937-498-7226",
+        address="129 E Court St, Sidney, OH 45365",
     ),
     OhioCounty.STARK: AuditorInfo(
-        name="Stark", fips="151", seat="Canton",
+        name="Stark",
+        fips="151",
+        seat="Canton",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://www.starkcountyohio.gov/auditor/real-estate",
         beacon_app=None,
         portal_notes="Stark County Auditor hosts its own portal. Free public access.",
-        phone="330-451-7443", address="110 Central Plaza S, Canton, OH 44702",
+        phone="330-451-7443",
+        address="110 Central Plaza S, Canton, OH 44702",
     ),
     OhioCounty.SUMMIT: AuditorInfo(
-        name="Summit", fips="153", seat="Akron",
+        name="Summit",
+        fips="153",
+        seat="Akron",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://fiscaloffice.summitoh.net/index.php/property-search",
         beacon_app=None,
         portal_notes="Summit County Fiscal Office hosts its own portal. Free public access.",
-        phone="330-643-2712", address="175 S Main St, Akron, OH 44308",
+        phone="330-643-2712",
+        address="175 S Main St, Akron, OH 44308",
     ),
     OhioCounty.TRUMBULL: AuditorInfo(
-        name="Trumbull", fips="155", seat="Warren",
+        name="Trumbull",
+        fips="155",
+        seat="Warren",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://property.co.trumbull.oh.us/",
         beacon_app=None,
         portal_notes="Trumbull County Auditor hosts its own portal. Free public access.",
-        phone="330-675-2401", address="160 High St NW, Warren, OH 44481",
+        phone="330-675-2401",
+        address="160 High St NW, Warren, OH 44481",
     ),
     OhioCounty.TUSCARAWAS: AuditorInfo(
-        name="Tuscarawas", fips="157", seat="New Philadelphia",
+        name="Tuscarawas",
+        fips="157",
+        seat="New Philadelphia",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=TuscarawasCountyOH&PageType=Search",
         beacon_app="TuscarawasCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="330-365-3243", address="125 E High Ave, New Philadelphia, OH 44663",
+        phone="330-365-3243",
+        address="125 E High Ave, New Philadelphia, OH 44663",
     ),
     OhioCounty.UNION: AuditorInfo(
-        name="Union", fips="159", seat="Marysville",
+        name="Union",
+        fips="159",
+        seat="Marysville",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=UnionCountyOH&PageType=Search",
         beacon_app="UnionCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="937-645-3006", address="233 W 6th St, Marysville, OH 43040",
+        phone="937-645-3006",
+        address="233 W 6th St, Marysville, OH 43040",
     ),
     OhioCounty.VAN_WERT: AuditorInfo(
-        name="Van Wert", fips="161", seat="Van Wert",
+        name="Van Wert",
+        fips="161",
+        seat="Van Wert",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=VanWertCountyOH&PageType=Search",
         beacon_app="VanWertCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-238-0843", address="121 E Main St, Van Wert, OH 45891",
+        phone="419-238-0843",
+        address="121 E Main St, Van Wert, OH 45891",
     ),
     OhioCounty.VINTON: AuditorInfo(
-        name="Vinton", fips="163", seat="McArthur",
+        name="Vinton",
+        fips="163",
+        seat="McArthur",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=VintonCountyOH&PageType=Search",
         beacon_app="VintonCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-596-3001", address="100 E Main St, McArthur, OH 45651",
+        phone="740-596-3001",
+        address="100 E Main St, McArthur, OH 45651",
     ),
     OhioCounty.WARREN: AuditorInfo(
-        name="Warren", fips="165", seat="Lebanon",
+        name="Warren",
+        fips="165",
+        seat="Lebanon",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=WarrenCountyOH&PageType=Search",
         beacon_app="WarrenCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="513-695-1382", address="406 Justice Dr, Lebanon, OH 45036",
+        phone="513-695-1382",
+        address="406 Justice Dr, Lebanon, OH 45036",
     ),
     OhioCounty.WASHINGTON: AuditorInfo(
-        name="Washington", fips="167", seat="Marietta",
+        name="Washington",
+        fips="167",
+        seat="Marietta",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?AppID=1102&LayerID=27247&PageTypeID=2&PageID=11082",
         beacon_app="WashingtonCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="740-373-6623", address="205 Putnam St, Marietta, OH 45750",
+        phone="740-373-6623",
+        address="205 Putnam St, Marietta, OH 45750",
     ),
     OhioCounty.WAYNE: AuditorInfo(
-        name="Wayne", fips="169", seat="Wooster",
+        name="Wayne",
+        fips="169",
+        seat="Wooster",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=WayneCountyOH&PageType=Search",
         beacon_app="WayneCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="330-287-5480", address="428 W Liberty St, Wooster, OH 44691",
+        phone="330-287-5480",
+        address="428 W Liberty St, Wooster, OH 44691",
     ),
     OhioCounty.WILLIAMS: AuditorInfo(
-        name="Williams", fips="171", seat="Bryan",
+        name="Williams",
+        fips="171",
+        seat="Bryan",
         system=AuditorPortalSystem.COUNTY_SITE,
         portal_url="https://realestate.williamscountyoh.gov/",
         beacon_app=None,
         portal_notes="Williams County Auditor hosts its own portal. Free public access.",
-        phone="419-636-5639", address="One Courthouse Square, Bryan, OH 43506",
+        phone="419-636-5639",
+        address="One Courthouse Square, Bryan, OH 43506",
     ),
     OhioCounty.WOOD: AuditorInfo(
-        name="Wood", fips="173", seat="Bowling Green",
+        name="Wood",
+        fips="173",
+        seat="Bowling Green",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?App=WoodCountyOH&PageType=Search",
         beacon_app="WoodCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-354-9150", address="One Courthouse Square, Bowling Green, OH 43402",
+        phone="419-354-9150",
+        address="One Courthouse Square, Bowling Green, OH 43402",
     ),
     OhioCounty.WYANDOT: AuditorInfo(
-        name="Wyandot", fips="175", seat="Upper Sandusky",
+        name="Wyandot",
+        fips="175",
+        seat="Upper Sandusky",
         system=AuditorPortalSystem.BEACON,
         portal_url="https://beacon.schneidercorp.com/Application.aspx?AppID=1140&LayerID=29166&PageTypeID=2&PageID=12100",
         beacon_app="WyandotCountyOH",
         portal_notes="Beacon portal — free public access.",
-        phone="419-294-1442", address="109 S Sandusky Ave, Upper Sandusky, OH 43351",
+        phone="419-294-1442",
+        address="109 S Sandusky Ave, Upper Sandusky, OH 43351",
     ),
 }
 
@@ -1113,6 +1384,7 @@ _AUDITOR_REGISTRY: dict[OhioCounty, AuditorInfo] = {
 # ---------------------------------------------------------------------------
 # Public API — registry
 # ---------------------------------------------------------------------------
+
 
 def get_auditor_info(county: OhioCounty) -> AuditorInfo:
     """
@@ -1157,6 +1429,7 @@ def list_counties(
 # ---------------------------------------------------------------------------
 # Public API — URL builder (Mode 2)
 # ---------------------------------------------------------------------------
+
 
 def get_auditor_url(
     county: OhioCounty,
@@ -1208,7 +1481,8 @@ def get_auditor_url(
 
     logger.info(
         "county_auditor get_auditor_url: county=%s system=%s",
-        county.value, info.system.value,
+        county.value,
+        info.system.value,
     )
 
     return AuditorUrlResult(
@@ -1224,6 +1498,7 @@ def get_auditor_url(
 # ---------------------------------------------------------------------------
 # Public API — ODNR statewide parcel query (Mode 1)
 # ---------------------------------------------------------------------------
+
 
 def search_parcels_by_owner(
     owner_name: str,
@@ -1319,6 +1594,7 @@ def search_parcels_by_pin(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _escape_like(value: str) -> str:
     """Escape single quotes in a LIKE clause value to prevent injection."""
     return value.replace("'", "''")
@@ -1392,7 +1668,10 @@ def _run_odnr_query(
 
     logger.info(
         "county_auditor ODNR query: query=%r county=%s results=%d truncated=%s",
-        query, county_filter, len(records), truncated,
+        query,
+        county_filter,
+        len(records),
+        truncated,
     )
 
     return ParcelSearchResult(
@@ -1455,10 +1734,7 @@ def _build_result_note(
 ) -> str:
     """Build the investigator note for a ParcelSearchResult."""
     scope = f"{county_filter.title()} County" if county_filter else "all 88 Ohio counties"
-    note = (
-        f"ODNR statewide parcel search for '{query}' across {scope} "
-        f"returned {count} parcel(s)."
-    )
+    note = f"ODNR statewide parcel search for '{query}' across {scope} returned {count} parcel(s)."
     if truncated:
         note += (
             f" Results capped at {MAX_RESULTS} — refine the search or add a county "

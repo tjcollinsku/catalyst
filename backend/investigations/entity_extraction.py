@@ -110,7 +110,9 @@ _ORG_PATTERN = re.compile(
     r"""
     (                                   # Capture: the full org name
         (?:[A-Z][a-zA-Z0-9&,'.\-]+\s+)+ # One or more capitalized words
-        (?:""" + _ORG_DESIGNATORS + r""")  # Ending in a legal designator
+        (?:"""
+    + _ORG_DESIGNATORS
+    + r""")  # Ending in a legal designator
         (?:\s*,?\s*(?:Inc\.?|LLC|Corp\.?))? # Optional secondary designator
     )
     """,
@@ -145,19 +147,38 @@ _DATE_PATTERNS = [
     re.compile(r"\b((?:19|20)\d{2})-(\d{2})-(\d{2})\b"),
     # "the 2nd day of March, 2022" — legal prose
     re.compile(
-        r"\bthe\s+(\d{1,2})(?:st|nd|rd|th)\s+day\s+of\s+(" +
-        _MONTH_NAMES + r"),?\s+((?:19|20)\d{2})\b",
+        r"\bthe\s+(\d{1,2})(?:st|nd|rd|th)\s+day\s+of\s+("
+        + _MONTH_NAMES
+        + r"),?\s+((?:19|20)\d{2})\b",
         re.IGNORECASE,
     ),
 ]
 
 _MONTH_MAP = {
-    "january": 1, "february": 2, "march": 3, "april": 4,
-    "may": 5, "june": 6, "july": 7, "august": 8,
-    "september": 9, "october": 10, "november": 11, "december": 12,
-    "jan": 1, "feb": 2, "mar": 3, "apr": 4,
-    "jun": 6, "jul": 7, "aug": 8, "sep": 9, "sept": 9,
-    "oct": 10, "nov": 11, "dec": 12,
+    "january": 1,
+    "february": 2,
+    "march": 3,
+    "april": 4,
+    "may": 5,
+    "june": 6,
+    "july": 7,
+    "august": 8,
+    "september": 9,
+    "october": 10,
+    "november": 11,
+    "december": 12,
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "sept": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
 }
 
 # ---------------------------------------------------------------------------
@@ -194,9 +215,7 @@ _AMOUNT_PATTERN = re.compile(
 #   "A01-0001-00-000"  — alphanumeric
 # ---------------------------------------------------------------------------
 
-_PARCEL_PATTERN = re.compile(
-    r"\b([A-Z]?\d{2,3}[-\s]\d{4,7}(?:[.\-]\d{3})?)\b"
-)
+_PARCEL_PATTERN = re.compile(r"\b([A-Z]?\d{2,3}[-\s]\d{4,7}(?:[.\-]\d{3})?)\b")
 
 # ---------------------------------------------------------------------------
 # Filing reference number patterns
@@ -232,6 +251,7 @@ _FILING_REF_PATTERN = re.compile(
 #   2. May reveal role context ("GRANTOR: John Homan" tells us his role)
 # ---------------------------------------------------------------------------
 
+
 def _get_context(text: str, match: re.Match, window: int = 80) -> str:
     """Return up to `window` characters on each side of a regex match."""
     start = max(0, match.start() - window)
@@ -243,6 +263,7 @@ def _get_context(text: str, match: re.Match, window: int = 80) -> str:
 # ---------------------------------------------------------------------------
 # Date normalization helper (internal to this module)
 # ---------------------------------------------------------------------------
+
 
 def _normalize_date(match: re.Match, pattern_index: int) -> str | None:
     """
@@ -292,6 +313,7 @@ def _normalize_date(match: re.Match, pattern_index: int) -> str | None:
 # Amount normalization helper
 # ---------------------------------------------------------------------------
 
+
 def _normalize_amount(raw_numeric: str) -> float | None:
     """
     Convert a raw numeric string like "4,505,000.00" to a Python float.
@@ -306,6 +328,7 @@ def _normalize_amount(raw_numeric: str) -> float | None:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def extract_entities(text: str, doc_type: str = "OTHER") -> dict[str, list[dict[str, Any]]]:
     """
@@ -371,10 +394,12 @@ def extract_entities(text: str, doc_type: str = "OTHER") -> dict[str, list[dict[
         raw = match.group(1).strip()
         if raw and raw not in seen_persons:
             seen_persons.add(raw)
-            results["persons"].append({
-                "raw": raw,
-                "context": _get_context(text, match),
-            })
+            results["persons"].append(
+                {
+                    "raw": raw,
+                    "context": _get_context(text, match),
+                }
+            )
 
     # --- Persons (inverted format) -------------------------------------------
     for match in _PERSON_INVERTED_PATTERN.finditer(text):
@@ -384,10 +409,12 @@ def extract_entities(text: str, doc_type: str = "OTHER") -> dict[str, list[dict[
         raw = f"{first_middle} {last}"
         if raw not in seen_persons:
             seen_persons.add(raw)
-            results["persons"].append({
-                "raw": raw,
-                "context": _get_context(text, match),
-            })
+            results["persons"].append(
+                {
+                    "raw": raw,
+                    "context": _get_context(text, match),
+                }
+            )
 
     # --- Organizations -------------------------------------------------------
     seen_orgs: set[str] = set()
@@ -395,10 +422,12 @@ def extract_entities(text: str, doc_type: str = "OTHER") -> dict[str, list[dict[
         raw = match.group(1).strip().rstrip(",")
         if raw and raw not in seen_orgs and len(raw) > 4:
             seen_orgs.add(raw)
-            results["orgs"].append({
-                "raw": raw,
-                "context": _get_context(text, match),
-            })
+            results["orgs"].append(
+                {
+                    "raw": raw,
+                    "context": _get_context(text, match),
+                }
+            )
 
     # --- Dates ---------------------------------------------------------------
     seen_dates: set[str] = set()
@@ -409,11 +438,13 @@ def extract_entities(text: str, doc_type: str = "OTHER") -> dict[str, list[dict[
             key = normalized or raw  # deduplicate by normalized form when possible
             if key not in seen_dates:
                 seen_dates.add(key)
-                results["dates"].append({
-                    "raw": raw,
-                    "normalized": normalized,
-                    "context": _get_context(text, match),
-                })
+                results["dates"].append(
+                    {
+                        "raw": raw,
+                        "normalized": normalized,
+                        "context": _get_context(text, match),
+                    }
+                )
 
     # --- Amounts -------------------------------------------------------------
     seen_amounts: set[float] = set()
@@ -423,17 +454,21 @@ def extract_entities(text: str, doc_type: str = "OTHER") -> dict[str, list[dict[
         # Deduplicate by value — same dollar amount appearing twice is one entry
         if normalized is not None and normalized not in seen_amounts:
             seen_amounts.add(normalized)
-            results["amounts"].append({
-                "raw": raw,
-                "normalized": normalized,
-                "context": _get_context(text, match),
-            })
+            results["amounts"].append(
+                {
+                    "raw": raw,
+                    "normalized": normalized,
+                    "context": _get_context(text, match),
+                }
+            )
         elif normalized is None and raw not in {a["raw"] for a in results["amounts"]}:
-            results["amounts"].append({
-                "raw": raw,
-                "normalized": None,
-                "context": _get_context(text, match),
-            })
+            results["amounts"].append(
+                {
+                    "raw": raw,
+                    "normalized": None,
+                    "context": _get_context(text, match),
+                }
+            )
 
     # --- Parcel numbers ------------------------------------------------------
     seen_parcels: set[str] = set()
@@ -441,10 +476,12 @@ def extract_entities(text: str, doc_type: str = "OTHER") -> dict[str, list[dict[
         raw = match.group(1).strip()
         if raw not in seen_parcels:
             seen_parcels.add(raw)
-            results["parcels"].append({
-                "raw": raw,
-                "context": _get_context(text, match),
-            })
+            results["parcels"].append(
+                {
+                    "raw": raw,
+                    "context": _get_context(text, match),
+                }
+            )
 
     # --- Filing reference numbers --------------------------------------------
     seen_refs: set[str] = set()
@@ -452,9 +489,11 @@ def extract_entities(text: str, doc_type: str = "OTHER") -> dict[str, list[dict[
         raw = match.group(1).strip()
         if raw not in seen_refs:
             seen_refs.add(raw)
-            results["filing_refs"].append({
-                "raw": raw,
-                "context": _get_context(text, match),
-            })
+            results["filing_refs"].append(
+                {
+                    "raw": raw,
+                    "context": _get_context(text, match),
+                }
+            )
 
     return results

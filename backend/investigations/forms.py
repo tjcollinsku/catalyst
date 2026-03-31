@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Case, Document, DocumentType
+from .models import Case, DocumentType
 
 
 class CaseForm(forms.ModelForm):

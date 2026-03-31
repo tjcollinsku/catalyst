@@ -110,9 +110,8 @@ import io
 import logging
 import zipfile
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
 
 import requests
 
@@ -155,14 +154,14 @@ _BMF_STATUS_MAP = {
 
 # EO BMF subsection codes → human-readable IRC section.
 _BMF_SUBSECTION_MAP = {
-    "2":  "501(c)(2)",
-    "3":  "501(c)(3)",
-    "4":  "501(c)(4)",
-    "5":  "501(c)(5)",
-    "6":  "501(c)(6)",
-    "7":  "501(c)(7)",
-    "8":  "501(c)(8)",
-    "9":  "501(c)(9)",
+    "2": "501(c)(2)",
+    "3": "501(c)(3)",
+    "4": "501(c)(4)",
+    "5": "501(c)(5)",
+    "6": "501(c)(6)",
+    "7": "501(c)(7)",
+    "8": "501(c)(8)",
+    "9": "501(c)(9)",
     "10": "501(c)(10)",
     "13": "501(c)(13)",
     "14": "501(c)(14)",
@@ -183,6 +182,7 @@ _BMF_DEDUCTIBILITY_MAP = {
 # Error type
 # ---------------------------------------------------------------------------
 
+
 class IRSError(Exception):
     """
     Raised when the IRS connector cannot complete a request.
@@ -192,6 +192,7 @@ class IRSError(Exception):
         status_code: HTTP status code if the error came from HTTP (or None).
         ein:         The EIN being looked up, if applicable (or None).
     """
+
     def __init__(
         self,
         message: str,
@@ -207,6 +208,7 @@ class IRSError(Exception):
 # Enums
 # ---------------------------------------------------------------------------
 
+
 class EoBmfRegion(Enum):
     """
     IRS EO BMF regional file identifiers.
@@ -221,17 +223,18 @@ class EoBmfRegion(Enum):
 
     STATE_OH:   eo_oh.csv — Ohio only (subset of MIDWEST, smaller download)
     """
-    NORTHEAST  = "eo1.csv"
-    SOUTHEAST  = "eo2.csv"
-    MIDWEST    = "eo3.csv"
+
+    NORTHEAST = "eo1.csv"
+    SOUTHEAST = "eo2.csv"
+    MIDWEST = "eo3.csv"
     SOUTH_WEST = "eo4.csv"
-    STATE_OH   = "eo_oh.csv"
-    STATE_IL   = "eo_il.csv"
-    STATE_IN   = "eo_in.csv"
-    STATE_MI   = "eo_mi.csv"
-    STATE_KY   = "eo_ky.csv"
-    STATE_PA   = "eo_pa.csv"
-    STATE_WV   = "eo_wv.csv"
+    STATE_OH = "eo_oh.csv"
+    STATE_IL = "eo_il.csv"
+    STATE_IN = "eo_in.csv"
+    STATE_MI = "eo_mi.csv"
+    STATE_KY = "eo_ky.csv"
+    STATE_PA = "eo_pa.csv"
+    STATE_WV = "eo_wv.csv"
 
     @property
     def url(self) -> str:
@@ -242,10 +245,11 @@ class EoBmfRegion(Enum):
 # Staleness warning
 # ---------------------------------------------------------------------------
 
+
 class StalenessLevel(Enum):
-    LOW    = "LOW"
+    LOW = "LOW"
     MEDIUM = "MEDIUM"
-    HIGH   = "HIGH"
+    HIGH = "HIGH"
 
 
 @dataclass
@@ -262,6 +266,7 @@ class StalenessWarning:
         level:          LOW (<7 days), MEDIUM (7-21 days), HIGH (>21 days).
         message:        Human-readable advisory string.
     """
+
     downloaded_at: datetime
     days_old: int
     level: StalenessLevel
@@ -309,6 +314,7 @@ class StalenessWarning:
 # Data structures
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Pub78Record:
     """
@@ -327,6 +333,7 @@ class Pub78Record:
         deductibility_code: IRS deductibility code. "1" = deductible.
         deductibility_description: Human-readable description of deductibility code.
     """
+
     ein: int
     name: str
     city: str
@@ -373,6 +380,7 @@ class EoBmfRecord:
         sort_name:        DBA / sort name if different from legal name.
         raw:              The full raw CSV row as a dict.
     """
+
     ein: int
     name: str
     city: str
@@ -402,6 +410,7 @@ class EoBmfRecord:
 @dataclass
 class Pub78SearchResult:
     """Returned by search_pub78(). Always includes a staleness warning."""
+
     matches: list[Pub78Record]
     query: str
     total_searched: int
@@ -411,6 +420,7 @@ class Pub78SearchResult:
 @dataclass
 class EoBmfSearchResult:
     """Returned by search_eo_bmf(). Always includes a staleness warning."""
+
     matches: list[EoBmfRecord]
     query: str
     total_searched: int
@@ -420,6 +430,7 @@ class EoBmfSearchResult:
 # ---------------------------------------------------------------------------
 # Internal HTTP helper
 # ---------------------------------------------------------------------------
+
 
 def _download(url: str) -> bytes:
     """
@@ -437,9 +448,7 @@ def _download(url: str) -> bytes:
     except requests.exceptions.ConnectionError as e:
         raise IRSError(f"Could not connect to IRS data server: {e}") from e
     except requests.exceptions.Timeout:
-        raise IRSError(
-            f"Request to IRS timed out after {REQUEST_TIMEOUT[1]}s: {url}"
-        )
+        raise IRSError(f"Request to IRS timed out after {REQUEST_TIMEOUT[1]}s: {url}")
     except requests.exceptions.RequestException as e:
         raise IRSError(f"Unexpected request error fetching {url}: {e}") from e
 
@@ -455,15 +464,14 @@ def _download(url: str) -> bytes:
         )
 
     content = response.content
-    logger.info(
-        "irs_connector: downloaded %s (%.1f KB)", url, len(content) / 1024
-    )
+    logger.info("irs_connector: downloaded %s (%.1f KB)", url, len(content) / 1024)
     return content
 
 
 # ---------------------------------------------------------------------------
 # Pub78 — fetch and parse
 # ---------------------------------------------------------------------------
+
 
 def fetch_pub78(url: str = PUB78_URL) -> tuple[list[Pub78Record], StalenessWarning]:
     """
@@ -506,7 +514,8 @@ def fetch_pub78(url: str = PUB78_URL) -> tuple[list[Pub78Record], StalenessWarni
 
     logger.info(
         "irs_connector fetch_pub78: parsed %d records, staleness=%s",
-        len(records), staleness.level.value,
+        len(records),
+        staleness.level.value,
     )
     return records, staleness
 
@@ -527,7 +536,9 @@ def _parse_pub78(text: str) -> list[Pub78Record]:
         if len(parts) < 6:
             logger.debug(
                 "irs_connector _parse_pub78: skipping short line %d (%d parts): %r",
-                line_no, len(parts), line[:80],
+                line_no,
+                len(parts),
+                line[:80],
             )
             continue
         ein_str, name, city, state, country, deductibility_code = (
@@ -543,23 +554,26 @@ def _parse_pub78(text: str) -> list[Pub78Record]:
         except ValueError:
             logger.debug(
                 "irs_connector _parse_pub78: skipping line %d — bad EIN %r",
-                line_no, ein_str,
+                line_no,
+                ein_str,
             )
             continue
         if not name:
             continue
 
-        records.append(Pub78Record(
-            ein=ein,
-            name=name,
-            city=city,
-            state=state,
-            country=country,
-            deductibility_code=deductibility_code,
-            deductibility_description=_BMF_DEDUCTIBILITY_MAP.get(
-                deductibility_code, f"Code {deductibility_code}"
-            ),
-        ))
+        records.append(
+            Pub78Record(
+                ein=ein,
+                name=name,
+                city=city,
+                state=state,
+                country=country,
+                deductibility_code=deductibility_code,
+                deductibility_description=_BMF_DEDUCTIBILITY_MAP.get(
+                    deductibility_code, f"Code {deductibility_code}"
+                ),
+            )
+        )
 
     return records
 
@@ -567,6 +581,7 @@ def _parse_pub78(text: str) -> list[Pub78Record]:
 # ---------------------------------------------------------------------------
 # EO BMF — fetch and parse
 # ---------------------------------------------------------------------------
+
 
 def fetch_eo_bmf(
     region: EoBmfRegion = EoBmfRegion.STATE_OH,
@@ -609,7 +624,9 @@ def fetch_eo_bmf(
 
     logger.info(
         "irs_connector fetch_eo_bmf: region=%s, parsed %d records, staleness=%s",
-        region.value, len(records), staleness.level.value,
+        region.value,
+        len(records),
+        staleness.level.value,
     )
     return records, staleness
 
@@ -633,7 +650,8 @@ def _parse_eo_bmf(text: str) -> list[EoBmfRecord]:
         except ValueError:
             logger.debug(
                 "irs_connector _parse_eo_bmf: skipping row %d — bad EIN %r",
-                row_no, ein_str,
+                row_no,
+                ein_str,
             )
             continue
 
@@ -654,37 +672,39 @@ def _parse_eo_bmf(text: str) -> list[EoBmfRecord]:
         subsection = (row.get("SUBSECTION") or "").strip()
         status_code = (row.get("STATUS") or "").strip()
 
-        records.append(EoBmfRecord(
-            ein=ein,
-            name=name,
-            city=(row.get("CITY") or "").strip(),
-            state=(row.get("STATE") or "").strip(),
-            zip_code=(row.get("ZIP") or "").strip(),
-            subsection=subsection,
-            subsection_description=_BMF_SUBSECTION_MAP.get(
-                subsection, f"501(c)({subsection})" if subsection else "Unknown"
-            ),
-            ruling_date=ruling_raw or None,
-            ruling_year=ruling_year,
-            ruling_month=ruling_month,
-            status_code=status_code,
-            status_description=_BMF_STATUS_MAP.get(status_code, f"Code {status_code}"),
-            is_revoked=(status_code == "12"),
-            deductibility_code=(row.get("DEDUCTIBILITY") or "").strip(),
-            deductibility_description=_BMF_DEDUCTIBILITY_MAP.get(
-                (row.get("DEDUCTIBILITY") or "").strip(),
-                f"Code {(row.get('DEDUCTIBILITY') or '').strip()}",
-            ),
-            ntee_code=(row.get("NTEE_CD") or "").strip() or None,
-            foundation_code=(row.get("FOUNDATION") or "").strip() or None,
-            filing_req_code=(row.get("FILING_REQ_CD") or "").strip() or None,
-            tax_period=(row.get("TAX_PERIOD") or "").strip() or None,
-            asset_amount=_safe_int(row.get("ASSET_AMT")),
-            income_amount=_safe_int(row.get("INCOME_AMT")),
-            revenue_amount=_safe_int(row.get("REVENUE_AMT")),
-            sort_name=(row.get("SORT_NAME") or "").strip() or None,
-            raw=dict(row),
-        ))
+        records.append(
+            EoBmfRecord(
+                ein=ein,
+                name=name,
+                city=(row.get("CITY") or "").strip(),
+                state=(row.get("STATE") or "").strip(),
+                zip_code=(row.get("ZIP") or "").strip(),
+                subsection=subsection,
+                subsection_description=_BMF_SUBSECTION_MAP.get(
+                    subsection, f"501(c)({subsection})" if subsection else "Unknown"
+                ),
+                ruling_date=ruling_raw or None,
+                ruling_year=ruling_year,
+                ruling_month=ruling_month,
+                status_code=status_code,
+                status_description=_BMF_STATUS_MAP.get(status_code, f"Code {status_code}"),
+                is_revoked=(status_code == "12"),
+                deductibility_code=(row.get("DEDUCTIBILITY") or "").strip(),
+                deductibility_description=_BMF_DEDUCTIBILITY_MAP.get(
+                    (row.get("DEDUCTIBILITY") or "").strip(),
+                    f"Code {(row.get('DEDUCTIBILITY') or '').strip()}",
+                ),
+                ntee_code=(row.get("NTEE_CD") or "").strip() or None,
+                foundation_code=(row.get("FOUNDATION") or "").strip() or None,
+                filing_req_code=(row.get("FILING_REQ_CD") or "").strip() or None,
+                tax_period=(row.get("TAX_PERIOD") or "").strip() or None,
+                asset_amount=_safe_int(row.get("ASSET_AMT")),
+                income_amount=_safe_int(row.get("INCOME_AMT")),
+                revenue_amount=_safe_int(row.get("REVENUE_AMT")),
+                sort_name=(row.get("SORT_NAME") or "").strip() or None,
+                raw=dict(row),
+            )
+        )
 
     return records
 
@@ -692,6 +712,7 @@ def _parse_eo_bmf(text: str) -> list[EoBmfRecord]:
 # ---------------------------------------------------------------------------
 # Search — Pub78
 # ---------------------------------------------------------------------------
+
 
 def search_pub78(
     query: str,
@@ -730,6 +751,7 @@ def search_pub78(
         # Generate a synthetic HIGH-staleness warning since we don't know when
         # the data was downloaded.
         from datetime import timedelta
+
         fake_dt = datetime.now(tz=timezone.utc) - timedelta(days=30)
         staleness_warning = StalenessWarning.from_download_time(fake_dt)
 
@@ -753,6 +775,7 @@ def search_pub78(
 # ---------------------------------------------------------------------------
 # Search — EO BMF
 # ---------------------------------------------------------------------------
+
 
 def search_eo_bmf(
     query: str,
@@ -792,6 +815,7 @@ def search_eo_bmf(
 
     if staleness_warning is None:
         from datetime import timedelta
+
         fake_dt = datetime.now(tz=timezone.utc) - timedelta(days=30)
         staleness_warning = StalenessWarning.from_download_time(fake_dt)
 
@@ -817,6 +841,7 @@ def search_eo_bmf(
 # ---------------------------------------------------------------------------
 # EIN lookup — exact match from EO BMF
 # ---------------------------------------------------------------------------
+
 
 def lookup_ein(
     ein: int,
@@ -858,6 +883,7 @@ def lookup_ein(
 
     if staleness_warning is None:
         from datetime import timedelta
+
         fake_dt = datetime.now(tz=timezone.utc) - timedelta(days=30)
         staleness_warning = StalenessWarning.from_download_time(fake_dt)
 
@@ -865,7 +891,9 @@ def lookup_ein(
         if record.ein == ein:
             logger.info(
                 "irs_connector lookup_ein: found EIN %d — %r (%s)",
-                ein, record.name, record.status_description,
+                ein,
+                record.name,
+                record.status_description,
             )
             return record, staleness_warning
 
@@ -876,6 +904,7 @@ def lookup_ein(
 # ---------------------------------------------------------------------------
 # Convenience wrapper — fetch and search in one call
 # ---------------------------------------------------------------------------
+
 
 def search_ohio_nonprofits(
     query: str,
@@ -917,6 +946,7 @@ def search_ohio_nonprofits(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _safe_int(value) -> int | None:
     """Convert a value to int, returning None if conversion fails or value is None/empty."""

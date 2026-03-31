@@ -75,16 +75,19 @@ except ImportError:
 
 try:
     from investigations.county_recorder_connector import (
-        OhioCounty, RecorderSystem, _REGISTRY,
+        _REGISTRY,
+        OhioCounty,
+        RecorderSystem,
     )
 except ImportError:
     try:
         from county_recorder_connector import (
-            OhioCounty, RecorderSystem, _REGISTRY,
+            _REGISTRY,
+            OhioCounty,
+            RecorderSystem,
         )
     except ImportError:
-        print("ERROR: Cannot import county_recorder_connector. "
-              "Run from the backend/ directory.")
+        print("ERROR: Cannot import county_recorder_connector. Run from the backend/ directory.")
         sys.exit(1)
 
 
@@ -95,18 +98,18 @@ except ImportError:
 # Expected domain fragments per RecorderSystem.
 # ALL fragments must be checked — we match if ANY one is present.
 EXPECTED_DOMAINS: dict[RecorderSystem, list[str]] = {
-    RecorderSystem.GOVOS_COUNTYFUSION:  ["govos.com", "kofiletech.us"],
-    RecorderSystem.GOVOS_CLOUD_SEARCH:  ["publicsearch.us", "govos.com"],
-    RecorderSystem.DTS_PAXWORLD:        ["dts-oh.com", "paxworld", "tylerhost.net"],
-    RecorderSystem.FIDLAR_AVA:          ["ava.fidlar.com", "fidlar.com"],
-    RecorderSystem.LAREDO:              ["rep4laredo.fidlar.com", "laredo", "fidlar.com"],
-    RecorderSystem.EAGLEWEB:            ["tylerhost.net", "eagleweb"],
-    RecorderSystem.COTT_SYSTEMS:        ["cotthosting.com"],
-    RecorderSystem.COMPILED_TECH:       ["compiled-technologies.com"],
-    RecorderSystem.USLANDRECORDS:       ["avenuinsights.com", "uslandrecords.com"],
+    RecorderSystem.GOVOS_COUNTYFUSION: ["govos.com", "kofiletech.us"],
+    RecorderSystem.GOVOS_CLOUD_SEARCH: ["publicsearch.us", "govos.com"],
+    RecorderSystem.DTS_PAXWORLD: ["dts-oh.com", "paxworld", "tylerhost.net"],
+    RecorderSystem.FIDLAR_AVA: ["ava.fidlar.com", "fidlar.com"],
+    RecorderSystem.LAREDO: ["rep4laredo.fidlar.com", "laredo", "fidlar.com"],
+    RecorderSystem.EAGLEWEB: ["tylerhost.net", "eagleweb"],
+    RecorderSystem.COTT_SYSTEMS: ["cotthosting.com"],
+    RecorderSystem.COMPILED_TECH: ["compiled-technologies.com"],
+    RecorderSystem.USLANDRECORDS: ["avenuinsights.com", "uslandrecords.com"],
     # No fixed pattern — skip domain check
-    RecorderSystem.CUSTOM:              [],
-    RecorderSystem.UNAVAILABLE:         [],
+    RecorderSystem.CUSTOM: [],
+    RecorderSystem.UNAVAILABLE: [],
 }
 
 # Known third-party aggregators — landing here is always wrong.
@@ -128,14 +131,28 @@ AGGREGATOR_DOMAINS = [
 
 # Keywords that signal a page is genuinely a recorder/land records portal.
 RECORDER_KEYWORDS_STRONG = [
-    "grantor", "grantee", "deed", "instrument number",
-    "recorded", "book and page", "recorder's office",
-    "land records", "official records search",
+    "grantor",
+    "grantee",
+    "deed",
+    "instrument number",
+    "recorded",
+    "book and page",
+    "recorder's office",
+    "land records",
+    "official records search",
 ]
 RECORDER_KEYWORDS_WEAK = [
-    "record date", "document type", "legal description",
-    "parcel", "real property", "mortgage", "release",
-    "notary", "lien", "easement", "plat",
+    "record date",
+    "document type",
+    "legal description",
+    "parcel",
+    "real property",
+    "mortgage",
+    "release",
+    "notary",
+    "lien",
+    "easement",
+    "plat",
 ]
 
 # URLs that were directly confirmed by the user or via live browser in this project.
@@ -194,8 +211,8 @@ USER_CONFIRMED_URLS: set[str] = {
 # These are not user-confirmed but are structurally plausible.
 GEMINI_PATTERN_CONFIRMED: set[RecorderSystem] = {
     RecorderSystem.GOVOS_CLOUD_SEARCH,  # publicsearch.us pattern is very consistent
-    RecorderSystem.EAGLEWEB,            # tylerhost.net pattern is very consistent
-    RecorderSystem.COTT_SYSTEMS,        # cotthosting.com pattern is very consistent
+    RecorderSystem.EAGLEWEB,  # tylerhost.net pattern is very consistent
+    RecorderSystem.COTT_SYSTEMS,  # cotthosting.com pattern is very consistent
     # compiled-technologies.com subdomain pattern is consistent
     RecorderSystem.COMPILED_TECH,
 }
@@ -205,30 +222,31 @@ GEMINI_PATTERN_CONFIRMED: set[RecorderSystem] = {
 # Result dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PortalCheckResult:
-    county_name:    str
-    county_enum:    OhioCounty
-    system:         RecorderSystem
-    original_url:   str
-    final_url:      Optional[str]
-    http_status:    Optional[int]
+    county_name: str
+    county_enum: OhioCounty
+    system: RecorderSystem
+    original_url: str
+    final_url: Optional[str]
+    http_status: Optional[int]
 
     # HTTP classification
     # OK | REDIRECT_SAME | REDIRECT_CROSS | DEAD | TIMEOUT | AGGREGATOR
     http_status_class: str
 
     # Confidence components (each 0 to max)
-    score_http:     int   # 0–35
-    score_domain:   int   # 0–25
-    score_content:  int   # 0–20
-    score_source:   int   # 0–20
+    score_http: int  # 0–35
+    score_domain: int  # 0–25
+    score_content: int  # 0–20
+    score_source: int  # 0–20
 
-    confidence:     int   # 0–100 total
+    confidence: int  # 0–100 total
     confidence_tier: str  # HIGH | MEDIUM | LOW | CRITICAL
 
-    flags:  list[str] = field(default_factory=list)  # specific issues found
-    note:   str = ""
+    flags: list[str] = field(default_factory=list)  # specific issues found
+    note: str = ""
     elapsed_ms: int = 0
     page_text_snippet: str = ""
 
@@ -245,30 +263,30 @@ def _confidence_tier(score: int) -> str:
 
 
 TIER_ICON = {
-    "HIGH":     "🟢",
-    "MEDIUM":   "🟡",
-    "LOW":      "🟠",
+    "HIGH": "🟢",
+    "MEDIUM": "🟡",
+    "LOW": "🟠",
     "CRITICAL": "🔴",
-    "SKIPPED":  "⏭️ ",
+    "SKIPPED": "⏭️ ",
 }
 
 TIER_COLOR = {
-    "HIGH":     "green",
-    "MEDIUM":   "yellow",
-    "LOW":      "orange",
+    "HIGH": "green",
+    "MEDIUM": "yellow",
+    "LOW": "orange",
     "CRITICAL": "red",
-    "SKIPPED":  "blue",
+    "SKIPPED": "blue",
 }
 
 ANSI = {
-    "green":  "\033[92m",
+    "green": "\033[92m",
     "yellow": "\033[93m",
     "orange": "\033[38;5;208m",
-    "red":    "\033[91m",
-    "blue":   "\033[94m",
-    "reset":  "\033[0m",
-    "bold":   "\033[1m",
-    "dim":    "\033[2m",
+    "red": "\033[91m",
+    "blue": "\033[94m",
+    "reset": "\033[0m",
+    "bold": "\033[1m",
+    "dim": "\033[2m",
 }
 
 
@@ -280,6 +298,7 @@ def _color(text: str, color: str) -> str:
 # ---------------------------------------------------------------------------
 # Domain helpers
 # ---------------------------------------------------------------------------
+
 
 def _same_domain(url1: str, url2: str) -> bool:
     """Return True if both URLs share the same registered domain."""
@@ -302,7 +321,7 @@ def _is_aggregator(url: str) -> bool:
 def _domain_matches_system(url: str, system: RecorderSystem) -> bool:
     patterns = EXPECTED_DOMAINS.get(system, [])
     if not patterns:
-        return True   # CUSTOM/UNAVAILABLE — no pattern to check
+        return True  # CUSTOM/UNAVAILABLE — no pattern to check
     url_lower = url.lower()
     return any(p.lower() in url_lower for p in patterns)
 
@@ -310,6 +329,7 @@ def _domain_matches_system(url: str, system: RecorderSystem) -> bool:
 # ---------------------------------------------------------------------------
 # Content scoring
 # ---------------------------------------------------------------------------
+
 
 def _score_content(page_text: str) -> tuple[int, list[str]]:
     """Return (score 0-20, list of matched keywords)."""
@@ -336,8 +356,8 @@ def _score_content(page_text: str) -> tuple[int, list[str]]:
 # Source scoring
 # ---------------------------------------------------------------------------
 
-def _score_source(original_url: str, system: RecorderSystem,
-                  final_url: Optional[str]) -> int:
+
+def _score_source(original_url: str, system: RecorderSystem, final_url: Optional[str]) -> int:
     check_url = final_url or original_url
     if original_url in USER_CONFIRMED_URLS or check_url in USER_CONFIRMED_URLS:
         return 20
@@ -408,18 +428,29 @@ def _fetch(url: str) -> tuple[Optional[requests.Response], Optional[str], int]:
 # Main check function
 # ---------------------------------------------------------------------------
 
+
 def check_portal(county: OhioCounty, skip_cf: bool = True) -> PortalCheckResult:
     info = _REGISTRY[county]
     original_url = info.portal_url or ""
 
     def _skipped(reason: str) -> PortalCheckResult:
         return PortalCheckResult(
-            county_name=info.name, county_enum=county, system=info.system,
-            original_url=original_url, final_url=None, http_status=None,
+            county_name=info.name,
+            county_enum=county,
+            system=info.system,
+            original_url=original_url,
+            final_url=None,
+            http_status=None,
             http_status_class="SKIPPED",
-            score_http=0, score_domain=0, score_content=0, score_source=0,
-            confidence=0, confidence_tier="SKIPPED",
-            flags=[], note=reason, elapsed_ms=0,
+            score_http=0,
+            score_domain=0,
+            score_content=0,
+            score_source=0,
+            confidence=0,
+            confidence_tier="SKIPPED",
+            flags=[],
+            note=reason,
+            elapsed_ms=0,
         )
 
     if info.system == RecorderSystem.UNAVAILABLE:
@@ -433,12 +464,21 @@ def check_portal(county: OhioCounty, skip_cf: bool = True) -> PortalCheckResult:
 
     if not original_url:
         return PortalCheckResult(
-            county_name=info.name, county_enum=county, system=info.system,
-            original_url="", final_url=None, http_status=None,
+            county_name=info.name,
+            county_enum=county,
+            system=info.system,
+            original_url="",
+            final_url=None,
+            http_status=None,
             http_status_class="DEAD",
-            score_http=0, score_domain=0, score_content=0, score_source=0,
-            confidence=0, confidence_tier="CRITICAL",
-            flags=["NO_URL"], note="No portal_url set in connector",
+            score_http=0,
+            score_domain=0,
+            score_content=0,
+            score_source=0,
+            confidence=0,
+            confidence_tier="CRITICAL",
+            flags=["NO_URL"],
+            note="No portal_url set in connector",
         )
 
     # --- HTTP fetch ---
@@ -447,31 +487,51 @@ def check_portal(county: OhioCounty, skip_cf: bool = True) -> PortalCheckResult:
     if err:
         status_class = "TIMEOUT" if "TIMEOUT" in err else "DEAD"
         return PortalCheckResult(
-            county_name=info.name, county_enum=county, system=info.system,
-            original_url=original_url, final_url=None, http_status=None,
+            county_name=info.name,
+            county_enum=county,
+            system=info.system,
+            original_url=original_url,
+            final_url=None,
+            http_status=None,
             http_status_class=status_class,
-            score_http=0, score_domain=0, score_content=0, score_source=0,
-            confidence=0, confidence_tier="CRITICAL",
-            flags=[status_class], note=err, elapsed_ms=elapsed_ms,
+            score_http=0,
+            score_domain=0,
+            score_content=0,
+            score_source=0,
+            confidence=0,
+            confidence_tier="CRITICAL",
+            flags=[status_class],
+            note=err,
+            elapsed_ms=elapsed_ms,
         )
 
     final_url = resp.url
     http_status = resp.status_code
 
-    flags:    list[str] = []
-    notes:    list[str] = []
+    flags: list[str] = []
+    notes: list[str] = []
 
     # --- Aggregator check (immediate CRITICAL) ---
     if _is_aggregator(final_url):
         flags.append("AGGREGATOR")
         notes.append(f"Landed on third-party aggregator: {final_url}")
         return PortalCheckResult(
-            county_name=info.name, county_enum=county, system=info.system,
-            original_url=original_url, final_url=final_url,
-            http_status=http_status, http_status_class="AGGREGATOR",
-            score_http=0, score_domain=0, score_content=0, score_source=0,
-            confidence=0, confidence_tier="CRITICAL",
-            flags=flags, note="; ".join(notes), elapsed_ms=elapsed_ms,
+            county_name=info.name,
+            county_enum=county,
+            system=info.system,
+            original_url=original_url,
+            final_url=final_url,
+            http_status=http_status,
+            http_status_class="AGGREGATOR",
+            score_http=0,
+            score_domain=0,
+            score_content=0,
+            score_source=0,
+            confidence=0,
+            confidence_tier="CRITICAL",
+            flags=flags,
+            note="; ".join(notes),
+            elapsed_ms=elapsed_ms,
         )
 
     # --- HTTP score ---
@@ -531,8 +591,7 @@ def check_portal(county: OhioCounty, skip_cf: bool = True) -> PortalCheckResult:
     # --- Total confidence ---
     # If HTTP is dead, clamp to max 15 regardless of other scores
     if score_http == 0:
-        confidence = min(score_http + score_domain +
-                         score_content + score_source, 15)
+        confidence = min(score_http + score_domain + score_content + score_source, 15)
     else:
         confidence = score_http + score_domain + score_content + score_source
 
@@ -549,13 +608,21 @@ def check_portal(county: OhioCounty, skip_cf: bool = True) -> PortalCheckResult:
         snippet = f"Page text: {clean}"
 
     return PortalCheckResult(
-        county_name=info.name, county_enum=county, system=info.system,
-        original_url=original_url, final_url=final_url,
-        http_status=http_status, http_status_class=http_class,
-        score_http=score_http, score_domain=score_domain,
-        score_content=score_content, score_source=score_source,
-        confidence=confidence, confidence_tier=tier,
-        flags=flags, note="; ".join(notes) if notes else f"HTTP {http_status}",
+        county_name=info.name,
+        county_enum=county,
+        system=info.system,
+        original_url=original_url,
+        final_url=final_url,
+        http_status=http_status,
+        http_status_class=http_class,
+        score_http=score_http,
+        score_domain=score_domain,
+        score_content=score_content,
+        score_source=score_source,
+        confidence=confidence,
+        confidence_tier=tier,
+        flags=flags,
+        note="; ".join(notes) if notes else f"HTTP {http_status}",
         elapsed_ms=elapsed_ms,
         page_text_snippet=snippet,
     )
@@ -565,22 +632,23 @@ def check_portal(county: OhioCounty, skip_cf: bool = True) -> PortalCheckResult:
 # Runner
 # ---------------------------------------------------------------------------
 
+
 def run_verification(include_cf: bool = False) -> list[PortalCheckResult]:
     skip_cf = not include_cf
     counties = sorted(_REGISTRY.keys(), key=lambda c: _REGISTRY[c].name)
 
     total = len(counties)
-    cf_count = sum(1 for c in counties
-                   if _REGISTRY[c].system == RecorderSystem.GOVOS_COUNTYFUSION)
+    cf_count = sum(1 for c in counties if _REGISTRY[c].system == RecorderSystem.GOVOS_COUNTYFUSION)
     to_check = total if include_cf else total - cf_count
 
+    print(f"\n{ANSI['bold']}Ohio County Recorder Portal Verification{ANSI['reset']}")
     print(
-        f"\n{ANSI['bold']}Ohio County Recorder Portal Verification{ANSI['reset']}")
-    print(f"Date: {datetime.date.today()}  |  Counties: {total}  |  "
-          f"Checking: {to_check}  |  CF skipped: {cf_count if skip_cf else 0}")
-    print(f"{'─'*90}")
+        f"Date: {datetime.date.today()}  |  Counties: {total}  |  "
+        f"Checking: {to_check}  |  CF skipped: {cf_count if skip_cf else 0}"
+    )
+    print(f"{'─' * 90}")
     print(f"  {'County':<18} {'System':<22} {'Score':>5}  {'Tier':<10}  Note")
-    print(f"{'─'*90}")
+    print(f"{'─' * 90}")
 
     results = []
     for i, county in enumerate(counties, 1):
@@ -591,21 +659,22 @@ def run_verification(include_cf: bool = False) -> list[PortalCheckResult]:
 
         if result.confidence_tier == "SKIPPED":
             tier_str = _color("⏭️  SKIPPED", "blue")
-            print(f" {info.system.value:<22} {'—':>5}  {tier_str:<20}  "
-                  f"{result.note[:50]}")
+            print(f" {info.system.value:<22} {'—':>5}  {tier_str:<20}  {result.note[:50]}")
         else:
             icon = TIER_ICON.get(result.confidence_tier, "?")
             color = TIER_COLOR.get(result.confidence_tier, "reset")
             tier_str = _color(f"{icon} {result.confidence_tier}", color)
             score_str = _color(f"{result.confidence:>3}", color)
             flag_str = f" [{', '.join(result.flags[:2])}]" if result.flags else ""
-            print(f" {info.system.value:<22} {score_str}/100  {tier_str:<20}  "
-                  f"{result.note[:45]}{flag_str}")
+            print(
+                f" {info.system.value:<22} {score_str}/100  {tier_str:<20}  "
+                f"{result.note[:45]}{flag_str}"
+            )
 
         results.append(result)
 
         if result.http_status_class not in ("SKIPPED",):
-            time.sleep(0.25)   # be polite
+            time.sleep(0.25)  # be polite
 
     return results
 
@@ -614,8 +683,10 @@ def run_verification(include_cf: bool = False) -> list[PortalCheckResult]:
 # Report writer
 # ---------------------------------------------------------------------------
 
+
 def _write_report(results: list[PortalCheckResult]) -> str:
     import os
+
     today = datetime.date.today().isoformat()
     # Write next to this script file, regardless of cwd
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -655,8 +726,8 @@ def _write_report(results: list[PortalCheckResult]) -> str:
         "",
         "## Summary",
         "",
-        f"| Tier | Count |",
-        f"|------|-------|",
+        "| Tier | Count |",
+        "|------|-------|",
         f"| 🔴 CRITICAL | {len(critical)} |",
         f"| 🟠 LOW | {len(low)} |",
         f"| 🟡 MEDIUM | {len(medium)} |",
@@ -791,6 +862,7 @@ def _write_report(results: list[PortalCheckResult]) -> str:
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
     # Windows consoles default to CP1252 which can't encode box-drawing chars
     # or emoji.  Reconfigure stdout/stderr to UTF-8 before any output.
@@ -803,11 +875,15 @@ def main():
         description="Verify all 88 Ohio county recorder portal URLs with confidence scoring"
     )
     parser.add_argument(
-        "--include-cf", action="store_true", default=False,
+        "--include-cf",
+        action="store_true",
+        default=False,
         help="Include CountyFusion counties (skipped by default — platform outage)",
     )
     parser.add_argument(
-        "--no-report", action="store_true", default=False,
+        "--no-report",
+        action="store_true",
+        default=False,
         help="Skip writing the markdown report file",
     )
     args = parser.parse_args()
@@ -821,21 +897,19 @@ def main():
     medium = [r for r in checked if r.confidence_tier == "MEDIUM"]
     high = [r for r in checked if r.confidence_tier == "HIGH"]
 
-    print(f"\n{'─'*90}")
+    print(f"\n{'─' * 90}")
     print(f"{ANSI['bold']}Confidence Summary{ANSI['reset']}")
+    print(f"  {_color('🔴 CRITICAL', 'red'):<30} {len(critical):>3}  — fix immediately")
+    print(f"  {_color('🟠 LOW', 'orange'):<30} {len(low):>3}  — manual verification needed")
+    print(f"  {_color('🟡 MEDIUM', 'yellow'):<30} {len(medium):>3}  — spot-check recommended")
+    print(f"  {_color('🟢 HIGH', 'green'):<30} {len(high):>3}  — verified")
     print(
-        f"  {_color('🔴 CRITICAL', 'red'):<30} {len(critical):>3}  — fix immediately")
-    print(f"  {_color('🟠 LOW',      'orange'):<30} {len(low):>3}  — manual verification needed")
-    print(
-        f"  {_color('🟡 MEDIUM',   'yellow'):<30} {len(medium):>3}  — spot-check recommended")
-    print(f"  {_color('🟢 HIGH',     'green'):<30} {len(high):>3}  — verified")
-    print(f"  {_color('⏭️  SKIPPED',  'blue'):<30} "
-          f"{len(results)-len(checked):>3}  — CountyFusion outage")
+        f"  {_color('⏭️  SKIPPED', 'blue'):<30} "
+        f"{len(results) - len(checked):>3}  — CountyFusion outage"
+    )
 
     if critical or low:
-        print(
-            f"\n  {_color(f'{len(critical) + len(low)} counties need attention', 'red')}"
-        )
+        print(f"\n  {_color(f'{len(critical) + len(low)} counties need attention', 'red')}")
 
     path = _write_report(results)
     print(f"\n  Report: {path}")

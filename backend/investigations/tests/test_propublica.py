@@ -26,7 +26,6 @@ Run these tests with:
 import unittest
 from unittest.mock import MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # Shared fixture data
 # These are realistic fake API responses that mirror ProPublica's actual format.
@@ -123,13 +122,14 @@ def _make_mock_response(json_data: dict, status_code: int = 200) -> MagicMock:
 # Search tests
 # ---------------------------------------------------------------------------
 
-class SearchOrganizationsTests(unittest.TestCase):
 
+class SearchOrganizationsTests(unittest.TestCase):
     @patch("investigations.propublica_connector.requests.get")
     def test_returns_list_of_summaries(self, mock_get):
         mock_get.return_value = _make_mock_response(SEARCH_RESPONSE)
 
         from investigations.propublica_connector import search_organizations
+
         results = search_organizations("Do Good Ministries", state="OH")
 
         self.assertEqual(len(results), 2)
@@ -143,6 +143,7 @@ class SearchOrganizationsTests(unittest.TestCase):
         mock_get.return_value = _make_mock_response(SEARCH_RESPONSE)
 
         from investigations.propublica_connector import search_organizations
+
         results = search_organizations("Do Good")
 
         # subsection_code 3 → "501(c)(3)"
@@ -153,11 +154,16 @@ class SearchOrganizationsTests(unittest.TestCase):
         mock_get.return_value = _make_mock_response(SEARCH_RESPONSE)
 
         from investigations.propublica_connector import search_organizations
+
         search_organizations("Do Good", state="oh")  # lowercase — should be uppercased
 
         # Inspect the params that were passed to requests.get
         call_kwargs = mock_get.call_args
-        params = call_kwargs[1].get("params") or call_kwargs[0][1] if len(call_kwargs[0]) > 1 else call_kwargs[1]["params"]
+        params = (
+            call_kwargs[1].get("params") or call_kwargs[0][1]
+            if len(call_kwargs[0]) > 1
+            else call_kwargs[1]["params"]
+        )
         self.assertIn("state[id]", params)
         self.assertEqual(params["state[id]"], "OH")
 
@@ -166,12 +172,13 @@ class SearchOrganizationsTests(unittest.TestCase):
         mock_get.return_value = _make_mock_response({"total_results": 0, "organizations": []})
 
         from investigations.propublica_connector import search_organizations
+
         results = search_organizations("xyznonexistent")
 
         self.assertEqual(results, [])
 
     def test_raises_on_empty_query(self):
-        from investigations.propublica_connector import search_organizations, ProPublicaError
+        from investigations.propublica_connector import ProPublicaError, search_organizations
 
         with self.assertRaises(ProPublicaError):
             search_organizations("")
@@ -183,7 +190,7 @@ class SearchOrganizationsTests(unittest.TestCase):
     def test_raises_propublica_error_on_404(self, mock_get):
         mock_get.return_value = _make_mock_response({}, status_code=404)
 
-        from investigations.propublica_connector import search_organizations, ProPublicaError
+        from investigations.propublica_connector import ProPublicaError, search_organizations
 
         with self.assertRaises(ProPublicaError) as ctx:
             search_organizations("anything")
@@ -194,7 +201,7 @@ class SearchOrganizationsTests(unittest.TestCase):
     def test_raises_propublica_error_on_rate_limit(self, mock_get):
         mock_get.return_value = _make_mock_response({}, status_code=429)
 
-        from investigations.propublica_connector import search_organizations, ProPublicaError
+        from investigations.propublica_connector import ProPublicaError, search_organizations
 
         with self.assertRaises(ProPublicaError) as ctx:
             search_organizations("anything")
@@ -204,9 +211,10 @@ class SearchOrganizationsTests(unittest.TestCase):
     @patch("investigations.propublica_connector.requests.get")
     def test_raises_propublica_error_on_connection_error(self, mock_get):
         import requests as req
+
         mock_get.side_effect = req.exceptions.ConnectionError("refused")
 
-        from investigations.propublica_connector import search_organizations, ProPublicaError
+        from investigations.propublica_connector import ProPublicaError, search_organizations
 
         with self.assertRaises(ProPublicaError):
             search_organizations("anything")
@@ -214,15 +222,18 @@ class SearchOrganizationsTests(unittest.TestCase):
     @patch("investigations.propublica_connector.requests.get")
     def test_skips_malformed_org_records_gracefully(self, mock_get):
         # One good record, one missing 'ein' key
-        mock_get.return_value = _make_mock_response({
-            "total_results": 2,
-            "organizations": [
-                {"ein": 123456789, "name": "GOOD ORG", "city": "X", "state": "OH"},
-                {"name": "BAD ORG — no EIN"},   # missing ein — should be skipped
-            ],
-        })
+        mock_get.return_value = _make_mock_response(
+            {
+                "total_results": 2,
+                "organizations": [
+                    {"ein": 123456789, "name": "GOOD ORG", "city": "X", "state": "OH"},
+                    {"name": "BAD ORG — no EIN"},  # missing ein — should be skipped
+                ],
+            }
+        )
 
         from investigations.propublica_connector import search_organizations
+
         results = search_organizations("anything")
 
         # Should return the one good record without crashing
@@ -234,13 +245,14 @@ class SearchOrganizationsTests(unittest.TestCase):
 # Fetch organization tests
 # ---------------------------------------------------------------------------
 
-class FetchOrganizationTests(unittest.TestCase):
 
+class FetchOrganizationTests(unittest.TestCase):
     @patch("investigations.propublica_connector.requests.get")
     def test_returns_org_profile(self, mock_get):
         mock_get.return_value = _make_mock_response(ORG_RESPONSE)
 
         from investigations.propublica_connector import fetch_organization
+
         profile = fetch_organization(123456789)
 
         self.assertEqual(profile.ein, 123456789)
@@ -254,6 +266,7 @@ class FetchOrganizationTests(unittest.TestCase):
         mock_get.return_value = _make_mock_response(ORG_RESPONSE)
 
         from investigations.propublica_connector import fetch_organization
+
         # "12-3456789" should normalize to 123456789
         profile = fetch_organization("12-3456789")
         self.assertEqual(profile.ein, 123456789)
@@ -262,13 +275,13 @@ class FetchOrganizationTests(unittest.TestCase):
     def test_raises_on_empty_organization_body(self, mock_get):
         mock_get.return_value = _make_mock_response({"organization": {}, "filings_with_data": []})
 
-        from investigations.propublica_connector import fetch_organization, ProPublicaError
+        from investigations.propublica_connector import ProPublicaError, fetch_organization
 
         with self.assertRaises(ProPublicaError):
             fetch_organization(123456789)
 
     def test_raises_on_invalid_ein(self):
-        from investigations.propublica_connector import fetch_organization, ProPublicaError
+        from investigations.propublica_connector import ProPublicaError, fetch_organization
 
         with self.assertRaises(ProPublicaError):
             fetch_organization(-1)
@@ -281,6 +294,7 @@ class FetchOrganizationTests(unittest.TestCase):
         mock_get.return_value = _make_mock_response(ORG_RESPONSE)
 
         from investigations.propublica_connector import fetch_organization
+
         profile = fetch_organization(123456789)
 
         # organization_raw should contain the original dict for fields we
@@ -293,13 +307,14 @@ class FetchOrganizationTests(unittest.TestCase):
 # Fetch filings tests
 # ---------------------------------------------------------------------------
 
-class FetchFilingsTests(unittest.TestCase):
 
+class FetchFilingsTests(unittest.TestCase):
     @patch("investigations.propublica_connector.requests.get")
     def test_returns_combined_filings_list(self, mock_get):
         mock_get.return_value = _make_mock_response(ORG_RESPONSE)
 
         from investigations.propublica_connector import fetch_filings
+
         filings = fetch_filings(123456789)
 
         # 2 filings_with_data + 1 filing_without_data = 3 total
@@ -310,6 +325,7 @@ class FetchFilingsTests(unittest.TestCase):
         mock_get.return_value = _make_mock_response(ORG_RESPONSE)
 
         from investigations.propublica_connector import fetch_filings
+
         filings = fetch_filings(123456789)
 
         tax_periods = [f.tax_period for f in filings]
@@ -320,6 +336,7 @@ class FetchFilingsTests(unittest.TestCase):
         mock_get.return_value = _make_mock_response(ORG_RESPONSE)
 
         from investigations.propublica_connector import fetch_filings
+
         filings = fetch_filings(123456789)
 
         most_recent = filings[0]
@@ -335,6 +352,7 @@ class FetchFilingsTests(unittest.TestCase):
         mock_get.return_value = _make_mock_response(ORG_RESPONSE)
 
         from investigations.propublica_connector import fetch_filings
+
         filings = fetch_filings(123456789)
 
         # The 2018 filing (oldest) has no financial data
@@ -348,6 +366,7 @@ class FetchFilingsTests(unittest.TestCase):
         mock_get.return_value = _make_mock_response(ORG_RESPONSE)
 
         from investigations.propublica_connector import fetch_filings
+
         filings = fetch_filings(123456789)
 
         for f in filings:
@@ -358,13 +377,16 @@ class FetchFilingsTests(unittest.TestCase):
 
     @patch("investigations.propublica_connector.requests.get")
     def test_returns_empty_list_when_no_filings(self, mock_get):
-        mock_get.return_value = _make_mock_response({
-            "organization": ORG_RESPONSE["organization"],
-            "filings_with_data": [],
-            "filings_without_data": [],
-        })
+        mock_get.return_value = _make_mock_response(
+            {
+                "organization": ORG_RESPONSE["organization"],
+                "filings_with_data": [],
+                "filings_without_data": [],
+            }
+        )
 
         from investigations.propublica_connector import fetch_filings
+
         filings = fetch_filings(123456789)
 
         self.assertEqual(filings, [])
@@ -374,27 +396,32 @@ class FetchFilingsTests(unittest.TestCase):
 # EIN validation tests
 # ---------------------------------------------------------------------------
 
-class EINValidationTests(unittest.TestCase):
 
+class EINValidationTests(unittest.TestCase):
     def test_string_ein_without_dash_accepted(self):
         from investigations.propublica_connector import _validate_ein
+
         self.assertEqual(_validate_ein("123456789"), 123456789)
 
     def test_string_ein_with_dash_accepted(self):
         from investigations.propublica_connector import _validate_ein
+
         self.assertEqual(_validate_ein("12-3456789"), 123456789)
 
     def test_integer_ein_accepted(self):
         from investigations.propublica_connector import _validate_ein
+
         self.assertEqual(_validate_ein(123456789), 123456789)
 
     def test_negative_ein_raises(self):
-        from investigations.propublica_connector import _validate_ein, ProPublicaError
+        from investigations.propublica_connector import ProPublicaError, _validate_ein
+
         with self.assertRaises(ProPublicaError):
             _validate_ein(-1)
 
     def test_non_numeric_string_raises(self):
-        from investigations.propublica_connector import _validate_ein, ProPublicaError
+        from investigations.propublica_connector import ProPublicaError, _validate_ein
+
         with self.assertRaises(ProPublicaError):
             _validate_ein("not-an-ein")
 
@@ -403,22 +430,26 @@ class EINValidationTests(unittest.TestCase):
 # Exempt status derivation tests
 # ---------------------------------------------------------------------------
 
-class ExemptStatusTests(unittest.TestCase):
 
+class ExemptStatusTests(unittest.TestCase):
     def test_subsection_3_returns_501c3(self):
         from investigations.propublica_connector import _derive_exempt_status
+
         self.assertEqual(_derive_exempt_status(3), "501(c)(3)")
 
     def test_subsection_4_returns_501c4(self):
         from investigations.propublica_connector import _derive_exempt_status
+
         self.assertEqual(_derive_exempt_status(4), "501(c)(4)")
 
     def test_unknown_subsection_returns_generic(self):
         from investigations.propublica_connector import _derive_exempt_status
+
         self.assertEqual(_derive_exempt_status(99), "501(c)(99)")
 
     def test_none_returns_none(self):
         from investigations.propublica_connector import _derive_exempt_status
+
         self.assertIsNone(_derive_exempt_status(None))
 
 

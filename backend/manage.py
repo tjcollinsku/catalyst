@@ -8,6 +8,7 @@ def main() -> None:
     # Load .env from project root (one level above backend/)
     try:
         from dotenv import load_dotenv
+
         load_dotenv(Path(__file__).resolve().parent.parent / ".env")
     except ImportError:
         pass  # dotenv not installed — rely on environment variables

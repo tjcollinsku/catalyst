@@ -64,7 +64,6 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 import requests
 
@@ -96,6 +95,7 @@ HEADERS = {
 # Error type
 # ---------------------------------------------------------------------------
 
+
 class ProPublicaError(Exception):
     """
     Raised when the ProPublica connector cannot complete a request.
@@ -105,6 +105,7 @@ class ProPublicaError(Exception):
         status_code: HTTP status code if the error came from the API (or None).
         ein:         The EIN being looked up, if applicable (or None).
     """
+
     def __init__(self, message: str, status_code: int | None = None, ein: int | None = None):
         super().__init__(message)
         self.status_code = status_code
@@ -119,6 +120,7 @@ class ProPublicaError(Exception):
 # documentation of what fields exist. Dataclasses make the contract explicit:
 # you know exactly what fields the connector returns, and what type each is.
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class OrganizationSummary:
@@ -135,6 +137,7 @@ class OrganizationSummary:
         subsection:    IRC subsection code (3 = 501(c)(3), 4 = 501(c)(4), etc.).
         exempt_status: Human-readable exemption status string (e.g., "501(c)(3)").
     """
+
     ein: int
     name: str
     city: str
@@ -166,6 +169,7 @@ class OrganizationProfile:
         organization_raw: The full raw dict from the API, in case you need a field
                           not explicitly modeled here.
     """
+
     ein: int
     name: str
     city: str
@@ -199,6 +203,7 @@ class Filing:
         officer_compensation_pct: Officer compensation as % of total expenses (float or None).
         filing_raw:          The full raw dict from the API.
     """
+
     tax_period: int
     tax_year: int
     form_type: str
@@ -214,6 +219,7 @@ class Filing:
 # ---------------------------------------------------------------------------
 # Internal HTTP helper
 # ---------------------------------------------------------------------------
+
 
 def _get(url: str, params: dict | None = None) -> dict:
     """
@@ -232,9 +238,7 @@ def _get(url: str, params: dict | None = None) -> dict:
             timeout=REQUEST_TIMEOUT,
         )
     except requests.exceptions.ConnectionError as e:
-        raise ProPublicaError(
-            f"Could not connect to ProPublica API: {e}"
-        ) from e
+        raise ProPublicaError(f"Could not connect to ProPublica API: {e}") from e
     except requests.exceptions.Timeout:
         raise ProPublicaError(
             f"Request to ProPublica API timed out after {REQUEST_TIMEOUT[1]}s: {url}"
@@ -261,14 +265,13 @@ def _get(url: str, params: dict | None = None) -> dict:
     try:
         return response.json()
     except ValueError as e:
-        raise ProPublicaError(
-            f"ProPublica API returned non-JSON response: {e}"
-        ) from e
+        raise ProPublicaError(f"ProPublica API returned non-JSON response: {e}") from e
 
 
 # ---------------------------------------------------------------------------
 # Public API — Search
 # ---------------------------------------------------------------------------
+
 
 def search_organizations(
     query: str,
@@ -311,15 +314,17 @@ def search_organizations(
     results = []
     for org in organizations:
         try:
-            results.append(OrganizationSummary(
-                ein=int(org["ein"]),
-                name=org.get("name") or "",
-                city=org.get("city") or "",
-                state=org.get("state") or "",
-                ntee_code=org.get("ntee_code"),
-                subsection=org.get("subsection_code"),
-                exempt_status=_derive_exempt_status(org.get("subsection_code")),
-            ))
+            results.append(
+                OrganizationSummary(
+                    ein=int(org["ein"]),
+                    name=org.get("name") or "",
+                    city=org.get("city") or "",
+                    state=org.get("state") or "",
+                    ntee_code=org.get("ntee_code"),
+                    subsection=org.get("subsection_code"),
+                    exempt_status=_derive_exempt_status(org.get("subsection_code")),
+                )
+            )
         except (KeyError, ValueError, TypeError) as e:
             logger.warning("propublica_search: skipping malformed org record: %s — %r", e, org)
 
@@ -330,6 +335,7 @@ def search_organizations(
 # ---------------------------------------------------------------------------
 # Public API — Organization profile
 # ---------------------------------------------------------------------------
+
 
 def fetch_organization(ein: int) -> OrganizationProfile:
     """
@@ -371,7 +377,9 @@ def fetch_organization(ein: int) -> OrganizationProfile:
         subsection=org.get("subsection_code"),
         exempt_status=_derive_exempt_status(org.get("subsection_code")),
         ruling_date=str(org["ruling"]) if org.get("ruling") else None,
-        classification=str(org["classification_codes"]) if org.get("classification_codes") else None,
+        classification=str(org["classification_codes"])
+        if org.get("classification_codes")
+        else None,
         foundation_code=str(org["foundation_code"]) if org.get("foundation_code") else None,
         activity_codes=str(org["activity_codes"]) if org.get("activity_codes") else None,
         deductibility=str(org["deductibility_code"]) if org.get("deductibility_code") else None,
@@ -385,6 +393,7 @@ def fetch_organization(ein: int) -> OrganizationProfile:
 # ---------------------------------------------------------------------------
 # Public API — Filings list
 # ---------------------------------------------------------------------------
+
 
 def fetch_filings(ein: int) -> list[Filing]:
     """
@@ -419,7 +428,7 @@ def fetch_filings(ein: int) -> list[Filing]:
     filings: list[Filing] = []
 
     # --- Filings with extracted financial data -------------------------------
-    for raw in (data.get("filings_with_data") or []):
+    for raw in data.get("filings_with_data") or []:
         try:
             filings.append(_parse_filing_with_data(raw))
         except (KeyError, ValueError, TypeError) as e:
@@ -428,7 +437,7 @@ def fetch_filings(ein: int) -> list[Filing]:
             )
 
     # --- Filings without extracted data (PDF links only) --------------------
-    for raw in (data.get("filings_without_data") or []):
+    for raw in data.get("filings_without_data") or []:
         try:
             filings.append(_parse_filing_without_data(raw))
         except (KeyError, ValueError, TypeError) as e:
@@ -452,6 +461,7 @@ def fetch_filings(ein: int) -> list[Filing]:
 # ---------------------------------------------------------------------------
 # Internal parsing helpers
 # ---------------------------------------------------------------------------
+
 
 def _parse_filing_with_data(raw: dict) -> Filing:
     """Parse a filing record from the filings_with_data list."""
@@ -544,7 +554,10 @@ def _derive_exempt_status(subsection_code: int | None) -> str | None:
 # Convenience: fetch everything about an org in one call
 # ---------------------------------------------------------------------------
 
-def fetch_full_profile(ein: int, polite_delay: float = POLITE_DELAY) -> tuple[OrganizationProfile, list[Filing]]:
+
+def fetch_full_profile(
+    ein: int, polite_delay: float = POLITE_DELAY
+) -> tuple[OrganizationProfile, list[Filing]]:
     """
     Convenience wrapper: fetch both the org profile and its filings in one call.
 
@@ -585,21 +598,25 @@ def fetch_full_profile(ein: int, polite_delay: float = POLITE_DELAY) -> tuple[Or
         subsection=org_raw.get("subsection_code"),
         exempt_status=_derive_exempt_status(org_raw.get("subsection_code")),
         ruling_date=str(org_raw["ruling"]) if org_raw.get("ruling") else None,
-        classification=str(org_raw["classification_codes"]) if org_raw.get("classification_codes") else None,
+        classification=str(org_raw["classification_codes"])
+        if org_raw.get("classification_codes")
+        else None,
         foundation_code=str(org_raw["foundation_code"]) if org_raw.get("foundation_code") else None,
         activity_codes=str(org_raw["activity_codes"]) if org_raw.get("activity_codes") else None,
-        deductibility=str(org_raw["deductibility_code"]) if org_raw.get("deductibility_code") else None,
+        deductibility=str(org_raw["deductibility_code"])
+        if org_raw.get("deductibility_code")
+        else None,
         organization_raw=org_raw,
     )
 
     filings: list[Filing] = []
-    for raw in (data.get("filings_with_data") or []):
+    for raw in data.get("filings_with_data") or []:
         try:
             filings.append(_parse_filing_with_data(raw))
         except (KeyError, ValueError, TypeError) as e:
             logger.warning("fetch_full_profile: skipping filing: %s", e)
 
-    for raw in (data.get("filings_without_data") or []):
+    for raw in data.get("filings_without_data") or []:
         try:
             filings.append(_parse_filing_without_data(raw))
         except (KeyError, ValueError, TypeError) as e:

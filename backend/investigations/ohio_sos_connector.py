@@ -72,11 +72,9 @@ from __future__ import annotations
 import csv
 import io
 import logging
-import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from enum import Enum
-from typing import Optional
 
 import requests
 
@@ -96,7 +94,7 @@ HEADERS = {
 }
 
 # Staleness thresholds (days since file was downloaded)
-STALENESS_LOW_DAYS = 7      # informational — file is reasonably fresh
+STALENESS_LOW_DAYS = 7  # informational — file is reasonably fresh
 STALENESS_MEDIUM_DAYS = 21  # review recommended — over 3 weeks old
 # anything above STALENESS_MEDIUM_DAYS is HIGH
 
@@ -107,6 +105,7 @@ MANUAL_SEARCH_URL = "https://businesssearch.ohiosos.gov"
 # Report type enum
 # ---------------------------------------------------------------------------
 
+
 class ReportType(Enum):
     """
     Available Ohio SOS monthly bulk report types.
@@ -114,24 +113,25 @@ class ReportType(Enum):
     Each value is the filename on publicfiles.ohiosos.gov.
     New reports are generated on the second Saturday of each month.
     """
+
     # New entity filings
-    FOREIGN_CORP_FORPROFIT   = "WI0010R.TXT"
-    FOREIGN_CORP_NONPROFIT   = "WI0030R.TXT"
+    FOREIGN_CORP_FORPROFIT = "WI0010R.TXT"
+    FOREIGN_CORP_NONPROFIT = "WI0030R.TXT"
     FOREIGN_CORP_PROFESSIONAL = "WI0040R.TXT"
-    CORP_FORPROFIT           = "WI0050R.TXT"
-    NONPROFIT_CORPS          = "WI0070R.TXT"  # most relevant for Catalyst
-    CORP_PROFESSIONAL        = "WI0080R.TXT"
-    LLC_FOREIGN              = "WI0090R.TXT"
-    LLC_DOMESTIC             = "WI0100R.TXT"  # most relevant for Catalyst
-    LP_FOREIGN               = "WI0110R.TXT"
-    LP_DOMESTIC              = "WI0120R.TXT"
+    CORP_FORPROFIT = "WI0050R.TXT"
+    NONPROFIT_CORPS = "WI0070R.TXT"  # most relevant for Catalyst
+    CORP_PROFESSIONAL = "WI0080R.TXT"
+    LLC_FOREIGN = "WI0090R.TXT"
+    LLC_DOMESTIC = "WI0100R.TXT"  # most relevant for Catalyst
+    LP_FOREIGN = "WI0110R.TXT"
+    LP_DOMESTIC = "WI0120R.TXT"
 
     # Amendment reports
-    MERGERS                  = "WI0210R.TXT"
-    DISSOLUTIONS             = "WI0220R.TXT"
-    SOS_CANCELLATIONS        = "WI0230R.TXT"
-    REINSTATEMENTS           = "WI0240R.TXT"
-    AMENDMENTS               = "WI0250R.TXT"  # most relevant for Catalyst
+    MERGERS = "WI0210R.TXT"
+    DISSOLUTIONS = "WI0220R.TXT"
+    SOS_CANCELLATIONS = "WI0230R.TXT"
+    REINSTATEMENTS = "WI0240R.TXT"
+    AMENDMENTS = "WI0250R.TXT"  # most relevant for Catalyst
 
     @property
     def url(self) -> str:
@@ -147,6 +147,7 @@ class ReportType(Enum):
 # Error type
 # ---------------------------------------------------------------------------
 
+
 class OhioSOSError(Exception):
     """
     Raised when the Ohio SOS connector cannot complete an operation.
@@ -156,6 +157,7 @@ class OhioSOSError(Exception):
         status_code: HTTP status if the error came from a download (or None).
         report_type: The ReportType being fetched when the error occurred (or None).
     """
+
     def __init__(
         self,
         message: str,
@@ -170,6 +172,7 @@ class OhioSOSError(Exception):
 # ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class EntityRecord:
@@ -199,6 +202,7 @@ class EntityRecord:
     Fields present in AMENDMENT reports only:
         (amendment reports have fewer fields — agent info is not included)
     """
+
     # Core fields (all report types)
     document_number: str
     charter_number: str
@@ -236,9 +240,10 @@ class StalenessWarning:
         message:          Human-readable warning text for display.
         manual_search_url: URL for manual verification.
     """
+
     downloaded_at: datetime
     days_old: int
-    level: str   # "LOW", "MEDIUM", "HIGH"
+    level: str  # "LOW", "MEDIUM", "HIGH"
     message: str
     manual_search_url: str = MANUAL_SEARCH_URL
 
@@ -257,6 +262,7 @@ class SearchResult:
         total_searched:   Total number of records searched across all loaded reports.
         staleness_warning: Always present — the human-in-the-loop reminder.
     """
+
     matches: list[EntityRecord]
     query: str
     total_searched: int
@@ -298,7 +304,7 @@ _AMENDMENT_COLUMNS = [
     "CHARTER NUMBER",
     "EFFECTIVE DATE",
     "BUSINESS NAME",
-    "TRANSASCTION CODE DESCRIPTION",   # note: typo in Ohio SOS header is intentional
+    "TRANSASCTION CODE DESCRIPTION",  # note: typo in Ohio SOS header is intentional
     "FILING ADDRESS NAME",
     "FILING ADDRESS 1",
     "FILING ADDRESS 2",
@@ -401,7 +407,9 @@ def _parse_records(
         except Exception as e:
             logger.warning(
                 "ohio_sos: skipping malformed row %d in %s: %s",
-                row_num, report_type.value, e,
+                row_num,
+                report_type.value,
+                e,
             )
 
     return records
@@ -410,6 +418,7 @@ def _parse_records(
 # ---------------------------------------------------------------------------
 # Internal: staleness calculation
 # ---------------------------------------------------------------------------
+
 
 def _build_staleness_warning(downloaded_at: datetime) -> StalenessWarning:
     """
@@ -462,6 +471,7 @@ def _build_staleness_warning(downloaded_at: datetime) -> StalenessWarning:
 # ---------------------------------------------------------------------------
 # Public API — Fetch a single report
 # ---------------------------------------------------------------------------
+
 
 def fetch_report(report_type: ReportType) -> list[EntityRecord]:
     """
@@ -525,7 +535,8 @@ def fetch_report(report_type: ReportType) -> list[EntityRecord]:
     records = _parse_records(text, report_type, downloaded_at)
     logger.info(
         "ohio_sos_fetch: parsed %d records from %s",
-        len(records), report_type.name,
+        len(records),
+        report_type.name,
     )
     return records
 
@@ -533,6 +544,7 @@ def fetch_report(report_type: ReportType) -> list[EntityRecord]:
 # ---------------------------------------------------------------------------
 # Public API — Load multiple reports
 # ---------------------------------------------------------------------------
+
 
 def load_reports(report_types: list[ReportType]) -> list[EntityRecord]:
     """
@@ -563,7 +575,8 @@ def load_reports(report_types: list[ReportType]) -> list[EntityRecord]:
         except OhioSOSError as e:
             logger.error(
                 "ohio_sos_load_reports: failed to fetch %s: %s",
-                report_type.name, e,
+                report_type.name,
+                e,
             )
     return all_records
 
@@ -571,6 +584,7 @@ def load_reports(report_types: list[ReportType]) -> list[EntityRecord]:
 # ---------------------------------------------------------------------------
 # Public API — Search
 # ---------------------------------------------------------------------------
+
 
 def search_entities(
     query: str,
@@ -617,9 +631,7 @@ def search_entities(
         raise OhioSOSError("Search query cannot be empty.")
 
     if not records:
-        raise OhioSOSError(
-            "No records to search. Call fetch_report() or load_reports() first."
-        )
+        raise OhioSOSError("No records to search. Call fetch_report() or load_reports() first.")
 
     query = query.strip()
 
@@ -629,21 +641,19 @@ def search_entities(
 
     if fuzzy:
         from .entity_normalization import normalize_org_name
+
         normalized_query = normalize_org_name(query)
-        matches = [
-            r for r in records
-            if normalized_query in normalize_org_name(r.business_name)
-        ]
+        matches = [r for r in records if normalized_query in normalize_org_name(r.business_name)]
     else:
         query_lower = query.lower()
-        matches = [
-            r for r in records
-            if query_lower in r.business_name.lower()
-        ]
+        matches = [r for r in records if query_lower in r.business_name.lower()]
 
     logger.info(
         "ohio_sos_search: query=%r fuzzy=%s — %d/%d matches",
-        query, fuzzy, len(matches), len(records),
+        query,
+        fuzzy,
+        len(matches),
+        len(records),
     )
 
     return SearchResult(
