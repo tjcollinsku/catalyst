@@ -331,3 +331,17 @@ export async function deleteDetection(
         method: "DELETE"
     }, options);
 }
+
+export interface ReevaluateSignalsResult {
+    documents_evaluated: number;
+    new_detections: DetectionItem[];
+}
+
+export async function reevaluateSignals(
+    caseId: string,
+    options?: ApiRequestOptions
+): Promise<ReevaluateSignalsResult> {
+    return request<ReevaluateSignalsResult>(`/api/cases/${caseId}/reevaluate-signals/`, {
+        method: "POST"
+    }, options);
+}

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BulkUploadResult, bulkUploadDocuments, createCase, createReferral, deleteDetection, deleteDocument, deleteReferral, fetchCaseDetail, fetchCases, fetchCaseSignals, fetchDetections, fetchReferrals, fetchSignalSummary, generateReferralMemo, isAbortError, processPendingOcr, updateDetection, updateReferral, updateSignal } from "./api";
+import { BulkUploadResult, bulkUploadDocuments, createCase, createReferral, deleteDetection, deleteDocument, deleteReferral, fetchCaseDetail, fetchCases, fetchCaseSignals, fetchDetections, fetchReferrals, fetchSignalSummary, generateReferralMemo, isAbortError, processPendingOcr, reevaluateSignals, updateDetection, updateReferral, updateSignal } from "./api";
 import { CaseDetailPanel } from "./components/CaseDetailPanel";
 import { CasesPanel } from "./components/CasesPanel";
+import { SemanticSearch } from "./components/SemanticSearch";
 import { DashboardMetrics } from "./components/DashboardMetrics";
 import { ToastItem, ToastStack } from "./components/ui/ToastStack";
 import { CaseDetail, CaseSummary, DetectionItem, DetectionUpdatePayload, NewReferralPayload, ReferralItem, ReferralUpdatePayload, SignalItem } from "./types";
@@ -40,6 +41,7 @@ export default function App() {
     const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
     const [generatingMemo, setGeneratingMemo] = useState(false);
     const [processingPendingOcr, setProcessingPendingOcr] = useState(false);
+    const [reevaluatingSignals, setReevaluatingSignals] = useState(false);
     const [loadingCases, setLoadingCases] = useState(true);
     const [loadingCaseDetail, setLoadingCaseDetail] = useState(false);
     const toastIdRef = useRef(0);
@@ -311,6 +313,25 @@ export default function App() {
             pushToast("error", (error as Error).message);
         } finally {
             setProcessingPendingOcr(false);
+        }
+    }
+
+    async function handleReevaluateSignals() {
+        if (!selectedCaseId) return;
+        setReevaluatingSignals(true);
+        try {
+            const result = await reevaluateSignals(selectedCaseId);
+            if (result.new_detections.length > 0) {
+                setDetections((prev) => [...result.new_detections, ...prev]);
+            }
+            pushToast(
+                "success",
+                `Signal re-evaluation complete: ${result.documents_evaluated} documents scanned, ${result.new_detections.length} new detection${result.new_detections.length !== 1 ? "s" : ""}.`
+            );
+        } catch (error) {
+            pushToast("error", (error as Error).message);
+        } finally {
+            setReevaluatingSignals(false);
         }
     }
 
@@ -625,6 +646,8 @@ export default function App() {
                 </p>
             </header>
 
+            <SemanticSearch selectedCaseId={selectedCaseId} />
+
             <ToastStack toasts={toasts} onDismiss={removeToast} />
 
             <DashboardMetrics
@@ -696,6 +719,7 @@ export default function App() {
                     savingDetectionId={savingDetectionId}
                     generatingMemo={generatingMemo}
                     processingPendingOcr={processingPendingOcr}
+                    reevaluatingSignals={reevaluatingSignals}
                     deletingDocumentId={deletingDocumentId}
                     onDocTypeFilterChange={setDocTypeFilter}
                     onOcrFilterChange={setOcrFilter}
@@ -713,6 +737,7 @@ export default function App() {
                     onDeleteDocument={(id) => { void handleDeleteDocument(id); }}
                     onGenerateMemo={() => { void handleGenerateMemo(); }}
                     onProcessPendingOcr={() => { void handleProcessPendingOcr(); }}
+                    onReevaluateSignals={() => { void handleReevaluateSignals(); }}
                     onBulkUpload={handleBulkUpload}
                     onBulkUploadComplete={handleBulkUploadComplete}
                     formatDate={formatDate}

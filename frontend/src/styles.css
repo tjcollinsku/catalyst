@@ -73,6 +73,81 @@ body {
     letter-spacing: 0.04em;
 }
 
+/* ── Persistent semantic search bar (under banner) ── */
+
+.semantic-search-bar {
+    margin-bottom: 1rem;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    backdrop-filter: blur(8px);
+    padding: 0.6rem 0.9rem;
+}
+
+.semantic-search-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.semantic-search-input {
+    flex: 1;
+    min-width: 200px;
+}
+
+.semantic-scope-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    color: var(--text-soft);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.semantic-index-status {
+    margin: 0.4rem 0 0;
+    font-size: 0.8rem;
+    color: var(--accent-strong);
+}
+
+.semantic-error {
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.7rem;
+    border-radius: 8px;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    font-size: 0.85rem;
+}
+
+.semantic-results {
+    margin-top: 0.6rem;
+    max-height: 50vh;
+    overflow-y: auto;
+    padding-right: 0.25rem;
+}
+
+.semantic-empty {
+    margin-top: 0.5rem;
+    color: var(--text-soft);
+    font-size: 0.85rem;
+}
+
+/* ── Re-evaluate signals bar ── */
+
+.reevaluate-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.75rem;
+}
+
+.reevaluate-hint {
+    color: var(--text-soft);
+    font-size: 0.78rem;
+}
+
 .toast-stack {
     position: fixed;
     top: 14px;

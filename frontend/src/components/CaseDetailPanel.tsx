@@ -41,6 +41,7 @@ interface CaseDetailPanelProps {
     deletingDocumentId: string | null;
     generatingMemo: boolean;
     processingPendingOcr: boolean;
+    reevaluatingSignals: boolean;
     onDocTypeFilterChange: (value: string) => void;
     onOcrFilterChange: (value: string) => void;
     onSignalSeverityFilterChange: (value: string) => void;
@@ -57,6 +58,7 @@ interface CaseDetailPanelProps {
     onDeleteDocument: (documentId: string) => void;
     onGenerateMemo: () => void;
     onProcessPendingOcr: () => void;
+    onReevaluateSignals: () => void;
     onBulkUpload: (files: File[]) => Promise<BulkUploadResult>;
     onBulkUploadComplete: (result: BulkUploadResult) => void;
     formatDate: (value: string) => string;
@@ -98,6 +100,7 @@ export function CaseDetailPanel({
     deletingDocumentId,
     generatingMemo,
     processingPendingOcr,
+    reevaluatingSignals,
     onCreateReferral,
     onUpdateReferral,
     onDeleteReferral,
@@ -106,6 +109,7 @@ export function CaseDetailPanel({
     onDeleteDocument,
     onGenerateMemo,
     onProcessPendingOcr,
+    onReevaluateSignals,
     onBulkUpload,
     onBulkUploadComplete,
     formatDate,
@@ -374,6 +378,19 @@ export function CaseDetailPanel({
                             The memo is saved as a document and will appear in the Documents list above.
                         </p>
                     </article>
+
+                    <div className="reevaluate-bar">
+                        <Button
+                            variant="secondary"
+                            disabled={reevaluatingSignals}
+                            onClick={onReevaluateSignals}
+                        >
+                            {reevaluatingSignals ? "Re-evaluating..." : "Re-evaluate Signals"}
+                        </Button>
+                        <span className="reevaluate-hint">
+                            Re-run all signal rules against this case's documents and entities.
+                        </span>
+                    </div>
 
                     <DetectionsPanel
                         detections={detections}

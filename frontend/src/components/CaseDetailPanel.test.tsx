@@ -62,6 +62,8 @@ const referralProps = {
     onDeleteDocument: vi.fn(),
     onGenerateMemo: vi.fn(),
     onProcessPendingOcr: vi.fn(),
+    onReevaluateSignals: vi.fn(),
+    reevaluatingSignals: false,
     onBulkUpload: vi.fn().mockResolvedValue({ created: [], errors: [] }),
     onBulkUploadComplete: vi.fn(),
 };
