@@ -6,7 +6,7 @@ exclude = [
   ".venv",
   "venv",
   "__pycache__",
-  "backend/investigations/migrations",
+  "**/migrations",
   "Osgood Project Files",
 ]
 
@@ -14,12 +14,12 @@ exclude = [
 select = ["E", "F", "I"]
 
 [tool.ruff.lint.per-file-ignores]
-"backend/**/tests/*.py" = ["E501"]
-"backend/investigations/county_auditor_connector.py" = ["E501"]
-"backend/investigations/county_recorder_connector.py" = ["E501"]
-"backend/investigations/irs_connector.py" = ["E501"]
-"backend/investigations/propublica_connector.py" = ["E501"]
-"backend/investigations/verify_recorder_portals.py" = ["E501"]
+"**/tests/*.py" = ["E501"]
+"**/county_auditor_connector.py" = ["E501"]
+"**/county_recorder_connector.py" = ["E501"]
+"**/irs_connector.py" = ["E501"]
+"**/propublica_connector.py" = ["E501"]
+"**/verify_recorder_portals.py" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"
