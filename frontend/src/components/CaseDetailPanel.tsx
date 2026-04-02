@@ -8,6 +8,7 @@ import { EmptyState } from "./ui/EmptyState";
 import { FormSelect } from "./ui/FormSelect";
 import { FormTextarea } from "./ui/FormTextarea";
 import { StateBlock } from "./ui/StateBlock";
+import styles from "./CaseDetailPanel.module.css";
 
 interface TriageDraft {
     status: string;
@@ -126,7 +127,7 @@ export function CaseDetailPanel({
             </div>
 
             {selectedCase && (
-                <div className="detail-meta">
+                <div className={styles.detailMeta}>
                     <span>Last Updated: {formatDate(selectedCase.updated_at)}</span>
                     <span>Referral: {selectedCase.referral_ref || "Not assigned"}</span>
                 </div>
@@ -148,12 +149,12 @@ export function CaseDetailPanel({
 
             {!loadingCaseDetail && selectedCase && (
                 <>
-                    <article className="info-card">
+                    <article className={styles.infoCard}>
                         <h3>Case Notes</h3>
                         <p>{selectedCase.notes || "No notes yet."}</p>
                     </article>
 
-                    <article className="info-card">
+                    <article className={styles.infoCard}>
                         <h3>Upload Documents</h3>
                         <BulkUploadPanel
                             onUpload={onBulkUpload}
@@ -161,10 +162,10 @@ export function CaseDetailPanel({
                         />
                     </article>
 
-                    <article className="info-card">
-                        <div className="card-toolbar">
+                    <article className={styles.infoCard}>
+                        <div className={styles.cardToolbar}>
                             <h3>Documents ({filteredDocuments.length}/{selectedCase.documents.length})</h3>
-                            <div className="compact-filters">
+                            <div className={styles.compactFilters}>
                                 <Button
                                     variant="secondary"
                                     disabled={processingPendingOcr || pendingOcrCount === 0}
@@ -200,7 +201,7 @@ export function CaseDetailPanel({
                                 </FormSelect>
                             </div>
                         </div>
-                        <div className="table-wrap">
+                        <div className={styles.tableWrap}>
                             {filteredDocuments.length === 0 ? (
                                 <EmptyState
                                     title={selectedCase.documents.length === 0
@@ -248,10 +249,10 @@ export function CaseDetailPanel({
                         </div>
                     </article>
 
-                    <article className="info-card">
-                        <div className="card-toolbar">
+                    <article className={styles.infoCard}>
+                        <div className={styles.cardToolbar}>
                             <h3>Signals ({filteredSignals.length}/{signals.length})</h3>
-                            <div className="compact-filters">
+                            <div className={styles.compactFilters}>
                                 <FormSelect
                                     value={signalSeverityFilter}
                                     onChange={(event) => onSignalSeverityFilterChange(event.target.value)}
@@ -278,7 +279,7 @@ export function CaseDetailPanel({
                                 </FormSelect>
                             </div>
                         </div>
-                        {triageError && <p className="triage-error">{triageError}</p>}
+                        {triageError && <p className={styles.triageError}>{triageError}</p>}
                         {filteredSignals.length === 0 ? (
                             <EmptyState
                                 title={signals.length === 0
@@ -289,13 +290,13 @@ export function CaseDetailPanel({
                                     : "Try broadening severity or status filters to show more triage items."}
                             />
                         ) : (
-                            <ul className="signal-list">
+                            <ul className={styles.signalList}>
                                 {filteredSignals.map((signal) => {
                                     const draft = getSignalDraft(signal);
                                     return (
                                         <li key={signal.id}>
                                             <div
-                                                className={signal.id === activeSignalId ? "signal-card active-signal" : "signal-card"}
+                                                className={signal.id === activeSignalId ? `${styles.signalCard} ${styles.activeSignal}` : styles.signalCard}
                                                 role="button"
                                                 tabIndex={0}
                                                 onClick={() => onActiveSignalChange(signal.id)}
@@ -308,20 +309,20 @@ export function CaseDetailPanel({
                                                 aria-label={`Focus signal ${signal.title}`}
                                             >
                                                 <strong>{signal.title}</strong>
-                                                <p className="signal-subhead">{signal.rule_id}</p>
+                                                <p className={styles.signalSubhead}>{signal.rule_id}</p>
                                                 <p>{signal.description}</p>
-                                                <p className="signal-subhead">Detected: {formatDate(signal.detected_at)}</p>
+                                                <p className={styles.signalSubhead}>Detected: {formatDate(signal.detected_at)}</p>
                                             </div>
-                                            <div className="signal-badges">
+                                            <div className={styles.signalBadges}>
                                                 <span className={`tag ${signal.severity.toLowerCase()}`}>
                                                     {signal.severity}
                                                 </span>
                                                 <span className="tag neutral">{signal.status}</span>
-                                                <div className="triage-quick-actions">
+                                                <div className={styles.triageQuickActions}>
                                                     {quickStatuses.map((status) => (
                                                         <Button
                                                             key={`${signal.id}-${status}`}
-                                                            className={`triage-chip ${draft.status === status ? "active" : ""}`}
+                                                            className={draft.status === status ? `${styles.triageChip} ${styles.active}` : styles.triageChip}
                                                             variant="secondary"
                                                             onClick={() => onSignalDraftChange(signal.id, { ...draft, status })}
                                                             aria-label={`Set signal status to ${status}`}
@@ -331,7 +332,7 @@ export function CaseDetailPanel({
                                                     ))}
                                                 </div>
                                                 <FormSelect
-                                                    className="triage-select"
+                                                    className={styles.triageSelect}
                                                     value={draft.status}
                                                     onChange={(event) => onSignalDraftChange(signal.id, { ...draft, status: event.target.value })}
                                                 >
@@ -342,14 +343,14 @@ export function CaseDetailPanel({
                                                     ))}
                                                 </FormSelect>
                                                 <FormTextarea
-                                                    className="triage-note"
+                                                    className={styles.triageNote}
                                                     placeholder="Investigator note"
                                                     value={draft.note}
                                                     onChange={(event) => onSignalDraftChange(signal.id, { ...draft, note: event.target.value })}
                                                     rows={2}
                                                 />
                                                 <Button
-                                                    className="triage-save"
+                                                    className={styles.triageSave}
                                                     onClick={() => void onSignalSave(signal)}
                                                     disabled={savingSignalId === signal.id}
                                                 >
@@ -362,8 +363,8 @@ export function CaseDetailPanel({
                             </ul>
                         )}
                     </article>
-                    <article className="info-card">
-                        <div className="card-toolbar">
+                    <article className={styles.infoCard}>
+                        <div className={styles.cardToolbar}>
                             <h3>Referral Memo</h3>
                             <Button
                                 variant="primary"
@@ -373,13 +374,13 @@ export function CaseDetailPanel({
                                 {generatingMemo ? "Generating…" : "Generate Memo"}
                             </Button>
                         </div>
-                        <p className="memo-hint">
+                        <p className={styles.memoHint}>
                             Generates a summary memo from the current case state and referral records.
                             The memo is saved as a document and will appear in the Documents list above.
                         </p>
                     </article>
 
-                    <div className="reevaluate-bar">
+                    <div className={styles.reevaluateBar}>
                         <Button
                             variant="secondary"
                             disabled={reevaluatingSignals}
@@ -387,7 +388,7 @@ export function CaseDetailPanel({
                         >
                             {reevaluatingSignals ? "Re-evaluating..." : "Re-evaluate Signals"}
                         </Button>
-                        <span className="reevaluate-hint">
+                        <span className={styles.reevaluateHint}>
                             Re-run all signal rules against this case's documents and entities.
                         </span>
                     </div>
@@ -401,7 +402,7 @@ export function CaseDetailPanel({
                         formatDate={formatDate}
                     />
 
-                    <article className="info-card">
+                    <article className={styles.infoCard}>
                         <ReferralsPanel
                             referrals={referrals}
                             loadingReferrals={loadingReferrals}

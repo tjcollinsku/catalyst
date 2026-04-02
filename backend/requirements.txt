@@ -9,3 +9,5 @@ requests>=2.31,<3.0
 gunicorn>=22.0,<24.0
 # CORS headers for cross-origin API access
 django-cors-headers>=4.3,<5.0
+# Anthropic Claude API for AI-powered entity extraction
+anthropic>=0.39,<1.0

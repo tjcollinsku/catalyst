@@ -23,6 +23,8 @@ from django.urls import reverse
 
 from ..models import (
     Case,
+    Detection,
+    DetectionStatus,
     Document,
     FinancialInstrument,
     InstrumentType,
@@ -833,36 +835,36 @@ class PersistSignalsTests(TestCase):
         triggers = [self._trigger()]
         created = persist_signals(self.case, triggers)
         self.assertEqual(len(created), 1)
-        self.assertEqual(Signal.objects.count(), 1)
+        self.assertEqual(Detection.objects.count(), 1)
 
     def test_deduplicates_against_existing_open_signal(self):
-        # Pre-create an OPEN signal with same key
-        Signal.objects.create(
+        # Pre-create an OPEN detection with same key
+        Detection.objects.create(
             case=self.case,
-            rule_id="SR-010",
-            severity=SignalSeverity.MEDIUM,
-            trigger_entity_id=None,
-            trigger_doc_id=None,
+            signal_type="REVENUE_ANOMALY",
+            severity="MEDIUM",
+            primary_document=None,
+            evidence_snapshot={"rule_id": "SR-010", "summary": "Existing."},
         )
         triggers = [self._trigger()]
         created = persist_signals(self.case, triggers)
         self.assertEqual(created, [])
-        self.assertEqual(Signal.objects.count(), 1)  # unchanged
+        self.assertEqual(Detection.objects.count(), 1)  # unchanged
 
     def test_does_not_deduplicate_against_dismissed_signal(self):
-        # DISMISSED signals allow re-fire
-        Signal.objects.create(
+        # DISMISSED detections allow re-fire
+        Detection.objects.create(
             case=self.case,
-            rule_id="SR-010",
-            severity=SignalSeverity.MEDIUM,
-            trigger_entity_id=None,
-            trigger_doc_id=None,
-            status=SignalStatus.DISMISSED,
+            signal_type="REVENUE_ANOMALY",
+            severity="MEDIUM",
+            primary_document=None,
+            evidence_snapshot={"rule_id": "SR-010", "summary": "Existing."},
+            status=DetectionStatus.DISMISSED,
         )
         triggers = [self._trigger()]
         created = persist_signals(self.case, triggers)
         self.assertEqual(len(created), 1)
-        self.assertEqual(Signal.objects.count(), 2)
+        self.assertEqual(Detection.objects.count(), 2)
 
     def test_persisted_signal_has_correct_fields(self):
         org = _make_org(self.case, "Test Org")
@@ -875,13 +877,13 @@ class PersistSignalsTests(TestCase):
             trigger_doc=None,
         )
         created = persist_signals(self.case, [trigger])
-        signal = created[0]
-        self.assertEqual(signal.rule_id, "SR-010")
-        self.assertEqual(signal.severity, "MEDIUM")
-        self.assertEqual(signal.status, SignalStatus.OPEN)
-        self.assertEqual(signal.detected_summary, "No 990 found.")
-        self.assertEqual(signal.trigger_entity_id, org.pk)
-        self.assertIsNone(signal.trigger_doc_id)
+        detection = created[0]
+        self.assertEqual(detection.evidence_snapshot["rule_id"], "SR-010")
+        self.assertEqual(detection.severity, "MEDIUM")
+        self.assertEqual(detection.status, DetectionStatus.OPEN)
+        self.assertEqual(detection.evidence_snapshot["summary"], "No 990 found.")
+        self.assertEqual(detection.signal_type, "REVENUE_ANOMALY")
+        self.assertIsNone(detection.primary_document_id)
 
     def test_empty_trigger_list_returns_empty(self):
         created = persist_signals(self.case, [])

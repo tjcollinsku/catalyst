@@ -75,6 +75,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
+from urllib.parse import urlparse
 
 import requests
 
@@ -1684,6 +1685,52 @@ def _run_odnr_query(
     )
 
 
+# SEC-037: Validate auditor portal URLs from ArcGIS API responses.
+# Ohio county auditor sites follow predictable domain patterns.
+_AUDITOR_DOMAIN_SUFFIXES = (
+    ".county.us",
+    ".oh.us",
+    ".ohio.gov",
+    ".govoffice.com",
+    ".devnetwedge.com",
+    ".arcgis.com",
+)
+
+logger = logging.getLogger("investigations.county_auditor_connector")
+
+
+def _validate_auditor_url(url: str | None) -> str | None:
+    """Validate that an auditor portal link comes from a known government domain.
+
+    SEC-037: Rejects URLs with unexpected domains that could indicate API
+    compromise or data poisoning.
+    """
+    if not url:
+        return None
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return None
+
+    if parsed.scheme not in ("http", "https", ""):
+        logger.warning("auditor_url_bad_scheme", extra={"url": url})
+        return None
+
+    host = (parsed.hostname or "").lower()
+    if not host:
+        # Relative URL or just a path — these are fine
+        return url
+
+    if any(host.endswith(suffix) for suffix in _AUDITOR_DOMAIN_SUFFIXES):
+        return url
+
+    logger.warning(
+        "auditor_url_untrusted_domain",
+        extra={"url": url, "domain": host},
+    )
+    return None
+
+
 def _parse_parcel_feature(feature: dict) -> ParcelRecord:
     """Parse a single ArcGIS feature dict into a ParcelRecord."""
     attrs = feature.get("attributes", {})
@@ -1721,7 +1768,7 @@ def _parse_parcel_feature(feature: dict) -> ParcelRecord:
         owner2=_str("OWNER2"),
         calc_acres=_float("CALC_ACRES"),
         assr_acres=_float("ASSR_ACRES"),
-        aud_link=_str("AUD_LINK"),
+        aud_link=_validate_auditor_url(_str("AUD_LINK")),
         raw=attrs,
     )
 

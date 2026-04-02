@@ -130,6 +130,14 @@ EO_BMF_BASE_URL = "https://www.irs.gov/pub/irs-soi"
 # Timeout for all HTTP requests (connect, read) in seconds.
 REQUEST_TIMEOUT = (10, 60)
 
+# SEC-017: Total download deadline in seconds. Prevents slow-drip DoS
+# where a server sends data one byte at a time to hold the thread open.
+DOWNLOAD_DEADLINE_SECONDS = 300  # 5 minutes max for any single download
+
+# SEC-017: Maximum download size in bytes (200 MB).
+# Prevents a compromised or misconfigured server from exhausting memory.
+MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024
+
 # User-Agent so the IRS can identify Catalyst traffic.
 HEADERS = {
     "User-Agent": "Catalyst/2.0 (Intelligence Triage Platform; contact: investigator)",
@@ -433,10 +441,15 @@ class EoBmfSearchResult:
 
 
 def _download(url: str) -> bytes:
-    """
-    Download a file from the given URL and return the raw bytes.
+    """Download a file from the given URL and return the raw bytes.
+
     Raises IRSError on network failure or non-200 HTTP status.
+
+    SEC-017: Uses chunked reading with a total deadline and size cap
+    to prevent slow-drip DoS or unbounded memory growth.
     """
+    import time
+
     logger.info("irs_connector: downloading %s", url)
     try:
         response = requests.get(
@@ -463,7 +476,27 @@ def _download(url: str) -> bytes:
             status_code=response.status_code,
         )
 
-    content = response.content
+    # SEC-017: Chunked download with deadline and size cap
+    deadline = time.monotonic() + DOWNLOAD_DEADLINE_SECONDS
+    chunks = []
+    total_bytes = 0
+
+    try:
+        for chunk in response.iter_content(chunk_size=64 * 1024):
+            if time.monotonic() > deadline:
+                response.close()
+                raise IRSError(f"Download exceeded {DOWNLOAD_DEADLINE_SECONDS}s deadline: {url}")
+            total_bytes += len(chunk)
+            if total_bytes > MAX_DOWNLOAD_BYTES:
+                response.close()
+                raise IRSError(
+                    f"Download exceeded {MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB size limit: {url}"
+                )
+            chunks.append(chunk)
+    except requests.exceptions.ChunkedEncodingError as e:
+        raise IRSError(f"Download interrupted (chunked encoding error): {e}") from e
+
+    content = b"".join(chunks)
     logger.info("irs_connector: downloaded %s (%.1f KB)", url, len(content) / 1024)
     return content
 

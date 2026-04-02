@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "./ui/Button";
 import { FormInput } from "./ui/FormInput";
+import styles from "./SemanticSearch.module.css";
 
 interface SemanticSearchProps {
     selectedCaseId: string | null;
@@ -38,10 +39,10 @@ export function SemanticSearch({ selectedCaseId }: SemanticSearchProps) {
     }
 
     return (
-        <div className="semantic-search-bar">
-            <div className="semantic-search-row">
+        <div className={styles.semanticSearchBar}>
+            <div className={styles.semanticSearchRow}>
                 <FormInput
-                    className="semantic-search-input"
+                    className={styles.semanticSearchInput}
                     placeholder="Semantic search across documents..."
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
@@ -58,7 +59,7 @@ export function SemanticSearch({ selectedCaseId }: SemanticSearchProps) {
                 >
                     {searching ? "Searching..." : "Search"}
                 </Button>
-                <label className="semantic-scope-toggle">
+                <label className={styles.semanticScopeToggle}>
                     <input
                         type="checkbox"
                         checked={scopeToCase}
@@ -67,12 +68,12 @@ export function SemanticSearch({ selectedCaseId }: SemanticSearchProps) {
                     Scope to case
                 </label>
             </div>
-            {error && <div className="semantic-error">{error}</div>}
+            {error && <div className={styles.semanticError}>{error}</div>}
             {!error && results.length === 0 && query.trim() && !searching && (
-                <p className="semantic-empty">No results found.</p>
+                <p className={styles.semanticEmpty}>No results found.</p>
             )}
             {results.length > 0 && (
-                <div className="semantic-results">
+                <div className={styles.semanticResults}>
                     {results.map((result, index) => {
                         const r = result as Record<string, unknown>;
                         return (

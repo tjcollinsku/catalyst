@@ -1,0 +1,265 @@
+/*
+ * PipelineTab
+ * Unified Signal → Detection → Finding pipeline view.
+ * Replaces separate Signals, Detections, and Findings tabs.
+ */
+
+.pipeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    height: 100%;
+}
+
+/* ── Toolbar row (below status bar) ─────────────────────── */
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-wrap: wrap;
+}
+
+.toolbarLabel {
+    font-size: var(--text-xs);
+    color: var(--text-soft);
+    white-space: nowrap;
+}
+
+.toolbarSpacer {
+    flex: 1;
+}
+
+.toolbarCount {
+    font-size: var(--text-xs);
+    color: var(--text-soft);
+}
+
+/* ── Card list ──────────────────────────────────────────── */
+
+.cardList {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.75rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* ── Shared card base ───────────────────────────────────── */
+
+.card {
+    background: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+    animation: rise-in 350ms ease both;
+    animation-delay: calc(var(--card-i, 0) * 50ms);
+}
+
+.card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card);
+}
+
+.cardSelected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.cardHeader {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+}
+
+.cardRuleId {
+    font-size: var(--text-xs);
+    font-weight: 700;
+    color: var(--accent);
+    white-space: nowrap;
+}
+
+.cardTitle {
+    flex: 1;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-main);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cardTime {
+    font-size: 0.65rem;
+    color: var(--text-soft);
+    white-space: nowrap;
+}
+
+.cardBody {
+    font-size: var(--text-xs);
+    color: var(--text-soft);
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.cardAiBadge { margin-top: 0.4rem; }
+
+.cardFooter {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* ── Quick-action buttons ────────────────────────────────── */
+
+.quickAction {
+    font-size: var(--text-xs);
+    padding: 0.2rem 0.5rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text-main);
+    cursor: pointer;
+    transition: all 0.12s;
+    white-space: nowrap;
+}
+
+.quickAction:hover {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+.quickActionDanger {
+    composes: quickAction;
+}
+
+.quickActionDanger:hover {
+    background: var(--danger);
+    border-color: var(--danger);
+}
+
+/* ── Severity + confidence inline badges ─────────────────── */
+
+.sevBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.sevCritical { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.sevHigh { background: rgba(249, 115, 22, 0.15); color: #f97316; }
+.sevMedium { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+.sevLow { background: rgba(96, 165, 250, 0.15); color: #60a5fa; }
+.sevInfo { background: rgba(148, 163, 184, 0.12); color: var(--text-soft); }
+
+.confBar {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.65rem;
+    color: var(--text-soft);
+}
+
+.confBarTrack {
+    width: 40px;
+    height: 4px;
+    background: var(--surface-2);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.confBarFill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+/* ── Entity/document tag pills ───────────────────────────── */
+
+.tagRow {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+    margin-top: 0.35rem;
+}
+
+.tagPill {
+    font-size: 0.6rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-soft);
+    border: 1px solid var(--border-subtle);
+}
+
+/* ── Finding narrative preview ───────────────────────────── */
+
+.narrativePreview {
+    font-size: var(--text-xs);
+    color: var(--text-soft);
+    font-style: italic;
+    line-height: 1.45;
+    margin-top: 0.25rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.legalRefs {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+    margin-top: 0.3rem;
+}
+
+.legalRef {
+    font-size: 0.6rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: var(--radius-sm);
+    background: rgba(69, 137, 255, 0.1);
+    color: var(--accent);
+    font-weight: 500;
+}
+
+/* ── Empty state ────────────────────────────────────────── */
+
+.empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1rem;
+    color: var(--text-soft);
+    text-align: center;
+    gap: 0.5rem;
+}
+
+.emptyTitle {
+    font-size: var(--text-base);
+    font-weight: 500;
+    color: var(--text-main);
+}
+
+.emptyDetail {
+    font-size: var(--text-sm);
+}

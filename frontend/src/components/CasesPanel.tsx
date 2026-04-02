@@ -5,6 +5,7 @@ import { FormInput } from "./ui/FormInput";
 import { FormSelect } from "./ui/FormSelect";
 import { FormTextarea } from "./ui/FormTextarea";
 import { StateBlock } from "./ui/StateBlock";
+import styles from "./CasesPanel.module.css";
 
 interface CasesPanelProps {
     filteredCases: CaseSummary[];
@@ -61,7 +62,7 @@ export function CasesPanel({
                 <h2>Cases</h2>
                 <span>{filteredCases.length} shown</span>
             </div>
-            <form className="create-case-form" onSubmit={onCreateCase}>
+            <form className={styles.createCaseForm} onSubmit={onCreateCase}>
                 <h3>New Case</h3>
                 <FormInput
                     type="text"
@@ -72,8 +73,8 @@ export function CasesPanel({
                     aria-invalid={formErrors.name ? "true" : "false"}
                     required
                 />
-                {formErrors.name && <p className="field-error">{formErrors.name}</p>}
-                <div className="inline-fields">
+                {formErrors.name && <p className={styles.fieldError}>{formErrors.name}</p>}
+                <div className={styles.inlineFields}>
                     <FormInput
                         type="text"
                         value={newCaseReferral}
@@ -83,7 +84,7 @@ export function CasesPanel({
                         aria-invalid={formErrors.referral ? "true" : "false"}
                     />
                 </div>
-                {formErrors.referral && <p className="field-error">{formErrors.referral}</p>}
+                {formErrors.referral && <p className={styles.fieldError}>{formErrors.referral}</p>}
                 <FormTextarea
                     value={newCaseNotes}
                     onChange={(event) => onNewCaseNotesChange(event.target.value)}
@@ -95,7 +96,7 @@ export function CasesPanel({
                     {isSubmittingCase ? "Creating..." : "Create Case"}
                 </Button>
             </form>
-            <div className="filter-row">
+            <div className={styles.filterRow}>
                 <FormInput
                     type="search"
                     value={caseQuery}
@@ -138,29 +139,29 @@ export function CasesPanel({
                     detail="Try clearing the search or switching to a different status filter."
                 />
             ) : (
-                <ul className="case-list">
+                <ul className={styles.caseList}>
                     {filteredCases.map((caseItem) => {
                         const topSeverity = caseSeverityMap[caseItem.id];
                         return (
                             <li key={caseItem.id}>
                                 <button
                                     type="button"
-                                    className={caseItem.id === selectedCaseId ? "case-pill active" : "case-pill"}
+                                    className={caseItem.id === selectedCaseId ? `${styles.casePill} ${styles.active}` : styles.casePill}
                                     onClick={() => onSelectCase(caseItem.id)}
                                 >
-                                    <span className="case-name">{caseItem.name}</span>
-                                    <span className="case-pill-badges">
-                                        <span className="case-meta">{caseItem.status}</span>
+                                    <span className={styles.caseName}>{caseItem.name}</span>
+                                    <span className={styles.casePillBadges}>
+                                        <span className={styles.caseMeta}>{caseItem.status}</span>
                                         {topSeverity && (
-                                            <span className={`tag ${topSeverity.toLowerCase()} case-severity-badge`}>
+                                            <span className={`tag ${topSeverity.toLowerCase()} ${styles.caseSeverityBadge}`}>
                                                 {topSeverity}
                                             </span>
                                         )}
                                     </span>
                                     {caseItem.referral_ref && (
-                                        <span className="case-meta">Ref: {caseItem.referral_ref}</span>
+                                        <span className={styles.caseMeta}>Ref: {caseItem.referral_ref}</span>
                                     )}
-                                    <span className="case-meta">{formatDate(caseItem.created_at)}</span>
+                                    <span className={styles.caseMeta}>{formatDate(caseItem.created_at)}</span>
                                 </button>
                             </li>
                         );

@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { BulkUploadResult } from "../api";
 import { Button } from "./ui/Button";
+import styles from "./BulkUploadPanel.module.css";
 
 const MAX_FILES = 50;
 
@@ -92,9 +93,9 @@ export function BulkUploadPanel({ onUpload, onComplete }: BulkUploadPanelProps) 
     const errorCount = entries.filter((e) => e.status === "error").length;
 
     return (
-        <div className="bulk-upload-panel">
+        <div className={styles.bulkUploadPanel}>
             <div
-                className={dragOver ? "drop-zone drop-zone-active" : "drop-zone"}
+                className={dragOver ? `${styles.dropZone} ${styles.dropZoneActive}` : styles.dropZone}
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleDrop}
@@ -104,7 +105,7 @@ export function BulkUploadPanel({ onUpload, onComplete }: BulkUploadPanelProps) 
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") inputRef.current?.click(); }}
                 aria-label="Drop files here or click to browse"
             >
-                <span className="drop-zone-label">
+                <span className={styles.dropZoneLabel}>
                     {dragOver
                         ? "Drop to add files"
                         : `Drop PDFs here or click to browse (max ${MAX_FILES})`}
@@ -114,21 +115,25 @@ export function BulkUploadPanel({ onUpload, onComplete }: BulkUploadPanelProps) 
                     type="file"
                     multiple
                     accept=".pdf"
-                    className="drop-zone-input"
+                    className={styles.dropZoneInput}
                     onChange={(e) => { if (e.target.files) addFiles(e.target.files); }}
                 />
             </div>
 
             {entries.length > 0 && (
                 <>
-                    <div className="bulk-file-list">
+                    <div className={styles.bulkFileList}>
                         {entries.map((entry) => (
-                            <div key={entry.file.name} className={`bulk-file-row bulk-file-${entry.status}`}>
-                                <span className="bulk-file-name">{entry.file.name}</span>
-                                <span className="bulk-file-size">
+                            <div key={entry.file.name} className={`${styles.bulkFileRow} ${
+                                entry.status === "pending" ? styles.bulkFilePending :
+                                entry.status === "done" ? styles.bulkFileDone :
+                                entry.status === "error" ? styles.bulkFileError : ""
+                            }`}>
+                                <span className={styles.bulkFileName}>{entry.file.name}</span>
+                                <span className={styles.bulkFileSize}>
                                     {(entry.file.size / 1024).toFixed(0)} KB
                                 </span>
-                                <span className="bulk-file-status">
+                                <span className={styles.bulkFileStatus}>
                                     {entry.status === "pending" && "Pending"}
                                     {entry.status === "done" && "Done"}
                                     {entry.status === "error" && (entry.error ?? "Error")}
@@ -136,7 +141,7 @@ export function BulkUploadPanel({ onUpload, onComplete }: BulkUploadPanelProps) 
                                 {entry.status === "pending" && (
                                     <button
                                         type="button"
-                                        className="bulk-file-remove"
+                                        className={styles.bulkFileRemove}
                                         onClick={() => removeEntry(entry.file.name)}
                                         aria-label={`Remove ${entry.file.name}`}
                                     >
@@ -147,13 +152,13 @@ export function BulkUploadPanel({ onUpload, onComplete }: BulkUploadPanelProps) 
                         ))}
                     </div>
 
-                    <div className="bulk-upload-footer">
-                        <span className="bulk-upload-summary">
+                    <div className={styles.bulkUploadFooter}>
+                        <span className={styles.bulkUploadSummary}>
                             {pendingCount > 0 && `${pendingCount} pending`}
                             {doneCount > 0 && ` · ${doneCount} uploaded`}
                             {errorCount > 0 && ` · ${errorCount} failed`}
                         </span>
-                        <div className="bulk-upload-actions">
+                        <div className={styles.bulkUploadActions}>
                             {pendingCount > 0 && (
                                 <Button
                                     variant="primary"

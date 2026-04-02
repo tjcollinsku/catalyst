@@ -1,0 +1,85 @@
+/* ── AI Summary Badge ─────────────────────────────────────── */
+
+.wrapper { display: inline-flex; flex-direction: column; gap: 0.4rem; }
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--accent-border, #334);
+    background: var(--surface-raised, #1a1a2e);
+    color: var(--accent-text, #8b9cf7);
+    font-size: var(--text-xs, 0.75rem);
+    cursor: pointer;
+    transition: all 150ms ease;
+    white-space: nowrap;
+}
+.badge:hover { background: var(--accent-bg-hover, #252545); border-color: var(--accent-text, #8b9cf7); }
+
+.icon { font-size: 0.8rem; line-height: 1; }
+.label { font-weight: 500; }
+
+/* States */
+.loading { opacity: 0.8; cursor: wait; }
+.error { border-color: var(--severity-high, #ef4444); color: var(--severity-high, #ef4444); }
+.loaded { border-color: var(--accent-text, #8b9cf7); }
+
+/* Spinner */
+.spinner {
+    display: inline-block;
+    width: 0.65rem;
+    height: 0.65rem;
+    border: 2px solid var(--accent-text, #8b9cf7);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Error tooltip */
+.errorTip {
+    font-size: var(--text-xs, 0.75rem);
+    color: var(--severity-high, #ef4444);
+    padding: 0.2rem 0;
+}
+
+/* ── Expanded panel ───────────────────────────────────────── */
+
+.panel {
+    background: var(--surface-raised, #1a1a2e);
+    border: 1px solid var(--accent-border, #334);
+    border-radius: 8px;
+    padding: 0.75rem;
+    font-size: var(--text-sm, 0.8125rem);
+    color: var(--text-main);
+    max-width: 380px;
+    animation: fadeIn 200ms ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+.summaryText { margin: 0 0 0.5rem; line-height: 1.5; }
+
+.section { margin-bottom: 0.5rem; }
+.sectionLabel { font-weight: 600; font-size: var(--text-xs, 0.75rem); text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); display: block; margin-bottom: 0.25rem; }
+
+.factList, .riskList {
+    margin: 0;
+    padding-left: 1.1rem;
+    list-style: disc;
+    line-height: 1.6;
+}
+.riskList { color: var(--severity-medium, #f59e0b); }
+
+/* Confidence bar */
+.confidence {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+.confLabel { font-size: var(--text-xs, 0.75rem); color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.confBar { flex: 1; height: 6px; background: var(--control-bg, #222); border-radius: 3px; overflow: hidden; }
+.confFill { height: 100%; background: linear-gradient(90deg, #0f62fe, #8b9cf7); border-radius: 3px; transition: width 400ms ease; }
+.confValue { font-size: var(--text-xs, 0.75rem); color: var(--text-muted); min-width: 2.5rem; text-align: right; }

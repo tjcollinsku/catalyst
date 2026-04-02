@@ -12,23 +12,31 @@ Use it to track:
 
 ## Current Open Tasks
 
-- **Run Osgood/Do Good case end-to-end** — create case, bulk upload ~100 docs in two batches, watch signals panel, create 4 referrals (FBI, State AG, IRS, FCA), generate memo
+- **Milestone 4: AI Memo Generation** — NOT STARTED per charter v3
+- **Milestone 5: Deploy** — NOT STARTED
+- ~~**Redesign signal/detection/finding UI**~~ — **COMPLETE (Session 27).** All 6 phases of FRONTEND_REDESIGN_GAMEPLAN.md implemented.
+- **Run Osgood/Do Good case end-to-end** — create case, bulk upload ~100 docs in two batches, watch pipeline, create 4 referrals (FBI, State AG, IRS, FCA), generate memo
+- Backend catch-up: `/api/search/`, `/api/cases/:id/export/`
 - Monitor OCC/CIC document classification accuracy — may need keyword rule tuning once actual docs are uploaded
 - Phase 3: Build investigator UI for fuzzy match candidate review (confirm/reject/merge)
-- Findings workflow — model exists, no API or UI yet
 - Case list pagination — hardcoded to 25
 - Phase 5 (future): Multi-state SOS connector support (same interface pattern as Ohio)
+- Frontend: Entity merge functionality — deferred, needs backend merge + audit log endpoint
+- Frontend: Processing status panel (async upload/OCR tracking) — deferred, needs backend websocket or polling endpoint
+- Frontend: Notification bell dropdown — placeholder button exists, needs backend notification model + API
 - **⚠️ MUST RETURN: Re-verify all CountyFusion counties once GovOS outage resolves** — see blocker below
 
 ## Immediate Next Steps
 
-- Stack is ready to run: CSRF fix is applied, bulk upload is wired, OCC/CIC types are added
-- **Restart both servers before starting the Osgood case:**
+- **Run full end-to-end demo** with the redesigned UI — verify graph, timeline, pipeline, and AI panel all work with real case data
+- **AI Memo Generation (Milestone 4)** — extend ai_proxy to generate formal referral memos
+- Key remaining backend endpoints:
+  1. `GET /api/search/?q=...&type=...&case_id=...` — full-text search
+  2. `GET /api/cases/<uuid>/export/?format=json|csv` — raw data export
+- Stack startup (unchanged):
   - Terminal 1 (backend): `cd C:\Users\tjcol\Catalyst\backend && ../.venv/Scripts/python.exe manage.py runserver`
   - Terminal 2 (frontend): `cd C:\Users\tjcol\Catalyst\frontend && npm run dev`
   - Open: http://localhost:5173
-- Upload documents in two batches of ≤50 files each (bulk endpoint limit is 50 per request)
-- Watch for OCC/CIC docs classifying as OTHER — if so, keyword rules in `classification.py` may need tuning
 - **After CF outage clears:** spot-check Seneca (key Osgood county) + ~5 other CF counties, then update checklist ❌ → ✅
 
 ## Current Blockers
@@ -41,6 +49,96 @@ Use it to track:
 - Seneca recorder phone (if urgent): 419-447-4476
 
 ## Session Recap Log
+
+### 2026-04-02 (Session 27) — Frontend Redesign COMPLETE (Phases 2–6)
+- **Phase 2 (Entity Graph):** Built D3 force-directed graph (EntityGraph.tsx) as OverviewTab centerpiece. Node shapes by entity type, signal count sizing, hover highlights, click-to-select, drag, zoom/pan. EntityProfilePanel slides in with type-specific metadata. Backend `api_case_graph()` endpoint gathers nodes/edges from 6 junction tables with CO_APPEARS_IN edge consolidation.
+- **Phase 3 (Timeline):** Built TimelineView.tsx with 4 toggle-able layers (document/signal/financial/transaction). Brush selection filters graph by date range. Click marker selects referenced entity. Two-way graph↔timeline synchronization.
+- **Phase 4 (Pipeline):** Built PipelineTab.tsx replacing 3 separate tabs. SOAR-style 5-stage status bar with dynamic counts. Quick-action buttons (Start Review, Confirm, Dismiss, Draft Finding, Publish). Signal/Detection/Finding detail panels. Added UNDER_REVIEW to SignalStatus model.
+- **Phase 5 (AI Integration):** Built `ai_proxy.py` (400 lines) with 4 AI functions, caching (10min TTL), rate limiting (10/min/case). Haiku for summarize, Sonnet for connections/narrative/ask. 4 Django POST views + URL routes. Frontend: AISummaryBadge component on pipeline cards + entity profiles. AIAssistantPanel with 6 quick actions + free-text chat, multi-turn conversation, source linking, follow-up suggestions. AI toggle button in AppShell topbar.
+- **Phase 6 (Polish):** Theme toggle (dark/light/auto) in topbar with smooth 200ms transition. Staggered card entrance animations. Loading skeletons (GraphSkeleton, TimelineSkeleton, KPI skeletons). Enhanced EmptyState component. Accessibility: skip-to-content link, ARIA live region for graph, ARIA labels, Escape-to-close, reduced motion support.
+- **Build:** tsc zero errors, vite build clean (684 modules, 425KB JS / 133KB gzip)
+- **Files:** 14 new components, 15+ modified files, 4 new backend endpoints, ~3000 lines of new code
+
+### 2026-04-02 (Session 26) — TS Fix, Investigative Platform Research, State Updates
+- Fixed remaining TypeScript errors in DetectionsTab.tsx (`evidence_snapshot` unknown→string casting)
+- `tsc --noEmit` passes with zero errors
+- Researched 9+ investigative platforms for UI/UX inspiration: Palantir Gotham/Foundry, Maltego, i2 Analyst's Notebook, NICE Actimize, Chainalysis Reactor, Splunk SOAR, Microsoft Sentinel, CrowdStrike Falcon, PANO OSINT
+- Key UI patterns identified: triage queue with quick-action buttons, severity+confidence dual-axis scoring, entity graph + timeline synchronized dual view, annotation-driven collaboration (private/shared notes), visual state machine for escalation flow, evidence chain visualization, narrative auto-generation for findings
+- Recommended 3-phase UI redesign: Phase 1 (signal queue + graph + evidence panel), Phase 2 (scoring dashboard + escalation + annotation), Phase 3 (case narrative builder + audit trail + export)
+- Updated CURRENT_STATE.md with sessions 24-26 work, resolved blockers, updated stats
+- Updated session tracker with current open tasks and next steps
+
+### 2026-04-02 (Session 25) — Blocker Cleanup + OverviewTab + Root Folder Reorganization
+- **Resolved TD-017 (Signal vs Detection overlap):** Rewrote `persist_signals()` to create Signal records instead of Detection records. Added `escalate_signal_to_detection()` bridge function. Updated signal detail PATCH to auto-escalate on CONFIRMED status.
+- **Resolved TD-016 (No Escalate to Finding button):** Added `onEscalateToFinding` prop to DetectionsPanel, "Escalate to Finding" button in UI, `handleEscalateToFinding()` handler in DetectionsTab that pre-fills findings from detection data.
+- **Resolved TD-015 (Parcel records):** Verified already working — `_extract_property_data()` runs for PARCEL_RECORD/DEED docs, SR-003/SR-018 evaluate property data.
+- Built OverviewTab — case intelligence dashboard with KPI cards, signal severity bars, top rules, pipeline health, financial overview, coverage audit
+- Added `api_case_dashboard()` and `api_case_coverage()` backend endpoints
+- Root folder cleanup: moved ~530MB of case evidence/reports/analysis/IRS bulk data into organized `case_data/` subdirectory. Archived legacy SQL migrations. Renamed `pc` → `scripts/pre-commit.sh`. Updated .gitignore.
+
+### 2026-04-01 (Session 24) — Signal Engine Expansion + AI Extraction + PDF Forensics
+- Expanded signal rules engine from 16 to 29 rules (SR-001 through SR-029)
+- Added 9 new signal type labels to frontend DetectionsPanel
+- Implemented AI-assisted entity extraction using Claude API
+- Added `extract_pdf_metadata()` using PyMuPDF — captures author, creator software, producer, creation/modification dates, page count, encryption status, form detection
+- Added `ingestion_metadata` JSONField to Document model for chain-of-custody forensic provenance
+- Wired PDF metadata extraction into upload pipeline between OCR and classification
+- Implemented forensic file rename on disk after filename generation
+- Updated FY2020 officer table and financial data in CASE_EVIDENCE_TRACKER.md
+- Generated migration 0018 for ingestion_metadata field
+
+### 2026-03-31 (Session 21) — Frontend Phases C, D, E Complete (Multi-View Redesign)
+
+**Scope:** Complete frontend redesign from single-page prototype into a multi-view application across 3 phases.
+
+#### Phase C — Cross-Case Views
+- **DashboardView** (`/`) — KPI cards (Total Cases, Open Signals, Entities, Referred Cases), severity breakdown bar chart, recently updated cases list, cross-case activity feed.
+- **TriageView** (`/triage`) — Cross-case signal triage queue with status/severity filters, expandable cards with quick-action triage buttons, note textarea, save with API call.
+- **ReferralsView** (`/referrals`) — Pipeline stage overview (DRAFT→SUBMITTED→ACKNOWLEDGED→CLOSED), filterable table, search by agency name.
+- **EntityBrowserView** (`/entities`) — Type filter pills, debounced search, table with type icons and entity-specific detail columns.
+- **EntityDetailView** (`/entities/:type/:id`) — Entity dossier with type-specific field layouts (person/org/property/financial instrument).
+- **CasesListView** — Added Kanban board toggle with 4-column layout (ACTIVE/PAUSED/REFERRED/CLOSED).
+- **4 backend endpoints added:** `GET /api/signals/` (cross-case), `GET /api/referrals/` (cross-case), `GET /api/entities/` (unions 4 model types), `GET /api/activity-feed/` (recent audit log).
+- **ShellContext** created — React context providing live sidebar badge counts (triage + draft referrals) and case name to the shell. Fetches on mount + 60s polling interval.
+
+#### Phase D — Advanced Features
+- **SearchView** (`/search`) — Client-side cross-case search across cases, signals, entities. Fans out to existing endpoints, scores by keyword relevance, displays AI Overview summary panel, type filter pills, ranked result cards.
+- **Legal citations** — 10 signal rules (SR-001 through SR-010) each display relevant ORC, IRC, and federal regulation citations as clickable links to authoritative sources. Data in `data/legalCitations.ts`.
+- **Investigation checklists** — Per-signal-type investigation step templates ("Investigators typically check...") with checkable items. State stored per-case in localStorage. Data in `data/investigationChecklists.ts`.
+- **PDF viewer** — Slide-over panel from right side with iframe PDF renderer, "Open externally" and "Download" links. Activated via "View" button on document rows.
+- **External search launchers** — 7 default sources (Google News, Newspapers.com, Legacy.com, Find-a-Grave, Ohio eCourts, PACER, Ohio SOS) on EntityDetailView. Configurable in Settings. Data in `data/externalSearchLaunchers.ts`.
+- **Enhanced SettingsView** — Left sub-nav with 4 sections: Appearance (theme), Keyboard (shortcut reference), External Search (full CRUD for launcher URLs), About (system info).
+- **Report generation / export** — JSON and CSV export buttons on ReferralsTab calling `GET /api/cases/:id/export/`.
+- **API additions:** `searchAll()`, `exportCaseReport()` functions in `api.ts`. Backend endpoints do not exist yet — frontend gracefully degrades.
+
+#### Phase E — Polish & Hardening
+- **Light theme CSS overhaul** — Replaced 30+ hardcoded dark-mode hex colors with 25 new CSS custom property tokens (`--card-bg`, `--control-bg`, `--form-bg`, `--tag-low-color`, `--shadow-card`, `--focus-ring`, etc.) with proper light/dark/auto values. All components now theme-aware.
+- **Command palette** — `Cmd+Shift+P` overlay with fuzzy-filtered navigation commands, arrow key selection, Enter to execute. Also wired G+key navigation (G+D=Dashboard, G+C=Cases, G+E=Entities, G+T=Triage, G+R=Referrals, G+S=Settings).
+- **Error boundary** — React class component wrapping the entire app, catches rendering crashes and shows friendly fallback with "Try Again" button.
+- **Accessibility** — ARIA landmarks on shell/sidebar/topbar, `aria-hidden` on decorative icons, `:focus-visible` global rule for keyboard focus rings, `role="main"` on content area.
+- **Dead code cleanup** — Removed `void checklistTick` hack, replaced with proper `[, setter]` destructure.
+- **Missing `.form-input` class** — Added CSS rule for settings launcher form inputs.
+
+#### Build Stats
+- **70 modules**, 257KB JS (78KB gzipped), 47KB CSS (9KB gzipped)
+- TypeScript: 0 errors, Vite build: clean
+- **13 routes**, 9 view components, 4 nested tab components, 2 context providers
+
+#### Files Created (this session)
+- `frontend/src/contexts/ShellContext.tsx`
+- `frontend/src/views/DashboardView.tsx`, `TriageView.tsx`, `ReferralsView.tsx`, `EntityBrowserView.tsx`, `EntityDetailView.tsx`
+- `frontend/src/data/legalCitations.ts`, `investigationChecklists.ts`, `externalSearchLaunchers.ts`
+- `frontend/src/components/ui/PdfViewer.tsx`, `CommandPalette.tsx`, `ErrorBoundary.tsx`
+- `backend/investigations/serializers.py` — 5 new serializer functions (person, org, property, financial instrument, audit log)
+- `backend/investigations/views.py` — 4 new view functions (signal_collection, referral_collection, entity_collection, activity_feed)
+- `backend/investigations/urls.py` — 4 new URL patterns
+
+#### Files Modified (this session)
+- `frontend/src/App.tsx`, `api.ts`, `types.ts`, `styles.css`
+- `frontend/src/layouts/AppShell.tsx`
+- `frontend/src/views/SearchView.tsx`, `SettingsView.tsx`, `CasesListView.tsx`, `CaseDetailView.tsx`
+- `frontend/src/components/cases/DocumentsTab.tsx`, `SignalsTab.tsx`, `ReferralsTab.tsx`
+- `frontend/src/components/ui/Sidebar.tsx`
 
 ### 2026-03-29 (Session 20) — Referral Workflow, Bulk Upload, OCC/CIC Types, CSRF Fix
 
