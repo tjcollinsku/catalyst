@@ -1,0 +1,46 @@
+# Version control
+.git
+.gitignore
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Local development files
+.env
+.env.*
+docker-compose.yml
+database/
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+
+# Node modules (rebuilt in Docker build stage)
+frontend/node_modules
+
+# Frontend build output (rebuilt in Docker build stage)
+frontend/dist
+
+# IDE / editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test / CI
+.github
+pytest-cache-files-*
+chromadb_data
+
+# Case data (never deploy local investigation files)
+case_data/
+Example Project Files/
+Irs 990 XML/

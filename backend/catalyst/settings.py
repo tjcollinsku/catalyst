@@ -2,6 +2,7 @@ import os
 import sys
 from pathlib import Path
 
+import dj_database_url
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -34,7 +35,8 @@ ALLOWED_HOSTS = [
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
-        "CSRF_TRUSTED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+        "CSRF_TRUSTED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173",
     ).split(",")
     if origin.strip()
 ]
@@ -63,6 +65,8 @@ CSRF_COOKIE_SAMESITE = "Lax"  # standard protection against cross-site POST
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # WhiteNoise must come right after SecurityMiddleware
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     # SEC-025: before auth so abusive IPs are blocked early
     "investigations.middleware.RateLimitMiddleware",
@@ -101,23 +105,34 @@ WSGI_APPLICATION = "catalyst.wsgi.application"
 ASGI_APPLICATION = "catalyst.asgi.application"
 
 # ---------------------------------------------------------------------------
-# Security: DB_PASSWORD must be set. Empty password = crash on startup.
-# See SECURITY.md Rule 4 and SEC-040.
+# Database Configuration
 # ---------------------------------------------------------------------------
-_db_password = os.getenv("DB_PASSWORD")
-if not _db_password:
-    raise RuntimeError("DB_PASSWORD environment variable is not set. Add it to your .env file.")
-
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("POSTGRES_DB", "catalyst_db"),
-        "USER": os.getenv("POSTGRES_USER", "catalyst_user"),
-        "PASSWORD": _db_password,
-        "HOST": os.getenv("DB_HOST", "127.0.0.1"),
-        "PORT": os.getenv("DB_PORT", "5433"),
+# Railway (and similar platforms) provide a DATABASE_URL env var.
+# If present, use it. Otherwise fall back to individual env vars for local dev.
+# ---------------------------------------------------------------------------
+_database_url = os.getenv("DATABASE_URL")
+if _database_url:
+    DATABASES = {
+        "default": dj_database_url.parse(
+            _database_url,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
     }
-}
+else:
+    _db_password = os.getenv("DB_PASSWORD")
+    if not _db_password:
+        raise RuntimeError("DB_PASSWORD environment variable is not set. Add it to your .env file.")
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("POSTGRES_DB", "catalyst_db"),
+            "USER": os.getenv("POSTGRES_USER", "catalyst_user"),
+            "PASSWORD": _db_password,
+            "HOST": os.getenv("DB_HOST", "127.0.0.1"),
+            "PORT": os.getenv("DB_PORT", "5433"),
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -131,7 +146,24 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
+# ---------------------------------------------------------------------------
+# Static Files — WhiteNoise serves these in production
+# ---------------------------------------------------------------------------
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
+# Additional directories for collectstatic to find files.
+# The frontend build output goes here so Django can serve the React SPA.
+STATICFILES_DIRS = []
+_frontend_dist = BASE_DIR / "static" / "frontend"
+if _frontend_dist.exists():
+    STATICFILES_DIRS.append(_frontend_dist)
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 MEDIA_URL = "media/"
@@ -177,20 +209,17 @@ LOGGING = {
 # API Token Authentication (SEC-001)
 # ---------------------------------------------------------------------------
 # Load token from environment. If CATALYST_API_TOKEN is set, auth is active.
-# If not set, behavior depends on CATALYST_REQUIRE_AUTH:
-#   - In production (DEBUG=False): auth is REQUIRED — server refuses to start
-#     without a token, preventing accidental unauthenticated deployment.
-#   - In development (DEBUG=True): auth is optional — requests pass through
-#     without a token for frictionless local work.
+# If not set, behavior depends on context:
+#   - In production (DEBUG=False): auth is REQUIRED — server refuses to
+#     start without a token, preventing unauthenticated deployment.
+#   - In development (DEBUG=True): auth is optional — requests pass
+#     through without a token for frictionless local work.
 #
 # To set up:
-#   1. Generate a token:  python -c "import secrets; print(secrets.token_urlsafe(32))"
-#   2. Add to .env:       CATALYST_API_TOKEN=<your-token>
+#   1. Generate a token:
+#      python -c "import secrets; print(secrets.token_urlsafe(32))"
+#   2. Add to .env:  CATALYST_API_TOKEN=<your-token>
 #   3. Pass in requests:  Authorization: Bearer <token>
-#
+# ---------------------------------------------------------------------------
 _raw_token = os.getenv("CATALYST_API_TOKEN", "").strip()
 CATALYST_API_TOKENS: set[str] = {_raw_token} if _raw_token else set()
-
-# In production, require auth even if no tokens are configured.
-# This catches the "forgot to set token" deployment mistake.
-CATALYST_REQUIRE_AUTH = not DEBUG

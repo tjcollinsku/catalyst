@@ -7,7 +7,15 @@ Pillow>=10.0,<12.0
 requests>=2.31,<3.0
 # Production WSGI server
 gunicorn>=22.0,<24.0
+# Static file serving in production
+whitenoise>=6.5,<7.0
+# Parse DATABASE_URL connection strings (Railway, Render, etc.)
+dj-database-url>=2.1,<3.0
 # CORS headers for cross-origin API access
 django-cors-headers>=4.3,<5.0
 # Anthropic Claude API for AI-powered entity extraction
 anthropic>=0.39,<1.0
+# Static file serving in production
+whitenoise>=6.5,<7.0
+# Parse DATABASE_URL connection strings (Railway, Render, etc.)
+dj-database-url>=2.1,<3.0
