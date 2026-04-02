@@ -1,0 +1,2 @@
+.control { border: 1px solid var(--control-border); border-radius: 10px; background: var(--control-bg); color: var(--text-main); padding: 0.5rem 0.55rem; font: inherit; width: 100%; min-width: 0; }
+.control:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }

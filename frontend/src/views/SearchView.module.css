@@ -1,0 +1,216 @@
+.searchViewHeader {
+    margin-bottom: 1.5rem;
+}
+
+.searchViewForm {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.5rem 1rem;
+}
+
+.searchViewForm .searchIcon {
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+.searchViewInput {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-main);
+    font-size: 1rem;
+    font-family: inherit;
+    outline: none;
+}
+
+.searchViewInput::placeholder {
+    color: var(--text-soft);
+}
+
+.searchViewSubmit {
+    padding: 0.4rem 1.2rem;
+    border-radius: 6px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-family: inherit;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.searchViewSubmit:hover {
+    opacity: 0.9;
+}
+
+.searchResultsHeader {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.searchResultsHeader h2 {
+    font-size: 1.1rem;
+    font-weight: 500;
+    margin: 0;
+}
+
+.referralCount {
+    font-size: 0.85rem;
+    color: var(--text-soft);
+}
+
+/* Type filter pills */
+.entityTypePills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.typePill {
+    padding: 0.4rem 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-soft);
+    font-size: 0.82rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.typePill:hover {
+    border-color: var(--accent);
+    background: var(--sidebar-hover);
+}
+
+.typePill.active {
+    border-color: var(--accent);
+    background: var(--sidebar-active);
+    color: var(--accent-strong);
+}
+
+/* AI Overview */
+.aiOverviewCard {
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.aiOverviewHeader {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.aiOverviewIcon {
+    font-size: 1rem;
+}
+
+.aiOverviewBody {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-main);
+    line-height: 1.55;
+}
+
+/* Loading hint */
+.loadingHint {
+    margin: 1.5rem 0;
+    padding: 0.75rem 1rem;
+    background: var(--sidebar-hover);
+    border-radius: 8px;
+    color: var(--text-soft);
+    font-size: 0.85rem;
+}
+
+/* Results list */
+.searchResultsList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.searchResultCard {
+    display: flex;
+    gap: 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    transition: border-color 0.15s;
+}
+
+.searchResultCard:hover {
+    border-color: var(--accent);
+}
+
+.searchResultLeft {
+    flex-shrink: 0;
+    width: 2rem;
+    text-align: center;
+    padding-top: 0.15rem;
+}
+
+.searchResultTypeIcon {
+    font-size: 1.1rem;
+}
+
+.searchResultContent {
+    flex: 1;
+    min-width: 0;
+}
+
+.searchResultTitle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.2rem;
+}
+
+.searchResultTypeBadge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--bg-haze);
+    color: var(--text-soft);
+}
+
+.searchResultSubtitle {
+    font-size: 0.75rem;
+    color: var(--text-soft);
+    margin-bottom: 0.3rem;
+}
+
+.searchResultSnippet {
+    font-size: 0.8rem;
+    color: var(--text-main);
+    line-height: 1.45;
+}
+
+.searchResultCase {
+    font-size: 0.72rem;
+    color: var(--text-soft);
+    margin-top: 0.25rem;
+}
+
+.searchResultRelevance {
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    color: var(--text-soft);
+    font-family: "IBM Plex Mono", monospace;
+    padding-top: 0.2rem;
+}

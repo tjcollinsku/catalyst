@@ -1,0 +1,350 @@
+.casesListHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.casesListHeader h2 {
+    margin: 0;
+    font-weight: 500;
+}
+
+.casesListActions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.casesListFilters {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.casesListFilters input[type="search"] {
+    flex: 1;
+    min-width: 180px;
+}
+
+.casesTableWrap {
+    overflow-x: auto;
+}
+
+.casesTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.casesTable thead th {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    font-weight: 500;
+    color: var(--text-soft);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+
+.casesTable tbody tr {
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+    transition: background 0.12s;
+}
+
+.casesTable tbody tr:hover,
+.casesTableRow.focused {
+    background: var(--sidebar-hover);
+}
+
+.casesTable td {
+    padding: 0.6rem 0.75rem;
+    vertical-align: middle;
+}
+
+.severityCell {
+    text-align: center;
+    font-size: 0.95rem;
+}
+
+.nameCell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.caseRowName {
+    font-weight: 500;
+    color: var(--text-main);
+}
+
+.caseRowRef {
+    font-size: 0.75rem;
+    color: var(--text-soft);
+}
+
+.numCell {
+    text-align: center;
+    color: var(--text-soft);
+}
+
+.timeCell {
+    white-space: nowrap;
+    color: var(--text-soft);
+    font-size: 0.8rem;
+}
+
+.statusPill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    background: var(--surface-strong);
+    color: var(--text-soft);
+    border: 1px solid var(--border);
+}
+
+.statusPill.statusActive {
+    color: var(--accent-strong);
+    border-color: var(--accent);
+}
+
+.statusPill.statusPaused {
+    color: var(--warn);
+    border-color: var(--warn);
+}
+
+.statusPill.statusReferred {
+    color: #a78bfa;
+    border-color: #a78bfa;
+}
+
+.statusPill.statusClosed {
+    color: var(--text-soft);
+    opacity: 0.7;
+}
+
+.casesTableFooter {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+    color: var(--text-soft);
+    border-top: 1px solid var(--line);
+}
+
+/* View toggle */
+.viewToggle {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.viewToggleBtn {
+    background: none;
+    border: none;
+    padding: 6px 10px;
+    cursor: pointer;
+    color: var(--text-soft);
+    font-size: 0.9rem;
+    line-height: 1;
+    transition: background 0.12s, color 0.12s;
+}
+
+.viewToggleBtn:hover {
+    background: var(--sidebar-hover);
+    color: var(--text-main);
+}
+
+.viewToggleBtn.active {
+    background: var(--sidebar-active);
+    color: var(--accent-strong);
+}
+
+/* Kanban Board */
+.kanbanBoard {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    min-height: 300px;
+}
+
+.kanbanColumn {
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.kanbanColumnHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--line);
+}
+
+.kanbanCount {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-soft);
+    background: var(--surface);
+    padding: 2px 6px;
+    border-radius: 8px;
+}
+
+.kanbanCards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex: 1;
+}
+
+.kanbanCard {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 0.75rem;
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.1s;
+    text-align: left;
+    font-family: inherit;
+    color: var(--text-main);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.kanbanCard:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+}
+
+.kanbanCardTop {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.kanbanSeverity {
+    font-size: 0.75rem;
+}
+
+.kanbanCardName {
+    font-weight: 500;
+    font-size: 0.82rem;
+}
+
+.kanbanCardRef {
+    font-size: 0.7rem;
+    color: var(--text-soft);
+}
+
+.kanbanCardMeta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: var(--text-soft);
+}
+
+.kanbanEmpty {
+    font-size: 0.75rem;
+    color: var(--text-soft);
+    text-align: center;
+    padding: 1rem 0;
+}
+
+/* Modal */
+.modalBackdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(4px);
+}
+
+.modalContent {
+    background: var(--surface-strong);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: min(440px, 90vw);
+    box-shadow: var(--shadow-modal);
+    animation: modalIn 0.18s ease-out;
+}
+
+@keyframes modalIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.modalHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--line);
+}
+
+.modalHeader h3 {
+    margin: 0;
+    font-weight: 500;
+}
+
+.modalClose {
+    background: none;
+    border: none;
+    color: var(--text-soft);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+
+.modalClose:hover {
+    background: var(--sidebar-hover);
+    color: var(--text-main);
+}
+
+.modalBody {
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.modalFooter {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid var(--line);
+}
+
+.formLabel {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 0.35rem;
+    color: var(--text-main);
+}
+
+.fieldError {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--danger);
+}

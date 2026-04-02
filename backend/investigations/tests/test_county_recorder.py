@@ -217,8 +217,8 @@ class RegistryCompletenessTests(unittest.TestCase):
                 )
 
     def test_cloud_search_template_counties(self):
-        """Carroll, Clark, Ottawa, Butler, Warren, Cuyahoga should have search_url_template.
-        Note: Sandusky was removed from this list — it is now CountyFusion, not Cloud Search."""
+        """Carroll, Clark, Ottawa, Butler should have search_url_template.
+        Note: Sandusky (CountyFusion) and Warren (Fidlar AVA) removed from this list."""
         template_counties = [
             OhioCounty.CARROLL,
             OhioCounty.CLARK,
@@ -295,9 +295,9 @@ class RegistryCompletenessTests(unittest.TestCase):
         """Holmes migrated from Laredo to Fidlar AVA."""
         self.assertEqual(_REGISTRY[OhioCounty.HOLMES].system, RecorderSystem.FIDLAR_AVA)
 
-    def test_warren_is_cloud_search(self):
-        """Warren migrated from Laredo to GovOS Cloud Search."""
-        self.assertEqual(_REGISTRY[OhioCounty.WARREN].system, RecorderSystem.GOVOS_CLOUD_SEARCH)
+    def test_warren_is_fidlar_ava(self):
+        """Warren corrected 2026-03-28: uses Fidlar AVA (not GovOS Cloud Search)."""
+        self.assertEqual(_REGISTRY[OhioCounty.WARREN].system, RecorderSystem.FIDLAR_AVA)
 
     def test_wood_is_fidlar_ava(self):
         """Wood migrated from Laredo to Fidlar AVA."""
@@ -327,9 +327,9 @@ class RegistryCompletenessTests(unittest.TestCase):
         """Trumbull migrated from CountyFusion to DTS PAXWorld (May 2023)."""
         self.assertEqual(_REGISTRY[OhioCounty.TRUMBULL].system, RecorderSystem.DTS_PAXWORLD)
 
-    def test_mercer_is_fidlar_ava(self):
-        """Mercer migrated from CountyFusion to Fidlar AVA."""
-        self.assertEqual(_REGISTRY[OhioCounty.MERCER].system, RecorderSystem.FIDLAR_AVA)
+    def test_mercer_is_custom(self):
+        """Mercer corrected 2026-03-28: uses LandmarkWeb (Custom), not Fidlar AVA."""
+        self.assertEqual(_REGISTRY[OhioCounty.MERCER].system, RecorderSystem.CUSTOM)
 
     def test_meigs_is_compiled_tech(self):
         """Meigs uses Compiled Technologies IDX — confirmed working by user 2026-03-28."""
@@ -415,8 +415,8 @@ class ListCountiesTests(unittest.TestCase):
 
     def test_filter_cloud_search(self):
         cloud = list_counties(system=RecorderSystem.GOVOS_CLOUD_SEARCH)
-        # Carroll, Clark, Ottawa, Franklin, Butler, Warren, Cuyahoga = at least 7
-        self.assertGreaterEqual(len(cloud), 7)
+        # Carroll, Clark, Ottawa, Franklin, Butler, Cuyahoga + others = at least 6
+        self.assertGreaterEqual(len(cloud), 6)
         for county in cloud:
             self.assertEqual(_REGISTRY[county].system, RecorderSystem.GOVOS_CLOUD_SEARCH)
 
@@ -428,17 +428,17 @@ class ListCountiesTests(unittest.TestCase):
         for county in ava:
             self.assertEqual(_REGISTRY[county].system, RecorderSystem.FIDLAR_AVA)
 
-    def test_filter_laredo_legacy(self):
-        """LAREDO is a legacy enum value. After the audit, no counties are assigned
-        to it in the registry — the enum is kept for historical reference and the
-        requires_login logic in get_search_url."""
+    def test_filter_laredo(self):
+        """LAREDO has Miami County after the 2026-03-28 audit correction
+        (migrated from Fidlar AVA to Fidlar Laredo)."""
         laredo = list_counties(system=RecorderSystem.LAREDO)
-        self.assertEqual(len(laredo), 0)
+        self.assertEqual(len(laredo), 1)
+        self.assertIn(OhioCounty.MIAMI, laredo)
 
     def test_filter_uslandrecords(self):
-        """After audit, only Madison and Pike remain on USLandRecords (Avenu Insights)."""
+        """After audit, only Madison remains on USLandRecords (Pike moved to CUSTOM)."""
         uslr = list_counties(system=RecorderSystem.USLANDRECORDS)
-        self.assertGreaterEqual(len(uslr), 2)
+        self.assertGreaterEqual(len(uslr), 1)
         for county in uslr:
             self.assertEqual(_REGISTRY[county].system, RecorderSystem.USLANDRECORDS)
 
@@ -550,10 +550,10 @@ class GetSearchUrlTests(unittest.TestCase):
         result = get_search_url(OhioCounty.SENECA)
         self.assertTrue(result.requires_login)
 
-    def test_uslandrecords_no_login(self):
-        """Madison County is on USLandRecords (Avenu) — no login required."""
+    def test_uslandrecords_requires_login(self):
+        """Madison County is on USLandRecords (Avenu) — requires free registration."""
         result = get_search_url(OhioCounty.MADISON)
-        self.assertFalse(result.requires_login)
+        self.assertTrue(result.requires_login)
 
     def test_custom_no_login(self):
         """Delaware County uses a custom portal — no login required."""

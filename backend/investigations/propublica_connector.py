@@ -64,6 +64,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
 
 import requests
 
@@ -463,6 +464,42 @@ def fetch_filings(ein: int) -> list[Filing]:
 # ---------------------------------------------------------------------------
 
 
+# SEC-016: Allowed domains for ProPublica PDF URLs
+_PROPUBLICA_ALLOWED_DOMAINS = {
+    "projects.propublica.org",
+    "pp990s3.s3.amazonaws.com",       # legacy S3 hosting
+    "apps.irs.gov",                     # IRS direct links sometimes appear
+}
+
+
+def _validate_propublica_url(url: str | None) -> str | None:
+    """Validate that a PDF URL comes from a trusted ProPublica domain.
+
+    SEC-016: If the ProPublica API were compromised, malicious URLs could be
+    injected. This check rejects any URL whose domain isn't in our allowlist.
+    """
+    if not url:
+        return None
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        logger.warning("propublica_invalid_url", extra={"url": url})
+        return None
+
+    if parsed.scheme not in ("http", "https"):
+        logger.warning("propublica_url_bad_scheme", extra={"url": url, "scheme": parsed.scheme})
+        return None
+
+    if parsed.hostname not in _PROPUBLICA_ALLOWED_DOMAINS:
+        logger.warning(
+            "propublica_url_untrusted_domain",
+            extra={"url": url, "domain": parsed.hostname},
+        )
+        return None
+
+    return url
+
+
 def _parse_filing_with_data(raw: dict) -> Filing:
     """Parse a filing record from the filings_with_data list."""
     tax_period = int(raw["tax_prd"])
@@ -472,7 +509,7 @@ def _parse_filing_with_data(raw: dict) -> Filing:
         tax_period=tax_period,
         tax_year=tax_year,
         form_type=str(raw.get("formtype") or "990"),
-        pdf_url=raw.get("pdf_url") or None,
+        pdf_url=_validate_propublica_url(raw.get("pdf_url")),
         total_revenue=_safe_float(raw.get("totrevenue")),
         total_expenses=_safe_float(raw.get("totfuncexpns")),
         total_assets_eoy=_safe_float(raw.get("totassetsend")),
@@ -495,7 +532,7 @@ def _parse_filing_without_data(raw: dict) -> Filing:
         tax_period=tax_period,
         tax_year=tax_year,
         form_type=str(raw.get("formtype") or raw.get("form_type") or "990"),
-        pdf_url=raw.get("pdf_url") or None,
+        pdf_url=_validate_propublica_url(raw.get("pdf_url")),
         filing_raw=raw,
     )
 

@@ -1,0 +1,148 @@
+/* ReferralsPanel styles */
+
+.referralsPanel {
+    display: grid;
+    gap: 0.6rem;
+}
+
+.referralsPanelHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.referralsPanelHeader h3 {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.referralCard {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.75rem;
+    background: var(--card-bg-alt);
+}
+
+.referralForm {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.85rem;
+    background: var(--form-bg);
+    display: grid;
+    gap: 0.5rem;
+}
+
+.referralForm h4 {
+    margin: 0;
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+    font-weight: 500;
+}
+
+.referralView {
+    display: grid;
+    gap: 0.3rem;
+}
+
+.referralRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.referralRow strong {
+    font-size: 0.95rem;
+}
+
+.referralMeta {
+    color: var(--text-soft);
+    font-size: 0.83rem;
+}
+
+.referralNotes {
+    font-size: 0.87rem;
+    color: var(--text-main);
+    line-height: 1.45;
+    margin-top: 0.15rem;
+}
+
+.referralDate {
+    font-size: 0.78rem;
+}
+
+.referralActions {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.4rem;
+}
+
+.referralActions button {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.82rem;
+}
+
+.referralEdit {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.referralStatus {
+    font-size: 0.72rem;
+    font-weight: 500;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+}
+
+.referralStatusDraft {
+    background: var(--tag-neutral-bg);
+    color: var(--tag-neutral-color);
+}
+
+.referralStatusSubmitted {
+    background: var(--sidebar-active);
+    color: var(--accent-strong);
+}
+
+.referralStatusAcknowledged {
+    background: var(--tag-low-bg);
+    color: var(--tag-low-color);
+}
+
+.referralStatusClosed {
+    background: var(--tag-neutral-bg);
+    color: var(--text-soft);
+}
+
+.formRow {
+    display: grid;
+    gap: 0.3rem;
+}
+
+.formRow label {
+    font-size: 0.78rem;
+    color: var(--text-soft);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+
+.formActions {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+.loadingHint {
+    margin: 0;
+    color: var(--text-soft);
+    font-size: 0.85rem;
+}
+
+.card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.75rem;
+}

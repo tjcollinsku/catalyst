@@ -1,0 +1,48 @@
+/* DashboardMetrics styles */
+
+.kpiGrid {
+    display: grid;
+    gap: 0.8rem;
+    margin-bottom: 1rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.kpiCard {
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    padding: 0.8rem 0.9rem;
+    background: var(--card-bg);
+}
+
+.kpiCard span {
+    display: block;
+    font-size: 0.76rem;
+    letter-spacing: 0.03em;
+    color: var(--text-soft);
+}
+
+.kpiCard strong {
+    display: block;
+    margin-top: 0.15rem;
+    font-size: 1.22rem;
+    color: var(--kpi-value-color);
+    font-weight: 600;
+}
+
+.kpiCard p {
+    margin: 0.15rem 0 0;
+    color: var(--text-soft);
+    font-size: 0.8rem;
+}
+
+@media (max-width: 940px) {
+    .kpiGrid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 620px) {
+    .kpiGrid {
+        grid-template-columns: 1fr;
+    }
+}

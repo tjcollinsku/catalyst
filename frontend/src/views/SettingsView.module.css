@@ -1,0 +1,281 @@
+.settingsLayout {
+    display: flex;
+    gap: 2rem;
+    min-height: 400px;
+}
+
+.settingsNav {
+    flex-shrink: 0;
+    width: 180px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.settingsNavItem {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-soft);
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.12s;
+}
+
+.settingsNavItem:hover {
+    background: var(--sidebar-hover);
+    color: var(--text-main);
+}
+
+.settingsNavItem.active {
+    background: var(--sidebar-active);
+    color: var(--accent-strong);
+    font-weight: 500;
+}
+
+.settingsContent {
+    flex: 1;
+    max-width: 700px;
+}
+
+.settingsContent h2 {
+    margin: 0 0 1.25rem;
+    font-weight: 500;
+    font-size: 1.15rem;
+}
+
+.infoCard {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.settingsCard {
+    padding: 1.25rem;
+}
+
+.settingsThemeOptions {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.settingsThemeBtn {
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-soft);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: border-color 0.15s;
+}
+
+.settingsThemeBtn.active {
+    border-color: var(--accent);
+    background: var(--sidebar-active);
+    color: var(--accent-strong);
+}
+
+.settingsHint {
+    font-size: 0.78rem;
+    color: var(--text-soft);
+    margin: 0;
+}
+
+.settingsDesc {
+    font-size: 0.82rem;
+    color: var(--text-soft);
+    margin: 0 0 1rem;
+}
+
+.settingsDesc code {
+    background: var(--bg-haze);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.78rem;
+}
+
+/* Shortcuts table */
+.shortcutsTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.shortcutsTable th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--text-soft);
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.shortcutsTable td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--line);
+}
+
+.shortcutsTable kbd {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-haze);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    font-weight: 500;
+}
+
+/* Launcher table */
+.launcherTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+    margin-bottom: 1rem;
+}
+
+.launcherTable th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--text-soft);
+    padding: 0.5rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.launcherTable td {
+    padding: 0.45rem 0.5rem;
+    border-bottom: 1px solid var(--line);
+}
+
+.launcherUrlCell {
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.launcherUrlCell code {
+    font-size: 0.72rem;
+    color: var(--text-soft);
+}
+
+.launcherActions {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.launcherActionBtn {
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-soft);
+    font-size: 0.72rem;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.launcherActionBtn:hover {
+    background: var(--bg-haze);
+    color: var(--text-main);
+}
+
+.launcherActionBtn.danger {
+    color: var(--danger);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.launcherActionBtn.danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.launcherForm {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+.launcherForm .formInput {
+    flex: 1;
+    min-width: 140px;
+}
+
+.launcherReset {
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--line);
+}
+
+.btnPrimary {
+    padding: 0.4rem 0.85rem;
+    border-radius: 6px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.btnPrimary:hover {
+    opacity: 0.9;
+}
+
+.btnSecondary {
+    padding: 0.4rem 0.85rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-soft);
+    font-family: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.btnSecondary:hover {
+    background: var(--bg-haze);
+    color: var(--text-main);
+}
+
+/* About fields */
+.aboutFields {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 0.5rem 1rem;
+    font-size: 0.85rem;
+}
+
+.aboutFields dt {
+    color: var(--text-soft);
+    font-weight: 500;
+}
+
+.aboutFields dd {
+    margin: 0;
+}
+
+.formInput {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    font-family: inherit;
+    font-size: 0.85rem;
+    color: var(--text-main);
+}
+
+.formInput:focus {
+    outline: none;
+    border-color: var(--accent);
+}
