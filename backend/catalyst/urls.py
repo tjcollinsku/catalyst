@@ -3,9 +3,8 @@ import os
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.urls import include, path, re_path
-from django.views.generic import TemplateView
 
 
 def health_check(request):
@@ -25,26 +24,35 @@ urlpatterns = [
 # In development, Vite dev server handles this instead.
 # ---------------------------------------------------------------------------
 if not settings.DEBUG:
-    # Serve index.html for any route that doesn't match an API endpoint.
-    # WhiteNoise serves the JS/CSS assets; this just handles the HTML entry.
-    _frontend_index = os.path.join(settings.STATIC_ROOT, "frontend", "index.html")
+    # Look for index.html in multiple possible locations
+    _possible_paths = [
+        os.path.join(settings.STATIC_ROOT, "frontend", "index.html"),
+        os.path.join(settings.BASE_DIR, "static", "frontend", "index.html"),
+    ]
 
-    class SPAView(TemplateView):
-        template_name = None
+    def _find_index_html():
+        for p in _possible_paths:
+            if os.path.exists(p):
+                return p
+        return None
 
-        def get(self, request, *args, **kwargs):
-            try:
-                with open(_frontend_index) as f:
-                    html = f.read()
-                from django.http import HttpResponse
-
-                return HttpResponse(html, content_type="text/html")
-            except FileNotFoundError:
-                return JsonResponse(
-                    {"error": "Frontend not built"},
-                    status=404,
-                )
+    def spa_view(request):
+        index_path = _find_index_html()
+        if index_path:
+            with open(index_path) as f:
+                html = f.read()
+            return HttpResponse(html, content_type="text/html")
+        # Debug info to help diagnose path issues
+        return JsonResponse(
+            {
+                "error": "Frontend not built",
+                "searched": _possible_paths,
+                "static_root": str(settings.STATIC_ROOT),
+                "base_dir": str(settings.BASE_DIR),
+            },
+            status=404,
+        )
 
     urlpatterns += [
-        re_path(r"^(?!api/|admin/|static/|media/).*$", SPAView.as_view()),
+        re_path(r"^(?!api/|admin/|static/|media/).*$", spa_view),
     ]
