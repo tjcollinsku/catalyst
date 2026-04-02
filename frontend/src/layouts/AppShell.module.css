@@ -1,0 +1,176 @@
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.shellMain {
+  flex: 1;
+  margin-left: 240px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--bg-ink);
+  border-bottom: 1px solid var(--border);
+  padding: 0.65rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.topbarRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.topbarSearch {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.45rem 0.75rem;
+  transition: border-color 150ms ease;
+}
+
+.topbarSearch:focus-within {
+  border-color: var(--accent);
+}
+
+.searchIcon {
+  color: var(--text-soft);
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  border: none;
+  background: none;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.searchInput::placeholder {
+  color: var(--text-soft);
+}
+
+.searchHint {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.65rem;
+  color: var(--text-soft);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.topbarActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.notificationBell {
+  position: relative;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.notificationBell:hover {
+  color: var(--text-main);
+  border-color: var(--accent);
+}
+
+.bellBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--badge-red);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.05rem 0.35rem;
+  border-radius: 8px;
+  min-width: 1rem;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* ── AI toggle button ─────────────────────────────────────── */
+
+.aiToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem 0.6rem;
+  color: var(--text-soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  transition: all 150ms ease;
+}
+
+.aiToggle:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.aiToggleActive {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.aiToggleIcon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.aiToggleLabel {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ── Theme toggle button ─────────────────────────────────── */
+
+.themeToggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.themeToggle:hover {
+  color: var(--text-main);
+  border-color: var(--accent);
+}
+
+.viewContent {
+  flex: 1;
+  padding: 1.5rem;
+  max-width: 1200px;
+}

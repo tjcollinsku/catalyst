@@ -39,6 +39,15 @@ _RULES: dict[str, list[tuple[re.Pattern, int]]] = {
         (re.compile(r"\bmarket value\b", re.I), 5),
         (re.compile(r"\bproperty card\b", re.I), 7),
         (re.compile(r"\bowner name\b", re.I), 4),
+        # Darke County / Ohio auditor parcel card patterns
+        (re.compile(r"\bTownship\b.*\bSchool District\b", re.I | re.DOTALL), 8),
+        (re.compile(r"\bMunicipality\b.*\bTownship\b", re.I | re.DOTALL), 7),
+        (re.compile(r"\bAppraised\s+\(100%\)", re.I), 10),
+        (re.compile(r"\bAssessed\s+\(35%\)", re.I), 10),
+        (re.compile(r"\bSOLD:\s+\d{1,2}/\d{1,2}/\d{4}", re.I), 9),
+        (re.compile(r"\bdarkecountyrealestate\.org\b", re.I), 10),
+        (re.compile(r"\bDeeded\s+Owner\s+Address\b", re.I), 8),
+        (re.compile(r"\bLegal\s+Acres\b", re.I), 7),
     ],
     "RECORDER_INSTRUMENT": [
         (re.compile(r"\binstrument\s*(?:no\.?|number)\b", re.I), 10),

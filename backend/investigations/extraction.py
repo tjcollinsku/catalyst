@@ -165,10 +165,155 @@ def _extract_text_ocr(absolute_path: str) -> str:
     return "\n\n".join(pages).strip()
 
 
+def _validate_pdf_header(absolute_path: str) -> bool:
+    """Check that the file starts with the PDF magic bytes (%PDF-).
+
+    SEC-014: Prevents processing of non-PDF files that have been
+    renamed to .pdf (e.g., executables, scripts, or other binaries).
+    Valid PDFs always start with %PDF-1.x or higher.
+    """
+    try:
+        with open(absolute_path, "rb") as f:
+            header = f.read(5)
+        return header == b"%PDF-"
+    except (OSError, IOError):
+        return False
+
+
+def extract_pdf_metadata(absolute_path: str) -> dict:
+    """
+    Extract PDF document metadata for chain-of-custody tracking.
+
+    Uses PyMuPDF to read the PDF info dictionary, which includes creation
+    software, timestamps, author, and structural details. This metadata is
+    critical for forensic provenance — it tells the investigator:
+      - WHO created the PDF (author field)
+      - WHAT software created it (producer/creator)
+      - WHEN it was created and last modified
+      - HOW MANY pages it contains
+      - WHETHER it has forms (interactive fields that may have been filled)
+
+    Returns a dict with keys:
+        title, author, subject, creator, producer, creation_date,
+        modification_date, page_count, has_forms, encrypted, pdf_version,
+        file_format_detail
+
+    All values are strings or ints. Missing values default to "".
+    Never raises — returns a partial dict on any error.
+    """
+    meta = {
+        "title": "",
+        "author": "",
+        "subject": "",
+        "creator": "",
+        "producer": "",
+        "creation_date": "",
+        "modification_date": "",
+        "page_count": 0,
+        "has_forms": False,
+        "encrypted": False,
+        "pdf_version": "",
+        "file_format_detail": "",
+    }
+
+    try:
+        with fitz.open(absolute_path) as doc:
+            meta["page_count"] = len(doc)
+            meta["encrypted"] = doc.is_encrypted
+
+            # PDF version from the header (e.g. "1.7", "2.0")
+            # PyMuPDF stores it in metadata or we can read from the header
+            info = doc.metadata or {}
+
+            meta["title"] = (info.get("title") or "").strip()
+            meta["author"] = (info.get("author") or "").strip()
+            meta["subject"] = (info.get("subject") or "").strip()
+            meta["creator"] = (info.get("creator") or "").strip()
+            meta["producer"] = (info.get("producer") or "").strip()
+            meta["pdf_version"] = (info.get("format") or "").strip()
+
+            # Dates come as PDF date strings: "D:20220915120000-04'00'"
+            # PyMuPDF normalizes them to ISO-ish strings in metadata
+            raw_creation = (info.get("creationDate") or "").strip()
+            raw_mod = (info.get("modDate") or "").strip()
+            meta["creation_date"] = _normalize_pdf_date(raw_creation)
+            meta["modification_date"] = _normalize_pdf_date(raw_mod)
+
+            # Check for form fields (AcroForms / XFA)
+            # A PDF with form fields may have been filled programmatically
+            try:
+                for page in doc:
+                    widgets = page.widgets()
+                    if widgets:
+                        # widgets() returns a generator; check first item
+                        first = next(widgets, None)
+                        if first is not None:
+                            meta["has_forms"] = True
+                            break
+            except Exception:
+                pass  # Some PDFs have malformed widget annotations
+
+            # Build a human-readable format detail string
+            parts = []
+            if meta["pdf_version"]:
+                parts.append(meta["pdf_version"])
+            parts.append(f"{meta['page_count']} pages")
+            if meta["encrypted"]:
+                parts.append("encrypted")
+            if meta["has_forms"]:
+                parts.append("has forms")
+            meta["file_format_detail"] = ", ".join(parts)
+
+    except Exception:
+        logger.exception(
+            "pdf_metadata_extraction_failed",
+            extra={"path": absolute_path},
+        )
+
+    return meta
+
+
+def _normalize_pdf_date(raw: str) -> str:
+    """
+    Convert a PDF date string to ISO 8601 format.
+
+    PDF dates look like: D:20220915120000-04'00' or D:20220915
+    We extract the date components and return YYYY-MM-DDTHH:MM:SS or
+    YYYY-MM-DD if time components aren't available.
+
+    Returns "" if the input can't be parsed.
+    """
+    import re
+
+    if not raw:
+        return ""
+
+    # Strip the "D:" prefix if present
+    cleaned = raw.replace("D:", "").strip()
+
+    # Match: YYYYMMDDHHMMSS with optional timezone
+    m = re.match(
+        r"(\d{4})(\d{2})(\d{2})"        # YYYYMMDD
+        r"(?:(\d{2})(\d{2})(\d{2}))?"    # HHMMSS (optional)
+        r"(?:[+\-Z].*)?",                 # timezone (ignored)
+        cleaned,
+    )
+    if not m:
+        return ""
+
+    year, month, day = m.group(1), m.group(2), m.group(3)
+    hour, minute, sec = m.group(4), m.group(5), m.group(6)
+
+    if hour and minute and sec:
+        return f"{year}-{month}-{day}T{hour}:{minute}:{sec}"
+    return f"{year}-{month}-{day}"
+
+
 def extract_from_pdf(absolute_path: str, file_size: int = 0) -> tuple[str, str]:
     """
     Extract text from a PDF using a two-stage pipeline:
 
+      Stage 0 — Magic bytes validation: rejects non-PDF files.
       Stage 1 — Direct extraction (PyMuPDF): fast, works on digital PDFs.
       Stage 2 — OCR fallback (Tesseract): used when Stage 1 returns sparse
                  text and the file is within the synchronous size limit.
@@ -186,6 +331,17 @@ def extract_from_pdf(absolute_path: str, file_size: int = 0) -> tuple[str, str]:
           - OcrStatus.FAILED      — unexpected error during extraction or OCR
     """
     from .models import OcrStatus
+
+    # Stage 0: SEC-014 — Validate PDF magic bytes before processing
+    if not _validate_pdf_header(absolute_path):
+        logger.warning(
+            "pdf_invalid_header",
+            extra={
+                "path": absolute_path,
+                "detail": "File does not start with %PDF- magic bytes. Rejecting.",
+            },
+        )
+        return "", OcrStatus.FAILED
 
     # Stage 1: direct text extraction
     try:

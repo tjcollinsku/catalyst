@@ -1,0 +1,379 @@
+/*
+ * Catalyst Shared Global Styles
+ * ─────────────────────────────────────────────
+ * Cross-cutting classes used by multiple components.
+ * These are global (not CSS Modules) because they're
+ * referenced by string in many TSX files.
+ *
+ * Over time, these should migrate into CSS Modules too.
+ */
+
+/* ── Panels ──────────────────────────────────────────── */
+
+.panel {
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--surface);
+    backdrop-filter: blur(8px);
+    box-shadow: var(--shadow-card);
+}
+
+.panel-list {
+    padding: 0.8rem;
+}
+
+.panel-detail {
+    padding: 1rem;
+}
+
+.panel-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.panel-heading h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 500;
+}
+
+.panel-heading span {
+    color: var(--text-soft);
+    font-size: 0.85rem;
+}
+
+/* ── Info card (reusable card container) ──────────────── */
+
+@keyframes stagger-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.info-card {
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    padding: 0.9rem;
+    background: var(--card-bg);
+    margin-bottom: 0.75rem;
+    opacity: 0;
+    animation: stagger-in 300ms ease-out forwards;
+}
+
+.info-card h3 {
+    margin: 0 0 0.6rem;
+    font-size: 0.95rem;
+}
+
+.info-card p {
+    margin: 0;
+    line-height: 1.45;
+}
+
+.card-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+}
+
+.card-toolbar h3 {
+    margin: 0;
+}
+
+.compact-filters {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.compact-filters select {
+    padding: 0.45rem 0.5rem;
+    min-width: 0;
+    width: auto;
+}
+
+/* ── Table ────────────────────────────────────────────── */
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    text-align: left;
+    padding: 0.5rem 0.55rem;
+    font-size: 0.84rem;
+    border-bottom: 1px solid var(--border);
+}
+
+th {
+    font-weight: 500;
+    color: var(--table-header-color);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* ── Tags ─────────────────────────────────────────────── */
+
+.tag {
+    display: inline-flex;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 500;
+}
+
+.tag.low {
+    background: var(--tag-low-bg);
+    color: var(--tag-low-color);
+}
+
+.tag.medium {
+    background: var(--tag-med-bg);
+    color: var(--tag-med-color);
+}
+
+.tag.high,
+.tag.critical {
+    background: var(--tag-high-bg);
+    color: var(--tag-high-color);
+}
+
+.tag.neutral {
+    background: var(--tag-neutral-bg);
+    color: var(--tag-neutral-color);
+}
+
+/* ── Severity bars (overview) ────────────────────────── */
+
+.severity-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.severity-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.severity-bar-label {
+    width: 80px;
+    font-size: 0.78rem;
+    color: var(--text-soft);
+    text-transform: capitalize;
+}
+
+.severity-bar-track {
+    flex: 1;
+    height: 8px;
+    background: var(--state-block-bg);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.severity-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 500ms ease-out;
+}
+
+.severity-bar-count {
+    width: 30px;
+    text-align: right;
+    font-size: 0.78rem;
+    color: var(--text-soft);
+    font-family: var(--font-mono);
+}
+
+/* ── Form helpers ─────────────────────────────────────── */
+
+.field-error {
+    margin: -0.15rem 0 0;
+    color: var(--field-error-color);
+    font-size: 0.8rem;
+}
+
+.text-muted {
+    color: var(--text-soft);
+    font-size: 0.84rem;
+}
+
+/* ── Tab loading / error states ──────────────────────── */
+
+.tab-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    color: var(--text-soft);
+    font-size: 0.9rem;
+}
+
+.tab-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    color: var(--danger);
+    font-size: 0.9rem;
+}
+
+/* ── Buttons (shared) ────────────────────────────────── */
+
+.btn-primary {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background: linear-gradient(150deg, #0f62fe, #2f7bff);
+    color: #fff;
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.btn-primary:hover {
+    transform: translateY(-1px);
+}
+
+/* ── Financials table ─────────────────────────────────── */
+
+.financials-table-wrap {
+    overflow-x: auto;
+    margin-top: 0.75rem;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+}
+
+.financials-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.financials-table th,
+.financials-table td {
+    padding: 0.45rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+    text-align: right;
+}
+
+.financials-table th {
+    background: var(--surface);
+    color: var(--table-header-color);
+    font-weight: 500;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.financials-table .line-item-col {
+    text-align: left;
+    min-width: 160px;
+}
+
+.financials-table .year-col {
+    min-width: 100px;
+}
+
+.financials-table .line-item-label {
+    text-align: left;
+    color: var(--text-main);
+}
+
+.financials-table .group-header-row td {
+    background: var(--surface);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--accent-strong);
+    text-align: left;
+    padding-top: 0.65rem;
+    border-bottom: 2px solid var(--border);
+}
+
+.financials-table .total-row td {
+    font-weight: 600;
+    border-top: 2px solid var(--border);
+}
+
+.financials-table .amount-cell {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+}
+
+/* ── PdfViewer entity/financial display classes ───────── */
+
+.entity-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.role-tags {
+    color: var(--text-soft);
+    font-size: 0.8rem;
+}
+
+.ein {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-soft);
+}
+
+.context-note {
+    color: var(--text-soft);
+    font-size: 0.8rem;
+    margin: 0.2rem 0 0;
+}
+
+.hash-value {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-soft);
+    word-break: break-all;
+}
+
+.info-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+/* ── Responsive breakpoints (shared) ─────────────────── */
+
+@media (max-width: 768px) {
+    .panel-list {
+        padding: 0.5rem;
+    }
+
+    .panel-detail {
+        padding: 0.75rem;
+    }
+}

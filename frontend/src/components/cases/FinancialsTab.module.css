@@ -1,0 +1,116 @@
+/* ══════════════════════════════════════════════════════════════
+   Financials Tab — Year-over-Year Table
+   ══════════════════════════════════════════════════════════════ */
+
+.financialsTab h3 {
+    margin: 0 0 4px;
+}
+
+.financialsTableWrap {
+    overflow-x: auto;
+    margin-top: 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.financialsTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.financialsTable th,
+.financialsTable td {
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--line);
+    text-align: right;
+    white-space: nowrap;
+}
+
+.financialsTable th {
+    background: var(--surface-strong);
+    color: var(--table-header-color, var(--text-soft));
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.lineItemCol {
+    text-align: left;
+    min-width: 200px;
+}
+
+.yearCol {
+    min-width: 130px;
+}
+
+.lineItemLabel {
+    text-align: left;
+    color: var(--text-main);
+}
+
+.groupHeaderRow td {
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent-strong, var(--accent));
+    background: var(--surface);
+    padding: 10px 12px 5px;
+    border-bottom: 2px solid var(--border);
+}
+
+.totalRow td {
+    font-weight: 600;
+    border-top: 1px solid var(--border);
+}
+
+.amountCell {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.82rem;
+}
+
+/* YoY badges */
+.yoyBadge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 500;
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.yoyUp {
+    background: var(--tag-low-bg);
+    color: var(--tag-low-color);
+}
+
+.yoyDown {
+    background: var(--tag-high-bg);
+    color: var(--tag-high-color);
+}
+
+.yoyFlag {
+    background: var(--tag-high-bg);
+    color: var(--tag-high-color);
+    font-weight: 600;
+}
+
+/* Confidence badges row */
+.financialsConfidence {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.confBadge {
+    font-size: 0.75rem;
+    color: var(--text-soft);
+    background: var(--tag-neutral-bg);
+    padding: 3px 8px;
+    border-radius: 4px;
+}

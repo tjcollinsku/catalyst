@@ -1,0 +1,7 @@
+.button { border-radius: 10px; padding: 0.5rem 0.8rem; font: inherit; cursor: pointer; transition: opacity 120ms ease, transform 120ms ease; }
+.button:hover:not(:disabled) { transform: translateY(-1px); }
+.button:disabled { opacity: 0.65; cursor: not-allowed; }
+.primary { border: 1px solid transparent; background: linear-gradient(150deg, #0f62fe, #2f7bff); color: var(--text-main); font-weight: 500; }
+.secondary { border: 1px solid var(--control-border); background: var(--control-bg); color: var(--text-main); }
+.danger { border: 1px solid transparent; background: linear-gradient(150deg, #dc2626, #ef4444); color: #fff; font-weight: 500; }
+.sm { padding: 0.3rem 0.6rem; font-size: var(--text-xs, 0.75rem); border-radius: 6px; }

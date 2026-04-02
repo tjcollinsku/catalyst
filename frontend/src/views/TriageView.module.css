@@ -1,0 +1,185 @@
+/* Triage View Styles */
+
+.triageHeader {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.triageHeader h2 {
+    margin: 0;
+    font-weight: 500;
+}
+
+.triageOpenBadge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger);
+}
+
+.triageFilters {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.triageList {
+    max-width: none;
+}
+
+.triageItem {
+    border-left: 3px solid transparent;
+    padding-left: 0.5rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.55rem;
+}
+
+.triageItem:has(.activeSignal) {
+    border-left-color: var(--accent);
+}
+
+.triageCardHeader {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.triageCaseLink {
+    background: none;
+    border: none;
+    color: var(--accent-strong);
+    font-family: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: none;
+}
+
+.triageCaseLink:hover {
+    text-decoration: underline;
+}
+
+/* Signal styles */
+.signalCard {
+    border-radius: 8px;
+    padding: 0.25rem;
+    outline: none;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.65rem 0.75rem;
+    background: var(--card-bg-alt);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.signalCard:focus-visible {
+    box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+.activeSignal {
+    background: var(--triage-active);
+}
+
+.signalSubhead {
+    font-size: 0.75rem;
+    letter-spacing: 0.03em;
+}
+
+.signalBadges {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+    min-width: 210px;
+}
+
+/* Triage action styles */
+.triageQuickActions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.3rem;
+}
+
+.triageChip {
+    padding: 0.3rem 0.35rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.02em;
+}
+
+.triageChipActive {
+    border-color: var(--accent-strong);
+    background: var(--triage-chip-active);
+}
+
+.triageSelect,
+.triageNote,
+.triageSave {
+    width: 100%;
+}
+
+.triageNote {
+    resize: vertical;
+    min-height: 56px;
+}
+
+.triageSave {
+    background: var(--card-bg-alt);
+}
+
+.triageSaveDisabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.triageError {
+    margin: 0 0 0.6rem;
+    color: var(--field-error-color);
+    font-size: 0.82rem;
+}
+
+/* Tag styles */
+.tag {
+    display: inline-flex;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 500;
+}
+
+.tagLow {
+    background: var(--tag-low-bg);
+    color: var(--tag-low-color);
+}
+
+.tagMedium {
+    background: var(--tag-med-bg);
+    color: var(--tag-med-color);
+}
+
+.tagHigh,
+.tagCritical {
+    background: var(--tag-high-bg);
+    color: var(--tag-high-color);
+}
+
+.tagNeutral {
+    background: var(--tag-neutral-bg);
+    color: var(--tag-neutral-color);
+}
+
+/* Loading state */
+.loadingHint {
+    margin: 0;
+    color: var(--text-soft);
+    font-size: 0.85rem;
+}

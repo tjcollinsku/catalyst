@@ -1,0 +1,6 @@
+.stack { position: fixed; top: 14px; right: 14px; z-index: 40; display: grid; gap: 8px; width: min(360px, calc(100vw - 28px)); }
+.toast { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 0.65rem 0.75rem; border-radius: 12px; border: 1px solid var(--control-border); box-shadow: var(--shadow-card); backdrop-filter: blur(8px); }
+.toast p { margin: 0; font-size: 0.9rem; }
+.error { color: #fff; background: linear-gradient(110deg, rgba(167, 15, 69, 0.95), rgba(211, 54, 111, 0.95)); }
+.success { color: #dff7e8; background: linear-gradient(110deg, rgba(23, 91, 63, 0.95), rgba(35, 121, 85, 0.95)); }
+.dismiss { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 0; font-size: 0.95rem; line-height: 1; }

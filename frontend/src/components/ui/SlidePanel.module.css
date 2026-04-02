@@ -1,0 +1,140 @@
+/*
+ * SlidePanel
+ * Generic slide-in panel from the right edge.
+ * Used for entity profiles, signal detail, AI panel.
+ */
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.title {
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--text-main);
+    margin: 0;
+}
+
+.subtitle {
+    font-size: var(--text-sm);
+    color: var(--text-soft);
+    margin: 0.15rem 0 0;
+}
+
+.closeBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-soft);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: color var(--transition-fast), border-color var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.closeBtn:hover {
+    color: var(--text-main);
+    border-color: var(--accent);
+}
+
+.body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+/* ── Expandable section (for drill-down panels) ──────── */
+
+.section {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.sectionToggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--text-main);
+    font: inherit;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    padding: 0.4rem 0;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.sectionToggle:hover {
+    color: var(--accent-strong);
+}
+
+.sectionArrow {
+    font-size: 0.7rem;
+    color: var(--text-soft);
+    transition: transform var(--transition-fast);
+}
+
+.sectionArrowOpen {
+    font-size: 0.7rem;
+    color: var(--text-soft);
+    transition: transform var(--transition-fast);
+    transform: rotate(90deg);
+}
+
+.sectionContent {
+    padding-top: 0.5rem;
+}
+
+.sectionCount {
+    font-size: var(--text-xs);
+    color: var(--text-soft);
+    font-weight: 400;
+    margin-left: 0.5rem;
+}
+
+/* ── Footer actions ──────────────────────────────────── */
+
+.footer {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.footerLink {
+    display: block;
+    text-align: center;
+    font-size: var(--text-sm);
+    color: var(--accent-strong);
+    text-decoration: none;
+    padding: 0.4rem;
+    border-radius: var(--radius-sm);
+    transition: background var(--transition-fast);
+}
+
+.footerLink:hover {
+    background: var(--sidebar-active);
+}

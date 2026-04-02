@@ -5,6 +5,7 @@ import { EmptyState } from "./ui/EmptyState";
 import { FormInput } from "./ui/FormInput";
 import { FormSelect } from "./ui/FormSelect";
 import { FormTextarea } from "./ui/FormTextarea";
+import styles from "./ReferralsPanel.module.css";
 
 const REFERRAL_STATUS_LABELS: Record<ReferralStatus, string> = {
     DRAFT: "Draft",
@@ -99,8 +100,8 @@ export function ReferralsPanel({
     }
 
     return (
-        <div className="referrals-panel">
-            <div className="referrals-panel-header">
+        <div className={styles.referralsPanel}>
+            <div className={styles.referralsPanelHeader}>
                 <h3>Government Referrals</h3>
                 {!showForm && (
                     <Button variant="primary" onClick={() => setShowForm(true)}>
@@ -110,9 +111,9 @@ export function ReferralsPanel({
             </div>
 
             {showForm && (
-                <div className="referral-form card">
+                <div className={`${styles.referralForm} ${styles.card}`}>
                     <h4>New Referral</h4>
-                    <div className="form-row">
+                    <div className={styles.formRow}>
                         <label>Agency Name *</label>
                         <FormInput
                             value={form.agency_name}
@@ -121,7 +122,7 @@ export function ReferralsPanel({
                         />
                         {formError && <span className="field-error">{formError}</span>}
                     </div>
-                    <div className="form-row">
+                    <div className={styles.formRow}>
                         <label>Submission ID</label>
                         <FormInput
                             value={form.submission_id}
@@ -129,7 +130,7 @@ export function ReferralsPanel({
                             placeholder="Agency tracking number (optional)"
                         />
                     </div>
-                    <div className="form-row">
+                    <div className={styles.formRow}>
                         <label>Contact Alias</label>
                         <FormInput
                             value={form.contact_alias}
@@ -137,7 +138,7 @@ export function ReferralsPanel({
                             placeholder="Internal alias for contact (optional)"
                         />
                     </div>
-                    <div className="form-row">
+                    <div className={styles.formRow}>
                         <label>Notes</label>
                         <FormTextarea
                             value={form.notes}
@@ -146,7 +147,7 @@ export function ReferralsPanel({
                             rows={3}
                         />
                     </div>
-                    <div className="form-actions">
+                    <div className={styles.formActions}>
                         <Button variant="primary" onClick={handleSubmitNew}>
                             Create Referral
                         </Button>
@@ -164,7 +165,7 @@ export function ReferralsPanel({
             )}
 
             {loadingReferrals && (
-                <p className="loading-hint">Loading referrals…</p>
+                <p className={styles.loadingHint}>Loading referrals…</p>
             )}
 
             {!loadingReferrals && referrals.length === 0 && !showForm && (
@@ -179,10 +180,10 @@ export function ReferralsPanel({
                 const isEditing = editingId === referral.referral_id;
 
                 return (
-                    <div key={referral.referral_id} className="referral-card card">
+                    <div key={referral.referral_id} className={`${styles.referralCard} ${styles.card}`}>
                         {isEditing ? (
-                            <div className="referral-edit">
-                                <div className="form-row">
+                            <div className={styles.referralEdit}>
+                                <div className={styles.formRow}>
                                     <label>Agency Name *</label>
                                     <FormInput
                                         value={editDraft.agency_name ?? ""}
@@ -191,7 +192,7 @@ export function ReferralsPanel({
                                         }
                                     />
                                 </div>
-                                <div className="form-row">
+                                <div className={styles.formRow}>
                                     <label>Submission ID</label>
                                     <FormInput
                                         value={editDraft.submission_id ?? ""}
@@ -200,7 +201,7 @@ export function ReferralsPanel({
                                         }
                                     />
                                 </div>
-                                <div className="form-row">
+                                <div className={styles.formRow}>
                                     <label>Contact Alias</label>
                                     <FormInput
                                         value={editDraft.contact_alias ?? ""}
@@ -209,7 +210,7 @@ export function ReferralsPanel({
                                         }
                                     />
                                 </div>
-                                <div className="form-row">
+                                <div className={styles.formRow}>
                                     <label>Status</label>
                                     <FormSelect
                                         value={editDraft.status ?? referral.status}
@@ -227,7 +228,7 @@ export function ReferralsPanel({
                                         ))}
                                     </FormSelect>
                                 </div>
-                                <div className="form-row">
+                                <div className={styles.formRow}>
                                     <label>Notes</label>
                                     <FormTextarea
                                         value={editDraft.notes ?? ""}
@@ -237,7 +238,7 @@ export function ReferralsPanel({
                                         rows={3}
                                     />
                                 </div>
-                                <div className="form-actions">
+                                <div className={styles.formActions}>
                                     <Button
                                         variant="primary"
                                         disabled={isSaving}
@@ -249,30 +250,35 @@ export function ReferralsPanel({
                                 </div>
                             </div>
                         ) : (
-                            <div className="referral-view">
-                                <div className="referral-row">
+                            <div className={styles.referralView}>
+                                <div className={styles.referralRow}>
                                     <strong>{referral.agency_name || "Unknown Agency"}</strong>
-                                    <span className={`referral-status referral-status-${referral.status.toLowerCase()}`}>
+                                    <span className={`${styles.referralStatus} ${
+                                        referral.status === "DRAFT" ? styles.referralStatusDraft :
+                                        referral.status === "SUBMITTED" ? styles.referralStatusSubmitted :
+                                        referral.status === "ACKNOWLEDGED" ? styles.referralStatusAcknowledged :
+                                        referral.status === "CLOSED" ? styles.referralStatusClosed : ""
+                                    }`}>
                                         {REFERRAL_STATUS_LABELS[referral.status]}
                                     </span>
                                 </div>
                                 {referral.submission_id && (
-                                    <div className="referral-meta">
+                                    <div className={styles.referralMeta}>
                                         Ref: {referral.submission_id}
                                     </div>
                                 )}
                                 {referral.contact_alias && (
-                                    <div className="referral-meta">
+                                    <div className={styles.referralMeta}>
                                         Contact: {referral.contact_alias}
                                     </div>
                                 )}
                                 {referral.notes && (
-                                    <div className="referral-notes">{referral.notes}</div>
+                                    <div className={styles.referralNotes}>{referral.notes}</div>
                                 )}
-                                <div className="referral-meta referral-date">
+                                <div className={`${styles.referralMeta} ${styles.referralDate}`}>
                                     Filed: {formatDate(referral.filing_date)}
                                 </div>
-                                <div className="referral-actions">
+                                <div className={styles.referralActions}>
                                     <Button onClick={() => handleStartEdit(referral)}>Edit</Button>
                                     <Button
                                         disabled={isSaving}

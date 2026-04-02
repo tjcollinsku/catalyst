@@ -1,0 +1,191 @@
+/* CaseDetailPanel styles */
+
+.detailMeta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-bottom: 0.75rem;
+    color: var(--text-soft);
+    font-size: 0.82rem;
+}
+
+.detailMeta span {
+    padding: 0.2rem 0.45rem;
+    border-radius: 999px;
+    background: var(--tag-neutral-bg);
+}
+
+.infoCard {
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    padding: 0.9rem;
+    background: var(--card-bg);
+    margin-bottom: 0.75rem;
+    opacity: 0;
+    animation: stagger-in 300ms ease-out forwards;
+}
+
+.infoCard h3 {
+    margin: 0 0 0.6rem;
+    font-size: 0.95rem;
+}
+
+.cardToolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+}
+
+.cardToolbar h3 {
+    margin: 0;
+}
+
+.compactFilters {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.compactFilters select {
+    padding: 0.45rem 0.5rem;
+    min-width: 0;
+    width: auto;
+}
+
+.infoCard p {
+    margin: 0;
+    line-height: 1.45;
+}
+
+.tableWrap {
+    overflow-x: auto;
+}
+
+.signalList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.55rem;
+}
+
+.signalList li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.65rem 0.75rem;
+    background: var(--card-bg-alt);
+}
+
+.signalList p {
+    margin: 0.2rem 0 0;
+    color: var(--text-soft);
+    font-size: 0.9rem;
+}
+
+.signalCard {
+    border-radius: 8px;
+    padding: 0.25rem;
+    outline: none;
+}
+
+.signalCard:focus-visible {
+    box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+.activeSignal {
+    background: var(--triage-active);
+}
+
+.signalSubhead {
+    font-size: 0.75rem;
+    letter-spacing: 0.03em;
+}
+
+.signalBadges {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+    min-width: 210px;
+}
+
+.triageQuickActions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.3rem;
+}
+
+.triageChip {
+    padding: 0.3rem 0.35rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.02em;
+}
+
+.triageChip.active {
+    border-color: var(--accent-strong);
+    background: var(--triage-chip-active);
+}
+
+.triageSelect,
+.triageNote,
+.triageSave {
+    width: 100%;
+}
+
+.triageNote {
+    resize: vertical;
+    min-height: 56px;
+}
+
+.triageSave {
+    background: var(--card-bg-alt);
+}
+
+.triageSave:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.triageError {
+    margin: 0 0 0.6rem;
+    color: var(--field-error-color);
+    font-size: 0.82rem;
+}
+
+.reevaluateBar {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.75rem;
+}
+
+.reevaluateHint {
+    color: var(--text-soft);
+    font-size: 0.78rem;
+}
+
+.memoHint {
+    color: var(--text-soft);
+    font-size: 0.84rem;
+    line-height: 1.45;
+    margin-top: 0.35rem !important;
+}
+
+@keyframes stagger-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

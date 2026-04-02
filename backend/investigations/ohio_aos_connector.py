@@ -25,6 +25,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime
+from urllib.parse import urlparse
 
 import requests
 
@@ -150,12 +151,27 @@ def _parse_aos_html(html: str) -> list[AuditReport]:
                 pass
 
         # Look for PDF link in the entity name cell (typical for AOS)
+        # SEC-038: Validate domain to prevent injected URLs from scraped HTML.
         pdf_url = None
         link_match = link_pattern.search(cells[0])
         if link_match:
-            pdf_url = link_match.group(1)
-            if pdf_url.startswith("/"):
-                pdf_url = "https://ohioauditor.gov" + pdf_url
+            raw_url = link_match.group(1)
+            if raw_url.startswith("/"):
+                # Relative path — safe to prefix with known domain
+                pdf_url = "https://ohioauditor.gov" + raw_url
+            else:
+                # Absolute URL — validate domain
+                try:
+                    parsed = urlparse(raw_url)
+                    if parsed.hostname and parsed.hostname.lower().endswith("ohioauditor.gov"):
+                        pdf_url = raw_url
+                    else:
+                        logger.warning(
+                            "aos_pdf_untrusted_domain",
+                            extra={"url": raw_url, "domain": parsed.hostname},
+                        )
+                except Exception:
+                    logger.warning("aos_pdf_invalid_url", extra={"url": raw_url})
 
         reports.append(
             AuditReport(

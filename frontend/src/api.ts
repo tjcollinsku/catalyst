@@ -1,14 +1,30 @@
 import {
+    ActivityEntry,
+    AIAskMessage,
+    AIAskResponse,
+    AIConnectionsResponse,
+    AINarrativeResponse,
+    AISummarizeResponse,
     CaseDetail,
+    CaseGraphResponse,
     CaseSummary,
+    CrossCaseReferral,
+    CrossCaseSignal,
     DetectionItem,
     DetectionUpdatePayload,
+    DocumentDetail,
     DocumentItem,
+    EntityItem,
+    FinancialSnapshotItem,
+    FindingItem,
+    FindingUpdatePayload,
     NewCasePayload,
+    NewFindingPayload,
     NewReferralPayload,
     PaginatedResponse,
     ReferralItem,
     ReferralUpdatePayload,
+    SearchResponse,
     SignalItem,
     SignalUpdatePayload
 } from "./types";
@@ -16,6 +32,28 @@ import {
 const API_BASE = "";
 const DEFAULT_TIMEOUT_MS = 15000;
 const BULK_UPLOAD_TIMEOUT_MS = 300000;
+
+// ---------------------------------------------------------------------------
+// SEC-033: CSRF token handling for write requests
+// ---------------------------------------------------------------------------
+
+/** Read the Django csrftoken cookie value. */
+function getCSRFToken(): string {
+    const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
+    return match ? decodeURIComponent(match[1]) : "";
+}
+
+/** HTTP methods that require a CSRF token. */
+const CSRF_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/** Fetch the CSRF cookie from the backend (called once on app startup). */
+export async function initCSRF(): Promise<void> {
+    try {
+        await fetch(`${API_BASE}/api/csrf/`, { credentials: "include" });
+    } catch {
+        // Non-fatal — CSRF cookie may already be set from a prior request
+    }
+}
 
 export interface ApiRequestOptions {
     signal?: AbortSignal;
@@ -72,6 +110,15 @@ async function request<T>(path: string, init: RequestInit = {}, options: ApiRequ
         headers.set("Content-Type", "application/json");
     }
 
+    // SEC-033: Include CSRF token on write requests
+    const method = (init.method ?? "GET").toUpperCase();
+    if (CSRF_METHODS.has(method)) {
+        const csrfToken = getCSRFToken();
+        if (csrfToken) {
+            headers.set("X-CSRFToken", csrfToken);
+        }
+    }
+
     const controller = new AbortController();
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     let didTimeout = false;
@@ -94,6 +141,7 @@ async function request<T>(path: string, init: RequestInit = {}, options: ApiRequ
         const response = await fetch(`${API_BASE}${path}`, {
             ...init,
             headers,
+            credentials: "include",    // SEC-033: send cookies (CSRF token)
             signal: controller.signal
         });
 
@@ -161,6 +209,21 @@ export async function fetchCases(
 
 export async function fetchCaseDetail(caseId: string, options?: ApiRequestOptions): Promise<CaseDetail> {
     return request<CaseDetail>(`/api/cases/${caseId}/`, {}, options);
+}
+
+export async function fetchDocumentDetail(
+    caseId: string,
+    documentId: string,
+    options?: ApiRequestOptions
+): Promise<DocumentDetail> {
+    return request<DocumentDetail>(`/api/cases/${caseId}/documents/${documentId}/`, {}, options);
+}
+
+export async function fetchCaseFinancials(
+    caseId: string,
+    options?: ApiRequestOptions
+): Promise<{ results: FinancialSnapshotItem[] }> {
+    return request<{ results: FinancialSnapshotItem[] }>(`/api/cases/${caseId}/financials/`, {}, options);
 }
 
 export async function fetchCaseSignals(
@@ -343,5 +406,301 @@ export async function reevaluateSignals(
 ): Promise<ReevaluateSignalsResult> {
     return request<ReevaluateSignalsResult>(`/api/cases/${caseId}/reevaluate-signals/`, {
         method: "POST"
+    }, options);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Findings (Milestone 2)
+   ═══════════════════════════════════════════════════════════════ */
+
+export async function fetchFindings(
+    caseId: string,
+    options?: ApiRequestOptions
+): Promise<PaginatedResponse<FindingItem>> {
+    return request<PaginatedResponse<FindingItem>>(
+        `/api/cases/${caseId}/findings/?limit=100&offset=0&order_by=created_at&direction=desc`,
+        {},
+        options
+    );
+}
+
+export async function createFinding(
+    caseId: string,
+    payload: NewFindingPayload,
+    options?: ApiRequestOptions
+): Promise<FindingItem> {
+    return request<FindingItem>(`/api/cases/${caseId}/findings/`, {
+        method: "POST",
+        body: JSON.stringify(payload)
+    }, options);
+}
+
+export async function updateFinding(
+    caseId: string,
+    findingId: string,
+    payload: FindingUpdatePayload,
+    options?: ApiRequestOptions
+): Promise<FindingItem> {
+    return request<FindingItem>(`/api/cases/${caseId}/findings/${findingId}/`, {
+        method: "PATCH",
+        body: JSON.stringify(payload)
+    }, options);
+}
+
+export async function deleteFinding(
+    caseId: string,
+    findingId: string,
+    options?: ApiRequestOptions
+): Promise<void> {
+    return request<void>(`/api/cases/${caseId}/findings/${findingId}/`, {
+        method: "DELETE"
+    }, options);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Cross-case endpoints (Phase C)
+   ═══════════════════════════════════════════════════════════════ */
+
+export interface CrossCaseSignalFilters {
+    status?: string;
+    severity?: string;
+    case_id?: string;
+    rule_id?: string;
+}
+
+export async function fetchCrossCaseSignals(
+    filters: CrossCaseSignalFilters = {},
+    limit = 100,
+    offset = 0,
+    options?: ApiRequestOptions
+): Promise<PaginatedResponse<CrossCaseSignal>> {
+    const params = new URLSearchParams();
+    params.set("limit", String(limit));
+    params.set("offset", String(offset));
+    params.set("order_by", "detected_at");
+    params.set("direction", "desc");
+    if (filters.status) params.set("status", filters.status);
+    if (filters.severity) params.set("severity", filters.severity);
+    if (filters.case_id) params.set("case_id", filters.case_id);
+    if (filters.rule_id) params.set("rule_id", filters.rule_id);
+    return request<PaginatedResponse<CrossCaseSignal>>(`/api/signals/?${params}`, {}, options);
+}
+
+export async function fetchCrossCaseReferrals(
+    filters: { status?: string; agency?: string; case_id?: string } = {},
+    limit = 100,
+    offset = 0,
+    options?: ApiRequestOptions
+): Promise<PaginatedResponse<CrossCaseReferral>> {
+    const params = new URLSearchParams();
+    params.set("limit", String(limit));
+    params.set("offset", String(offset));
+    if (filters.status) params.set("status", filters.status);
+    if (filters.agency) params.set("agency", filters.agency);
+    if (filters.case_id) params.set("case_id", filters.case_id);
+    return request<PaginatedResponse<CrossCaseReferral>>(`/api/referrals/?${params}`, {}, options);
+}
+
+export async function fetchEntities(
+    filters: { type?: string; q?: string; case_id?: string } = {},
+    limit = 100,
+    offset = 0,
+    options?: ApiRequestOptions
+): Promise<{ count: number; limit: number; offset: number; results: EntityItem[] }> {
+    const params = new URLSearchParams();
+    params.set("limit", String(limit));
+    params.set("offset", String(offset));
+    if (filters.type) params.set("type", filters.type);
+    if (filters.q) params.set("q", filters.q);
+    if (filters.case_id) params.set("case_id", filters.case_id);
+    return request<{ count: number; limit: number; offset: number; results: EntityItem[] }>(
+        `/api/entities/?${params}`, {}, options,
+    );
+}
+
+export async function fetchActivityFeed(
+    limit = 20,
+    options?: ApiRequestOptions
+): Promise<{ results: ActivityEntry[] }> {
+    return request<{ results: ActivityEntry[] }>(`/api/activity-feed/?limit=${limit}`, {}, options);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Search endpoint (Phase D)
+   ═══════════════════════════════════════════════════════════════ */
+
+export async function searchAll(
+    query: string,
+    filters: { type?: string; case_id?: string } = {},
+    options?: ApiRequestOptions
+): Promise<SearchResponse> {
+    const params = new URLSearchParams();
+    params.set("q", query);
+    if (filters.type) params.set("type", filters.type);
+    if (filters.case_id) params.set("case_id", filters.case_id);
+    return request<SearchResponse>(`/api/search/?${params}`, {}, options);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Report generation (Phase D)
+   ═══════════════════════════════════════════════════════════════ */
+
+export interface ReportExportResult {
+    format: string;
+    filename: string;
+    download_url: string;
+}
+
+export async function exportCaseReport(
+    caseId: string,
+    format: "json" | "csv" = "json",
+    options?: ApiRequestOptions
+): Promise<ReportExportResult> {
+    return request<ReportExportResult>(`/api/cases/${caseId}/export/?format=${format}`, {}, options);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Case intelligence dashboard & coverage audit
+   ═══════════════════════════════════════════════════════════════ */
+
+export interface CaseDashboardData {
+    case: {
+        id: string;
+        name: string;
+        status: string;
+        created_at: string;
+        referral_ref: string;
+    };
+    documents: {
+        total: number;
+        by_type: Record<string, number>;
+        by_extraction_status: Record<string, number>;
+        renamed_count: number;
+    };
+    entities: {
+        persons: number;
+        organizations: number;
+        properties: number;
+        financial_instruments: number;
+        total: number;
+    };
+    signals: {
+        total: number;
+        by_severity: Record<string, number>;
+        by_status: Record<string, number>;
+        top_rules: Array<{ rule_id: string; summary: string; count: number }>;
+    };
+    detections: {
+        total: number;
+        confirmed: number;
+        pending: number;
+    };
+    findings: {
+        total: number;
+        by_severity: Record<string, number>;
+        by_status: Record<string, number>;
+    };
+    financials: {
+        years_covered: number;
+        total_revenue: string;
+        total_expenses: string;
+        timeline: Array<{ year: number; revenue: string; expenses: string }>;
+    };
+    pipeline: {
+        extraction_success_rate: number;
+        ai_enhanced_count: number;
+        total_documents_processed: number;
+    };
+}
+
+export async function fetchCaseDashboard(
+    caseId: string,
+    options?: ApiRequestOptions
+): Promise<CaseDashboardData> {
+    return request<CaseDashboardData>(`/api/cases/${caseId}/dashboard/`, {}, options);
+}
+
+export interface CoverageGapItem {
+    rule_id: string;
+    rule_title: string;
+    gap_type: string;
+    message: string;
+    recommendation: string;
+}
+
+export interface CaseCoverageData {
+    gaps: CoverageGapItem[];
+    coverage_score: number;
+    total_rules: number;
+    active_rules: number;
+    blind_rules: number;
+}
+
+export async function fetchCaseCoverage(
+    caseId: string,
+    options?: ApiRequestOptions
+): Promise<CaseCoverageData> {
+    return request<CaseCoverageData>(`/api/cases/${caseId}/coverage/`, {}, options);
+}
+
+/* ── Case entity-relationship graph ────────────────────────── */
+
+export async function fetchCaseGraph(
+    caseId: string,
+    options?: ApiRequestOptions
+): Promise<CaseGraphResponse> {
+    return request<CaseGraphResponse>(`/api/cases/${caseId}/graph/`, {}, options);
+}
+
+/* ── AI endpoints (Phase 5) ──────────────────────────────── */
+
+export async function aiSummarize(
+    caseId: string,
+    targetType: string,
+    targetId: string,
+    options?: ApiRequestOptions
+): Promise<AISummarizeResponse> {
+    return request<AISummarizeResponse>(`/api/cases/${caseId}/ai/summarize/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target_type: targetType, target_id: targetId }),
+    }, options);
+}
+
+export async function aiConnections(
+    caseId: string,
+    entityId?: string,
+    options?: ApiRequestOptions
+): Promise<AIConnectionsResponse> {
+    return request<AIConnectionsResponse>(`/api/cases/${caseId}/ai/connections/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entity_id: entityId ?? null }),
+    }, options);
+}
+
+export async function aiNarrative(
+    caseId: string,
+    detectionIds: string[],
+    tone: "formal" | "executive" | "technical" = "formal",
+    options?: ApiRequestOptions
+): Promise<AINarrativeResponse> {
+    return request<AINarrativeResponse>(`/api/cases/${caseId}/ai/narrative/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ detection_ids: detectionIds, tone }),
+    }, options);
+}
+
+export async function aiAsk(
+    caseId: string,
+    question: string,
+    conversationHistory: AIAskMessage[] = [],
+    options?: ApiRequestOptions
+): Promise<AIAskResponse> {
+    return request<AIAskResponse>(`/api/cases/${caseId}/ai/ask/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, conversation_history: conversationHistory }),
     }, options);
 }

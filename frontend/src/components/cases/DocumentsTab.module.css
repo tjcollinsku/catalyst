@@ -1,0 +1,121 @@
+/* Documents Tab — Document Management */
+
+.docActionsCell {
+    display: flex;
+    gap: 0.4rem;
+}
+
+/* ── Bulk upload ── */
+
+.bulkUploadPanel {
+    display: grid;
+    gap: 0.6rem;
+}
+
+.dropZone {
+    border: 2px dashed var(--control-border);
+    border-radius: 12px;
+    padding: 1.2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease;
+    background: var(--drop-zone-bg);
+}
+
+.dropZone:hover,
+.dropZoneActive {
+    border-color: var(--accent);
+    background: rgba(15, 98, 254, 0.06);
+}
+
+.dropZoneLabel {
+    color: var(--text-soft);
+    font-size: 0.87rem;
+}
+
+.dropZoneInput {
+    display: none;
+}
+
+.bulkFileList {
+    display: grid;
+    gap: 0.3rem;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.bulkFileRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 8px;
+    font-size: 0.84rem;
+    background: var(--empty-state-bg);
+    border: 1px solid var(--border);
+}
+
+.bulkFilePending { border-color: rgba(145, 163, 182, 0.2); }
+.bulkFileDone { border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05); }
+.bulkFileError { border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.05); }
+
+.bulkFileName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bulkFileSize {
+    color: var(--text-soft);
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+.bulkFileStatus {
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+.bulkFileDone .bulkFileStatus { color: var(--tag-low-color); }
+.bulkFileError .bulkFileStatus { color: var(--tag-high-color); }
+.bulkFilePending .bulkFileStatus { color: var(--text-soft); }
+
+.bulkFileRemove {
+    background: transparent;
+    border: none;
+    color: var(--text-soft);
+    cursor: pointer;
+    padding: 0 0.2rem;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.bulkFileRemove:hover { color: var(--text-main); }
+
+.bulkUploadFooter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.bulkUploadSummary {
+    color: var(--text-soft);
+    font-size: 0.83rem;
+}
+
+.bulkUploadActions {
+    display: flex;
+    gap: 0.4rem;
+}
+
+/* ── Referral memo section ── */
+
+.memoHint {
+    color: var(--text-soft);
+    font-size: 0.84rem;
+    line-height: 1.45;
+    margin-top: 0.35rem !important;
+}
