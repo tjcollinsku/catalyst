@@ -485,14 +485,12 @@ def _download(url: str) -> bytes:
         for chunk in response.iter_content(chunk_size=64 * 1024):
             if time.monotonic() > deadline:
                 response.close()
-                raise IRSError(
-                    f"Download exceeded {DOWNLOAD_DEADLINE_SECONDS}s deadline: {url}"
-                )
+                raise IRSError(f"Download exceeded {DOWNLOAD_DEADLINE_SECONDS}s deadline: {url}")
             total_bytes += len(chunk)
             if total_bytes > MAX_DOWNLOAD_BYTES:
                 response.close()
                 raise IRSError(
-                    f"Download exceeded {MAX_DOWNLOAD_BYTES // (1024*1024)} MB size limit: {url}"
+                    f"Download exceeded {MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB size limit: {url}"
                 )
             chunks.append(chunk)
     except requests.exceptions.ChunkedEncodingError as e:

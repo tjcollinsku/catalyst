@@ -16,7 +16,7 @@ _secret_key = os.getenv("DJANGO_SECRET_KEY")
 if not _secret_key:
     raise RuntimeError(
         "DJANGO_SECRET_KEY environment variable is not set. "
-        "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(64))\" "
+        'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(64))" '
         "and add it to your .env file."
     )
 SECRET_KEY = _secret_key
@@ -58,13 +58,14 @@ CORS_ALLOW_CREDENTIALS = True
 
 # CSRF — SEC-024: Allow the React SPA to read the csrftoken cookie so it
 # can include it as an X-CSRFToken header on write requests.
-CSRF_COOKIE_HTTPONLY = False       # JS must be able to read the cookie
-CSRF_COOKIE_SAMESITE = "Lax"       # standard protection against cross-site POST
+CSRF_COOKIE_HTTPONLY = False  # JS must be able to read the cookie
+CSRF_COOKIE_SAMESITE = "Lax"  # standard protection against cross-site POST
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
-    "investigations.middleware.RateLimitMiddleware",   # SEC-025: before auth so abusive IPs are blocked early
+    # SEC-025: before auth so abusive IPs are blocked early
+    "investigations.middleware.RateLimitMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -105,10 +106,7 @@ ASGI_APPLICATION = "catalyst.asgi.application"
 # ---------------------------------------------------------------------------
 _db_password = os.getenv("DB_PASSWORD")
 if not _db_password:
-    raise RuntimeError(
-        "DB_PASSWORD environment variable is not set. "
-        "Add it to your .env file."
-    )
+    raise RuntimeError("DB_PASSWORD environment variable is not set. Add it to your .env file.")
 
 DATABASES = {
     "default": {

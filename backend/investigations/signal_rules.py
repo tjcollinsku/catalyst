@@ -1162,14 +1162,10 @@ def evaluate_sr014_address_nexus(case, trigger_doc=None) -> list[SignalTrigger]:
         linked_entities = []
 
         for pa in addr.person_addresses.all():
-            linked_entities.append(
-                ("Person", pa.person.full_name, pa.person.pk)
-            )
+            linked_entities.append(("Person", pa.person.full_name, pa.person.pk))
 
         for oa in addr.org_addresses.all():
-            linked_entities.append(
-                ("Organization", oa.org.name, oa.org.pk)
-            )
+            linked_entities.append(("Organization", oa.org.name, oa.org.pk))
 
         if len(linked_entities) < 2:
             continue
@@ -1216,7 +1212,6 @@ def evaluate_sr014_address_nexus(case, trigger_doc=None) -> list[SignalTrigger]:
 
 def evaluate_sr015_insider_swap(case, trigger_doc=None) -> list[SignalTrigger]:
     from .models import (
-        Organization,
         PersonOrganization,
         PropertyTransaction,
         Relationship,
@@ -1225,9 +1220,9 @@ def evaluate_sr015_insider_swap(case, trigger_doc=None) -> list[SignalTrigger]:
     triggers = []
 
     # Step 1: Get all persons who hold roles in case organizations
-    org_person_links = PersonOrganization.objects.filter(
-        org__case=case
-    ).select_related("person", "org")
+    org_person_links = PersonOrganization.objects.filter(org__case=case).select_related(
+        "person", "org"
+    )
 
     # Build a set of person IDs who are "insiders" (officers/agents of orgs)
     insider_person_ids = set()
@@ -1246,9 +1241,7 @@ def evaluate_sr015_insider_swap(case, trigger_doc=None) -> list[SignalTrigger]:
     related_to_insiders = set()
     relationship_map: dict[UUID, list[tuple]] = defaultdict(list)
 
-    relationships = Relationship.objects.filter(
-        case=case
-    ).select_related("person_a", "person_b")
+    relationships = Relationship.objects.filter(case=case).select_related("person_a", "person_b")
 
     for rel in relationships:
         if rel.person_a.pk in insider_person_ids:
@@ -1336,9 +1329,7 @@ def evaluate_sr016_family_network_density(case, trigger_doc=None) -> list[Signal
     from .models import PersonOrganization, Relationship
 
     # Get all persons linked to organizations in this case
-    org_person_links = PersonOrganization.objects.filter(
-        org__case=case
-    ).select_related("person")
+    org_person_links = PersonOrganization.objects.filter(org__case=case).select_related("person")
 
     org_person_ids = set()
     for link in org_person_links:
@@ -1401,18 +1392,16 @@ def evaluate_sr017_blanket_lien_charity(case, trigger_doc=None) -> list[SignalTr
 
     triggers = []
 
-    blanket_liens = list(
-        case.financial_instruments.filter(is_blanket_lien=True)
-    )
+    blanket_liens = list(case.financial_instruments.filter(is_blanket_lien=True))
 
     if not blanket_liens:
         return []
 
     # Get all persons who are officers/agents of CHARITY organizations
     charity_person_ids = set(
-        PersonOrganization.objects.filter(
-            org__case=case, org__org_type="CHARITY"
-        ).values_list("person_id", flat=True)
+        PersonOrganization.objects.filter(org__case=case, org__org_type="CHARITY").values_list(
+            "person_id", flat=True
+        )
     )
 
     for lien in blanket_liens:
@@ -1452,9 +1441,7 @@ def evaluate_sr018_rapid_flip(case, trigger_doc=None) -> list[SignalTrigger]:
 
     for prop in case.properties.all():
         txns = list(
-            prop.transactions.filter(
-                transaction_date__isnull=False
-            ).order_by("transaction_date")
+            prop.transactions.filter(transaction_date__isnull=False).order_by("transaction_date")
         )
 
         if len(txns) < 2:
@@ -1475,9 +1462,12 @@ def evaluate_sr018_rapid_flip(case, trigger_doc=None) -> list[SignalTrigger]:
                     severity="HIGH",
                     title=RULE_REGISTRY["SR-018"].title,
                     detected_summary=(
-                        f"Property '{prop_label}' changed hands twice in {gap_days} days: "
-                        f"({t1.transaction_date}) {t1.seller_name or '?'} → {t1.buyer_name or '?'}, "
-                        f"then ({t2.transaction_date}) {t2.seller_name or '?'} → {t2.buyer_name or '?'}. "
+                        f"Property '{prop_label}' changed hands twice in "
+                        f"{gap_days} days: "
+                        f"({t1.transaction_date}) {t1.seller_name or '?'} → "
+                        f"{t1.buyer_name or '?'}, "
+                        f"then ({t2.transaction_date}) {t2.seller_name or '?'} → "
+                        f"{t2.buyer_name or '?'}. "
                         f"Rapid flips suggest pre-arranged transactions."
                     ),
                     trigger_entity_id=prop.pk,
@@ -1498,11 +1488,7 @@ def evaluate_sr018_rapid_flip(case, trigger_doc=None) -> list[SignalTrigger]:
 
 
 def evaluate_sr019_entity_proliferation(case, trigger_doc=None) -> list[SignalTrigger]:
-    orgs = list(
-        case.organizations.filter(
-            formation_date__isnull=False
-        ).order_by("formation_date")
-    )
+    orgs = list(case.organizations.filter(formation_date__isnull=False).order_by("formation_date"))
 
     if len(orgs) < 3:
         return []
@@ -1512,8 +1498,7 @@ def evaluate_sr019_entity_proliferation(case, trigger_doc=None) -> list[SignalTr
 
     for i, anchor_org in enumerate(orgs):
         window_orgs = [
-            o for o in orgs
-            if 0 <= (o.formation_date - anchor_org.formation_date).days <= 90
+            o for o in orgs if 0 <= (o.formation_date - anchor_org.formation_date).days <= 90
         ]
 
         if len(window_orgs) < 3:
@@ -1555,11 +1540,9 @@ def evaluate_sr019_entity_proliferation(case, trigger_doc=None) -> list[SignalTr
 
 def evaluate_sr020_multi_county(case, trigger_doc=None) -> list[SignalTrigger]:
     counties = set(
-        case.properties.exclude(
-            county__isnull=True
-        ).exclude(
-            county=""
-        ).values_list("county", flat=True)
+        case.properties.exclude(county__isnull=True)
+        .exclude(county="")
+        .values_list("county", flat=True)
     )
 
     if len(counties) < 3:
@@ -1713,9 +1696,7 @@ def evaluate_sr023_formation_before_acquisition(case, trigger_doc=None) -> list[
 
     triggers = []
 
-    orgs_with_dates = list(
-        case.organizations.filter(formation_date__isnull=False)
-    )
+    orgs_with_dates = list(case.organizations.filter(formation_date__isnull=False))
 
     if not orgs_with_dates:
         return []
@@ -1742,9 +1723,7 @@ def evaluate_sr023_formation_before_acquisition(case, trigger_doc=None) -> list[
     for org in orgs_with_dates:
         # Find persons linked to this org
         org_persons = set(
-            PersonOrganization.objects.filter(
-                org=org
-            ).values_list("person_id", flat=True)
+            PersonOrganization.objects.filter(org=org).values_list("person_id", flat=True)
         )
 
         # Find all persons related to those org persons
@@ -1829,9 +1808,7 @@ def evaluate_sr024_charity_conduit(case, trigger_doc=None) -> list[SignalTrigger
         last_txn = links[-1].transaction
 
         prop_label = (
-            first_txn.property.address
-            or first_txn.property.parcel_number
-            or "unknown property"
+            first_txn.property.address or first_txn.property.parcel_number or "unknown property"
         )
 
         time_span = chain.time_span_days or "unknown"
@@ -1906,7 +1883,7 @@ _SCHEDULE_B_PATTERN = re.compile(r"\bschedule\s+b\b", re.IGNORECASE)
 
 
 def evaluate_sr025_990_denies_related_party(case, trigger_doc=None) -> list[SignalTrigger]:
-    from .models import PersonOrganization, PropertyTransaction, Relationship
+    from .models import PersonOrganization, Relationship
 
     # Step 1: Find 990 documents where Line 28 says "No"
     denial_docs = []
@@ -1921,9 +1898,9 @@ def evaluate_sr025_990_denies_related_party(case, trigger_doc=None) -> list[Sign
     # Step 2: Check if database has evidence of related-party transactions
     # Get all persons who are officers/agents of CHARITY orgs
     charity_person_ids = set(
-        PersonOrganization.objects.filter(
-            org__case=case, org__org_type="CHARITY"
-        ).values_list("person_id", flat=True)
+        PersonOrganization.objects.filter(org__case=case, org__org_type="CHARITY").values_list(
+            "person_id", flat=True
+        )
     )
 
     if not charity_person_ids:
@@ -2003,9 +1980,7 @@ def evaluate_sr026_990_denies_contractors(case, trigger_doc=None) -> list[Signal
         return []
 
     # Step 2: Check if building permits exist (evidence of contractors)
-    permit_docs = list(
-        case.documents.filter(doc_type="BUILDING_PERMIT")
-    )
+    permit_docs = list(case.documents.filter(doc_type="BUILDING_PERMIT"))
 
     # Also check for contractor names extracted from permits
     contractor_names = set()
@@ -2153,7 +2128,8 @@ def evaluate_sr029_low_program_ratio(case, trigger_doc=None) -> list[SignalTrigg
 
         # Program expenses = total_expenses - (salaries + fundraising + other)
         # Or if we have grants_paid, that's a direct program expense
-        # For now, use: program = total_expenses - salaries - professional_fundraising - other_expenses
+        # For now, use: program = total_expenses - salaries -
+        # professional_fundraising - other_expenses
         # If any component is missing, we can't compute — skip
         salaries = snap.salaries_and_compensation or 0
         fundraising = snap.professional_fundraising or 0
@@ -2452,7 +2428,6 @@ def coverage_audit(case) -> list[CoverageGap]:
         PersonOrganization,
         Relationship,
         SocialMediaConnection,
-        TransactionChain,
     )
 
     gaps = []
@@ -2466,14 +2441,11 @@ def coverage_audit(case) -> list[CoverageGap]:
     relationship_count = Relationship.objects.filter(case=case).count()
     address_count = Address.objects.filter(case=case).count()
     social_count = SocialMediaConnection.objects.filter(case=case).count()
-    chain_count = TransactionChain.objects.filter(case=case).count()
     snapshot_count = FinancialSnapshot.objects.filter(case=case).count()
     person_org_count = PersonOrganization.objects.filter(org__case=case).count()
 
     deceased_count = case.persons.filter(date_of_death__isnull=False).count()
-    orgs_with_formation = case.organizations.filter(
-        formation_date__isnull=False
-    ).count()
+    orgs_with_formation = case.organizations.filter(formation_date__isnull=False).count()
 
     txn_count = 0
     for prop in case.properties.all():
@@ -2483,255 +2455,281 @@ def coverage_audit(case) -> list[CoverageGap]:
 
     # SR-001: Needs persons with date_of_death AND documents with text
     if deceased_count == 0:
-        gaps.append(CoverageGap(
-            rule_id="SR-001",
-            rule_title=RULE_REGISTRY["SR-001"].title,
-            gap_type="RULE_BLIND",
-            message=(
-                "No persons have a date_of_death recorded. SR-001 (deceased "
-                "signer) cannot detect forgery without knowing who is deceased."
-            ),
-            recommendation=(
-                "Add date_of_death to Person records for any deceased individuals "
-                "mentioned in case documents (obituaries, death certificates)."
-            ),
-        ))
+        gaps.append(
+            CoverageGap(
+                rule_id="SR-001",
+                rule_title=RULE_REGISTRY["SR-001"].title,
+                gap_type="RULE_BLIND",
+                message=(
+                    "No persons have a date_of_death recorded. SR-001 (deceased "
+                    "signer) cannot detect forgery without knowing who is deceased."
+                ),
+                recommendation=(
+                    "Add date_of_death to Person records for any deceased individuals "
+                    "mentioned in case documents (obituaries, death certificates)."
+                ),
+            )
+        )
 
     # SR-002: Needs orgs with formation_date
     if orgs_with_formation == 0 and org_count > 0:
-        gaps.append(CoverageGap(
-            rule_id="SR-002",
-            rule_title=RULE_REGISTRY["SR-002"].title,
-            gap_type="RULE_BLIND",
-            message=(
-                f"{org_count} organizations exist but none have a formation_date. "
-                f"SR-002 (entity predates formation) cannot run."
-            ),
-            recommendation=(
-                "Add formation_date from Secretary of State filings to each "
-                "Organization record."
-            ),
-        ))
+        gaps.append(
+            CoverageGap(
+                rule_id="SR-002",
+                rule_title=RULE_REGISTRY["SR-002"].title,
+                gap_type="RULE_BLIND",
+                message=(
+                    f"{org_count} organizations exist but none have a formation_date. "
+                    f"SR-002 (entity predates formation) cannot run."
+                ),
+                recommendation=(
+                    "Add formation_date from Secretary of State filings to each "
+                    "Organization record."
+                ),
+            )
+        )
 
     # SR-003: Needs properties with BOTH purchase_price and assessed_value
     props_with_both = case.properties.filter(
         purchase_price__isnull=False, assessed_value__isnull=False
     ).count()
     if property_count > 0 and props_with_both == 0:
-        gaps.append(CoverageGap(
-            rule_id="SR-003",
-            rule_title=RULE_REGISTRY["SR-003"].title,
-            gap_type="MISSING_DATA",
-            message=(
-                f"{property_count} properties exist but none have both "
-                f"purchase_price and assessed_value. SR-003 (valuation anomaly) "
-                f"cannot compare prices."
-            ),
-            recommendation=(
-                "Add assessed_value from county auditor records and "
-                "purchase_price from deeds to each Property record."
-            ),
-        ))
+        gaps.append(
+            CoverageGap(
+                rule_id="SR-003",
+                rule_title=RULE_REGISTRY["SR-003"].title,
+                gap_type="MISSING_DATA",
+                message=(
+                    f"{property_count} properties exist but none have both "
+                    f"purchase_price and assessed_value. SR-003 (valuation anomaly) "
+                    f"cannot compare prices."
+                ),
+                recommendation=(
+                    "Add assessed_value from county auditor records and "
+                    "purchase_price from deeds to each Property record."
+                ),
+            )
+        )
 
     # SR-014: Needs Address records with links
     if address_count == 0 and (person_count > 0 or org_count > 0):
-        gaps.append(CoverageGap(
-            rule_id="SR-014",
-            rule_title=RULE_REGISTRY["SR-014"].title,
-            gap_type="RULE_BLIND",
-            message=(
-                "No normalized Address records exist. SR-014 (address nexus) "
-                "cannot detect shared addresses without the Address table."
-            ),
-            recommendation=(
-                "Create Address records for addresses found on documents, then "
-                "link them to Persons and Organizations via PersonAddress and "
-                "OrgAddress. Focus on addresses that appear on multiple filings."
-            ),
-        ))
+        gaps.append(
+            CoverageGap(
+                rule_id="SR-014",
+                rule_title=RULE_REGISTRY["SR-014"].title,
+                gap_type="RULE_BLIND",
+                message=(
+                    "No normalized Address records exist. SR-014 (address nexus) "
+                    "cannot detect shared addresses without the Address table."
+                ),
+                recommendation=(
+                    "Create Address records for addresses found on documents, then "
+                    "link them to Persons and Organizations via PersonAddress and "
+                    "OrgAddress. Focus on addresses that appear on multiple filings."
+                ),
+            )
+        )
 
     # SR-015: Needs Relationships AND PersonOrganization links AND transactions
     if relationship_count == 0:
-        gaps.append(CoverageGap(
-            rule_id="SR-015",
-            rule_title=RULE_REGISTRY["SR-015"].title,
-            gap_type="RULE_BLIND",
-            message=(
-                "No Relationship records exist. SR-015 (insider swap) cannot "
-                "detect related-party transactions without knowing who is related "
-                "to whom. This is the most important gap to fill."
-            ),
-            recommendation=(
-                "Add Relationship records for family connections (obituaries), "
-                "business partnerships (SOS filings), and social connections "
-                "(Facebook). Even partial relationship data enables detection."
-            ),
-        ))
+        gaps.append(
+            CoverageGap(
+                rule_id="SR-015",
+                rule_title=RULE_REGISTRY["SR-015"].title,
+                gap_type="RULE_BLIND",
+                message=(
+                    "No Relationship records exist. SR-015 (insider swap) cannot "
+                    "detect related-party transactions without knowing who is related "
+                    "to whom. This is the most important gap to fill."
+                ),
+                recommendation=(
+                    "Add Relationship records for family connections (obituaries), "
+                    "business partnerships (SOS filings), and social connections "
+                    "(Facebook). Even partial relationship data enables detection."
+                ),
+            )
+        )
     elif person_org_count == 0:
-        gaps.append(CoverageGap(
-            rule_id="SR-015",
-            rule_title=RULE_REGISTRY["SR-015"].title,
-            gap_type="MISSING_DATA",
-            message=(
-                f"{relationship_count} relationships recorded but no "
-                f"PersonOrganization links. SR-015 needs to know who the "
-                f"'insiders' are (officers/agents of organizations)."
-            ),
-            recommendation=(
-                "Add PersonOrganization records linking persons to their roles "
-                "in case organizations (officer, agent, incorporator, etc.)."
-            ),
-        ))
+        gaps.append(
+            CoverageGap(
+                rule_id="SR-015",
+                rule_title=RULE_REGISTRY["SR-015"].title,
+                gap_type="MISSING_DATA",
+                message=(
+                    f"{relationship_count} relationships recorded but no "
+                    f"PersonOrganization links. SR-015 needs to know who the "
+                    f"'insiders' are (officers/agents of organizations)."
+                ),
+                recommendation=(
+                    "Add PersonOrganization records linking persons to their roles "
+                    "in case organizations (officer, agent, incorporator, etc.)."
+                ),
+            )
+        )
 
     # SR-016: Needs both Relationships and PersonOrganization
     if relationship_count == 0 or person_org_count == 0:
-        gaps.append(CoverageGap(
-            rule_id="SR-016",
-            rule_title=RULE_REGISTRY["SR-016"].title,
-            gap_type="RULE_BLIND",
-            message=(
-                "SR-016 (family network density) requires both Relationship "
-                "records and PersonOrganization links to measure how much of "
-                "governance is family-controlled."
-            ),
-            recommendation=(
-                "Add family Relationships (from obituaries) and "
-                "PersonOrganization links (from 990s and SOS filings)."
-            ),
-        ))
+        gaps.append(
+            CoverageGap(
+                rule_id="SR-016",
+                rule_title=RULE_REGISTRY["SR-016"].title,
+                gap_type="RULE_BLIND",
+                message=(
+                    "SR-016 (family network density) requires both Relationship "
+                    "records and PersonOrganization links to measure how much of "
+                    "governance is family-controlled."
+                ),
+                recommendation=(
+                    "Add family Relationships (from obituaries) and "
+                    "PersonOrganization links (from 990s and SOS filings)."
+                ),
+            )
+        )
 
     # SR-017: Needs blanket lien data on FinancialInstruments
     blanket_count = case.financial_instruments.filter(is_blanket_lien=True).count()
     if fin_instrument_count > 0 and blanket_count == 0:
-        gaps.append(CoverageGap(
-            rule_id="SR-017",
-            rule_title=RULE_REGISTRY["SR-017"].title,
-            gap_type="LOW_CONFIDENCE",
-            message=(
-                f"{fin_instrument_count} financial instruments exist but none "
-                f"are flagged as blanket liens. Either there are no blanket liens, "
-                f"or the is_blanket_lien field hasn't been populated."
-            ),
-            recommendation=(
-                "Review UCC filings for 'all assets', 'all equipment', or similar "
-                "blanket language and set is_blanket_lien=True on those records."
-            ),
-        ))
+        gaps.append(
+            CoverageGap(
+                rule_id="SR-017",
+                rule_title=RULE_REGISTRY["SR-017"].title,
+                gap_type="LOW_CONFIDENCE",
+                message=(
+                    f"{fin_instrument_count} financial instruments exist but none "
+                    f"are flagged as blanket liens. Either there are no blanket liens, "
+                    f"or the is_blanket_lien field hasn't been populated."
+                ),
+                recommendation=(
+                    "Review UCC filings for 'all assets', 'all equipment', or similar "
+                    "blanket language and set is_blanket_lien=True on those records."
+                ),
+            )
+        )
 
     # SR-018/SR-024: Needs property transactions
     if property_count > 0 and txn_count == 0:
-        gaps.append(CoverageGap(
-            rule_id="SR-018",
-            rule_title=RULE_REGISTRY["SR-018"].title,
-            gap_type="RULE_BLIND",
-            message=(
-                f"{property_count} properties exist but no PropertyTransaction "
-                f"records. SR-018 (rapid flip) and SR-024 (conduit pattern) "
-                f"need transaction history to detect patterns."
-            ),
-            recommendation=(
-                "Add PropertyTransaction records from deeds — at minimum: "
-                "transaction_date, buyer_id, seller_id, buyer_name, seller_name, "
-                "and price."
-            ),
-        ))
+        gaps.append(
+            CoverageGap(
+                rule_id="SR-018",
+                rule_title=RULE_REGISTRY["SR-018"].title,
+                gap_type="RULE_BLIND",
+                message=(
+                    f"{property_count} properties exist but no PropertyTransaction "
+                    f"records. SR-018 (rapid flip) and SR-024 (conduit pattern) "
+                    f"need transaction history to detect patterns."
+                ),
+                recommendation=(
+                    "Add PropertyTransaction records from deeds — at minimum: "
+                    "transaction_date, buyer_id, seller_id, buyer_name, seller_name, "
+                    "and price."
+                ),
+            )
+        )
 
     # SR-021: Needs FinancialSnapshot data
     if snapshot_count == 0 and org_count > 0:
         charity_count = case.organizations.filter(org_type="CHARITY").count()
         if charity_count > 0:
-            gaps.append(CoverageGap(
-                rule_id="SR-021",
-                rule_title=RULE_REGISTRY["SR-021"].title,
-                gap_type="RULE_BLIND",
-                message=(
-                    "No FinancialSnapshot records exist for any charity. "
-                    "SR-021 (revenue spike) needs multi-year 990 data to detect "
-                    "anomalous growth patterns."
-                ),
-                recommendation=(
-                    "Add FinancialSnapshot records from each year's Form 990. "
-                    "At minimum: tax_year, total_revenue, total_contributions, "
-                    "total_expenses."
-                ),
-            ))
+            gaps.append(
+                CoverageGap(
+                    rule_id="SR-021",
+                    rule_title=RULE_REGISTRY["SR-021"].title,
+                    gap_type="RULE_BLIND",
+                    message=(
+                        "No FinancialSnapshot records exist for any charity. "
+                        "SR-021 (revenue spike) needs multi-year 990 data to detect "
+                        "anomalous growth patterns."
+                    ),
+                    recommendation=(
+                        "Add FinancialSnapshot records from each year's Form 990. "
+                        "At minimum: tax_year, total_revenue, total_contributions, "
+                        "total_expenses."
+                    ),
+                )
+            )
 
     # SR-022: Needs social media data
     if social_count == 0 and person_count >= 3:
-        gaps.append(CoverageGap(
-            rule_id="SR-022",
-            rule_title=RULE_REGISTRY["SR-022"].title,
-            gap_type="LOW_CONFIDENCE",
-            message=(
-                "No SocialMediaConnection records exist. SR-022 (social cluster) "
-                "is optional but powerful — it detects patronage networks that "
-                "don't appear on any official filing."
-            ),
-            recommendation=(
-                "If available, add Facebook/LinkedIn connections between case "
-                "persons. Focus on the primary officer's friend list and look for "
-                "overlap with transaction parties."
-            ),
-        ))
+        gaps.append(
+            CoverageGap(
+                rule_id="SR-022",
+                rule_title=RULE_REGISTRY["SR-022"].title,
+                gap_type="LOW_CONFIDENCE",
+                message=(
+                    "No SocialMediaConnection records exist. SR-022 (social cluster) "
+                    "is optional but powerful — it detects patronage networks that "
+                    "don't appear on any official filing."
+                ),
+                recommendation=(
+                    "If available, add Facebook/LinkedIn connections between case "
+                    "persons. Focus on the primary officer's friend list and look for "
+                    "overlap with transaction parties."
+                ),
+            )
+        )
 
     # SR-023: Needs orgs with formation dates AND transactions
     if orgs_with_formation == 0 or txn_count == 0:
-        gaps.append(CoverageGap(
-            rule_id="SR-023",
-            rule_title=RULE_REGISTRY["SR-023"].title,
-            gap_type="RULE_BLIND",
-            message=(
-                "SR-023 (entity formation before acquisition) needs both "
-                "organization formation_dates and PropertyTransaction records "
-                "to detect suspicious timing."
-            ),
-            recommendation=(
-                "Add formation_date to Organizations (from SOS) and "
-                "PropertyTransaction records (from deeds)."
-            ),
-        ))
+        gaps.append(
+            CoverageGap(
+                rule_id="SR-023",
+                rule_title=RULE_REGISTRY["SR-023"].title,
+                gap_type="RULE_BLIND",
+                message=(
+                    "SR-023 (entity formation before acquisition) needs both "
+                    "organization formation_dates and PropertyTransaction records "
+                    "to detect suspicious timing."
+                ),
+                recommendation=(
+                    "Add formation_date to Organizations (from SOS) and "
+                    "PropertyTransaction records (from deeds)."
+                ),
+            )
+        )
 
     # ── General completeness check ───────────────────────────────────
     if doc_count > 0 and person_count == 0 and org_count == 0:
-        gaps.append(CoverageGap(
-            rule_id="ALL",
-            rule_title="Entity Extraction Incomplete",
-            gap_type="MISSING_DATA",
-            message=(
-                f"{doc_count} documents uploaded but no Person or Organization "
-                f"records created. Most signal rules need entity data to work."
-            ),
-            recommendation=(
-                "Run entity extraction on uploaded documents, or manually create "
-                "Person and Organization records for entities named in the documents."
-            ),
-        ))
+        gaps.append(
+            CoverageGap(
+                rule_id="ALL",
+                rule_title="Entity Extraction Incomplete",
+                gap_type="MISSING_DATA",
+                message=(
+                    f"{doc_count} documents uploaded but no Person or Organization "
+                    f"records created. Most signal rules need entity data to work."
+                ),
+                recommendation=(
+                    "Run entity extraction on uploaded documents, or manually create "
+                    "Person and Organization records for entities named in the documents."
+                ),
+            )
+        )
 
     # ── Manual vs automatic detection ratio ──────────────────────────
     from .models import Detection
 
-    auto_count = Detection.objects.filter(
-        case=case, detection_method="SYSTEM_AUTO"
-    ).count()
+    auto_count = Detection.objects.filter(case=case, detection_method="SYSTEM_AUTO").count()
     manual_count = Detection.objects.filter(
         case=case, detection_method="INVESTIGATOR_MANUAL"
     ).count()
 
     if manual_count > auto_count and manual_count >= 3:
-        gaps.append(CoverageGap(
-            rule_id="META",
-            rule_title="Manual Detections Outnumber Automatic",
-            gap_type="LOW_CONFIDENCE",
-            message=(
-                f"Investigators have manually flagged {manual_count} issues vs "
-                f"{auto_count} automatic detections. This suggests the signal "
-                f"rules are missing patterns that humans are catching."
-            ),
-            recommendation=(
-                "Review manually-flagged detections for common patterns. "
-                "These represent candidates for new automatic signal rules. "
-                "Consider adding new SR rules based on the manual findings."
-            ),
-        ))
+        gaps.append(
+            CoverageGap(
+                rule_id="META",
+                rule_title="Manual Detections Outnumber Automatic",
+                gap_type="LOW_CONFIDENCE",
+                message=(
+                    f"Investigators have manually flagged {manual_count} issues vs "
+                    f"{auto_count} automatic detections. This suggests the signal "
+                    f"rules are missing patterns that humans are catching."
+                ),
+                recommendation=(
+                    "Review manually-flagged detections for common patterns. "
+                    "These represent candidates for new automatic signal rules. "
+                    "Consider adding new SR rules based on the manual findings."
+                ),
+            )
+        )
 
     return gaps

@@ -32,10 +32,9 @@ Configuration (settings.py)::
 Set either to ``"0/minute"`` or omit to disable that limit.
 """
 
-import json
 import logging
-import time
 import threading
+import time
 
 from django.conf import settings
 from django.http import JsonResponse
@@ -68,7 +67,11 @@ class TokenAuthMiddleware:
 
             if not auth_header:
                 return JsonResponse(
-                    {"errors": {"auth": ["Authentication required. Provide an Authorization header."]}},
+                    {
+                        "errors": {
+                            "auth": ["Authentication required. Provide an Authorization header."]
+                        }
+                    },
                     status=401,
                 )
 
@@ -76,7 +79,13 @@ class TokenAuthMiddleware:
             parts = auth_header.split(" ", 1)
             if len(parts) != 2 or parts[0].lower() != "bearer":
                 return JsonResponse(
-                    {"errors": {"auth": ["Invalid Authorization header format. Expected: Bearer <token>"]}},
+                    {
+                        "errors": {
+                            "auth": [
+                                "Invalid Authorization header format. Expected: Bearer <token>"
+                            ]
+                        }
+                    },
                     status=401,
                 )
 
@@ -96,6 +105,7 @@ class TokenAuthMiddleware:
 # -----------------------------------------------------------------------
 # SEC-025: Rate Limiting Middleware
 # -----------------------------------------------------------------------
+
 
 def _parse_rate(rate_string: str) -> tuple[int, int]:
     """Parse a rate string like '200/minute' into (max_requests, window_seconds).
@@ -199,10 +209,7 @@ class RateLimitMiddleware:
                 if not window:
                     continue
                 cutoff = now - window
-                stale_keys = [
-                    ip for ip, ts in log.items()
-                    if not ts or ts[-1] <= cutoff
-                ]
+                stale_keys = [ip for ip, ts in log.items() if not ts or ts[-1] <= cutoff]
                 for ip in stale_keys:
                     del log[ip]
 
@@ -229,10 +236,19 @@ class RateLimitMiddleware:
             kind = "write" if is_write else "read"
             logger.warning(
                 "rate_limit_exceeded",
-                extra={"ip": ip, "method": request.method, "path": request.path, "kind": kind},
+                extra={
+                    "ip": ip,
+                    "method": request.method,
+                    "path": request.path,
+                    "kind": kind,
+                },
             )
             response = JsonResponse(
-                {"errors": {"rate_limit": [f"Too many requests. Try again in {retry_after} seconds."]}},
+                {
+                    "errors": {
+                        "rate_limit": [f"Too many requests. Try again in {retry_after} seconds."]
+                    }
+                },
                 status=429,
             )
             response["Retry-After"] = str(retry_after)

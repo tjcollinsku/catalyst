@@ -29,8 +29,8 @@ from .models import (
     GovernmentReferral,
     InvestigatorNote,
     OcrStatus,
-    OrgDocument,
     Organization,
+    OrgDocument,
     Person,
     PersonDocument,
     PersonOrganization,
@@ -198,9 +198,7 @@ def _generate_forensic_filename(
         # --- Date selection ---
         # For parcel records, prefer the SOLD date (most forensically relevant)
         if doc_type == "PARCEL_RECORD":
-            sold_match = _re.search(
-                r"SOLD:\s+(\d{1,2})/(\d{1,2})/(\d{4})", extracted_text
-            )
+            sold_match = _re.search(r"SOLD:\s+(\d{1,2})/(\d{1,2})/(\d{4})", extracted_text)
             if sold_match:
                 m, d, y = sold_match.group(1), sold_match.group(2), sold_match.group(3)
                 yr = int(y)
@@ -306,8 +304,14 @@ def _extract_property_data(extracted_text, doc_type, document, case):
             defaults={
                 "address": card.address or "",
                 "county": card.county or "DARKE",
-                "assessed_value": Decimal(str(card.current_assessed)) if card.current_assessed else None,
-                "purchase_price": Decimal(str(card.most_recent_sale_price)) if card.most_recent_sale_price else None,
+                "assessed_value": (
+                    Decimal(str(card.current_assessed)) if card.current_assessed else None
+                ),
+                "purchase_price": (
+                    Decimal(str(card.most_recent_sale_price))
+                    if card.most_recent_sale_price
+                    else None
+                ),
                 "notes": (
                     f"Owner: {card.owner or 'unknown'}\n"
                     f"Municipality: {card.municipality or ''}\n"
@@ -444,7 +448,8 @@ def _extract_property_data(extracted_text, doc_type, document, case):
         recording_date = None
         if deed.recording_date:
             try:
-                from datetime import date, datetime as _dt
+                from datetime import date
+                from datetime import datetime as _dt
 
                 if isinstance(deed.recording_date, str):
                     recording_date = _dt.strptime(deed.recording_date, "%Y-%m-%d").date()
@@ -672,7 +677,7 @@ def _process_uploaded_file(
         )
 
     # --- SEC-027/028: Track extraction pipeline failures ---
-    extraction_failures = []   # list of step names that failed
+    extraction_failures = []  # list of step names that failed
     entity_summary = None
 
     if run_pipeline and extracted_text and not is_generated:
@@ -699,18 +704,23 @@ def _process_uploaded_file(
                         "ai_extraction_merged",
                         extra={
                             "document_id": str(document.pk),
-                            "ai_proposals": extraction_result.get("meta", {}).get("ai_proposals", 0),
+                            "ai_proposals": (
+                                extraction_result.get("meta", {}).get("ai_proposals", 0)
+                            ),
                         },
                     )
             except Exception:
                 logger.warning(
                     "ai_extraction_skipped",
-                    extra={"document_id": str(document.pk), "reason": "AI extraction failed, using regex only"},
+                    extra={
+                        "document_id": str(document.pk),
+                        "reason": "AI extraction failed, using regex only",
+                    },
                 )
 
             # --- Stage 2: Data quality validation on extracted financials ---
             try:
-                from .data_quality import validate_financial_snapshot as _vfs, validate_person as _vp
+                from .data_quality import validate_financial_snapshot as _vfs
 
                 for fin in extraction_result.get("financials", []):
                     if fin.get("source") == "ai":
@@ -1323,6 +1333,7 @@ def _build_ordering_fields(order_by, direction):
 # SEC-024: CSRF cookie endpoint for SPA
 # ---------------------------------------------------------------------------
 
+
 @ensure_csrf_cookie
 @require_http_methods(["GET"])
 def api_csrf_token(request):
@@ -1337,6 +1348,7 @@ def api_csrf_token(request):
 # ---------------------------------------------------------------------------
 # Case collection & detail
 # ---------------------------------------------------------------------------
+
 
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
@@ -1577,7 +1589,7 @@ def api_case_document_detail(request, pk, document_id):
     data = serialize_document(document)
 
     # Linked persons
-    from .models import PersonDocument, OrgDocument
+    from .models import OrgDocument, PersonDocument
 
     person_links = PersonDocument.objects.filter(document=document).select_related("person")
     data["persons"] = [
@@ -1893,7 +1905,7 @@ def api_signal_summary(request):
         output_field=IntegerField(),
     )
 
-    from django.db.models import Count, Q
+    from django.db.models import Count
 
     rows = (
         Signal.objects.values("case_id")
@@ -1950,7 +1962,11 @@ def api_search(request):
     valid_types = {"case", "document", "signal", "entity"}
     if raw_type and raw_type not in valid_types:
         return JsonResponse(
-            {"errors": {"type": [f"Invalid type. Expected one of: {', '.join(sorted(valid_types))}."]}},
+            {
+                "errors": {
+                    "type": [f"Invalid type. Expected one of: {', '.join(sorted(valid_types))}."]
+                }
+            },
             status=400,
         )
 
@@ -1964,35 +1980,32 @@ def api_search(request):
     if raw_type in (None, "case"):
         vector = SearchVector("name", weight="A") + SearchVector("notes", weight="B")
         case_qs = (
-            Case.objects
-            .annotate(rank=SearchRank(vector, search_query))
+            Case.objects.annotate(rank=SearchRank(vector, search_query))
             .filter(rank__gt=0)
             .order_by("-rank")
         )
         if raw_case_id:
             case_qs = case_qs.filter(pk=raw_case_id)
         for c in case_qs[:25]:
-            results.append({
-                "type": "case",
-                "id": str(c.pk),
-                "title": c.name,
-                "subtitle": f"Status: {c.status}",
-                "snippet": f"Status: {c.status}" + (f" — {c.notes[:120]}" if c.notes else ""),
-                "relevance": round(float(c.rank), 4),
-                "case_id": str(c.pk),
-                "case_name": c.name,
-                "route": f"/cases/{c.pk}",
-            })
+            results.append(
+                {
+                    "type": "case",
+                    "id": str(c.pk),
+                    "title": c.name,
+                    "subtitle": f"Status: {c.status}",
+                    "snippet": f"Status: {c.status}" + (f" — {c.notes[:120]}" if c.notes else ""),
+                    "relevance": round(float(c.rank), 4),
+                    "case_id": str(c.pk),
+                    "case_name": c.name,
+                    "route": f"/cases/{c.pk}",
+                }
+            )
 
     # --- Documents ---
     if raw_type in (None, "document"):
-        vector = (
-            SearchVector("filename", weight="A")
-            + SearchVector("extracted_text", weight="B")
-        )
+        vector = SearchVector("filename", weight="A") + SearchVector("extracted_text", weight="B")
         doc_qs = (
-            Document.objects
-            .select_related("case")
+            Document.objects.select_related("case")
             .annotate(rank=SearchRank(vector, search_query))
             .filter(rank__gt=0)
             .order_by("-rank")
@@ -2011,24 +2024,25 @@ def api_search(request):
                     + d.extracted_text[start:end].strip()
                     + ("..." if end < len(d.extracted_text) else "")
                 )
-            results.append({
-                "type": "document",
-                "id": str(d.pk),
-                "title": d.filename,
-                "subtitle": f"{d.doc_type} — {d.case.name}",
-                "snippet": snippet,
-                "relevance": round(float(d.rank), 4),
-                "case_id": str(d.case_id),
-                "case_name": d.case.name,
-                "route": f"/cases/{d.case_id}",
-            })
+            results.append(
+                {
+                    "type": "document",
+                    "id": str(d.pk),
+                    "title": d.filename,
+                    "subtitle": f"{d.doc_type} — {d.case.name}",
+                    "snippet": snippet,
+                    "relevance": round(float(d.rank), 4),
+                    "case_id": str(d.case_id),
+                    "case_name": d.case.name,
+                    "route": f"/cases/{d.case_id}",
+                }
+            )
 
     # --- Signals ---
     if raw_type in (None, "signal"):
         vector = SearchVector("detected_summary", weight="A")
         sig_qs = (
-            Signal.objects
-            .select_related("case")
+            Signal.objects.select_related("case")
             .annotate(rank=SearchRank(vector, search_query))
             .filter(rank__gt=0)
             .order_by("-rank")
@@ -2036,25 +2050,26 @@ def api_search(request):
         if raw_case_id:
             sig_qs = sig_qs.filter(case_id=raw_case_id)
         for s in sig_qs[:25]:
-            results.append({
-                "type": "signal",
-                "id": str(s.pk),
-                "title": f"{s.rule_id} — {s.severity}",
-                "subtitle": f"Signal — {s.status}",
-                "snippet": s.detected_summary[:200] if s.detected_summary else "",
-                "relevance": round(float(s.rank), 4),
-                "case_id": str(s.case_id),
-                "case_name": s.case.name,
-                "route": f"/cases/{s.case_id}",
-            })
+            results.append(
+                {
+                    "type": "signal",
+                    "id": str(s.pk),
+                    "title": f"{s.rule_id} — {s.severity}",
+                    "subtitle": f"Signal — {s.status}",
+                    "snippet": s.detected_summary[:200] if s.detected_summary else "",
+                    "relevance": round(float(s.rank), 4),
+                    "case_id": str(s.case_id),
+                    "case_name": s.case.name,
+                    "route": f"/cases/{s.case_id}",
+                }
+            )
 
     # --- Entities (persons, orgs, properties, financial instruments) ---
     if raw_type in (None, "entity"):
         # Persons — search full_name and notes
         p_vector = SearchVector("full_name", weight="A") + SearchVector("notes", weight="C")
         person_qs = (
-            Person.objects
-            .select_related("case")
+            Person.objects.select_related("case")
             .annotate(rank=SearchRank(p_vector, search_query))
             .filter(rank__gt=0)
             .order_by("-rank")
@@ -2062,23 +2077,26 @@ def api_search(request):
         if raw_case_id:
             person_qs = person_qs.filter(case_id=raw_case_id)
         for p in person_qs[:25]:
-            results.append({
-                "type": "entity",
-                "id": str(p.pk),
-                "title": p.full_name,
-                "subtitle": "Person" + (f" — {', '.join(p.role_tags)}" if p.role_tags else ""),
-                "snippet": f"Person — Roles: {', '.join(p.role_tags)}" if p.role_tags else "Person",
-                "relevance": round(float(p.rank), 4),
-                "case_id": str(p.case_id),
-                "case_name": p.case.name,
-                "route": f"/entities/person/{p.pk}",
-            })
+            results.append(
+                {
+                    "type": "entity",
+                    "id": str(p.pk),
+                    "title": p.full_name,
+                    "subtitle": "Person" + (f" — {', '.join(p.role_tags)}" if p.role_tags else ""),
+                    "snippet": f"Person — Roles: {', '.join(p.role_tags)}"
+                    if p.role_tags
+                    else "Person",
+                    "relevance": round(float(p.rank), 4),
+                    "case_id": str(p.case_id),
+                    "case_name": p.case.name,
+                    "route": f"/entities/person/{p.pk}",
+                }
+            )
 
         # Organizations — search name and notes
         o_vector = SearchVector("name", weight="A") + SearchVector("notes", weight="C")
         org_qs = (
-            Organization.objects
-            .select_related("case")
+            Organization.objects.select_related("case")
             .annotate(rank=SearchRank(o_vector, search_query))
             .filter(rank__gt=0)
             .order_by("-rank")
@@ -2086,17 +2104,20 @@ def api_search(request):
         if raw_case_id:
             org_qs = org_qs.filter(case_id=raw_case_id)
         for o in org_qs[:25]:
-            results.append({
-                "type": "entity",
-                "id": str(o.pk),
-                "title": o.name,
-                "subtitle": f"Organization — {o.org_type}",
-                "snippet": f"Organization — {o.org_type}" + (f", EIN: {o.ein}" if o.ein else ""),
-                "relevance": round(float(o.rank), 4),
-                "case_id": str(o.case_id),
-                "case_name": o.case.name,
-                "route": f"/entities/organization/{o.pk}",
-            })
+            results.append(
+                {
+                    "type": "entity",
+                    "id": str(o.pk),
+                    "title": o.name,
+                    "subtitle": f"Organization — {o.org_type}",
+                    "snippet": f"Organization — {o.org_type}"
+                    + (f", EIN: {o.ein}" if o.ein else ""),
+                    "relevance": round(float(o.rank), 4),
+                    "case_id": str(o.case_id),
+                    "case_name": o.case.name,
+                    "route": f"/entities/organization/{o.pk}",
+                }
+            )
 
         # Properties — search address, parcel_number, county
         prop_vector = (
@@ -2105,8 +2126,7 @@ def api_search(request):
             + SearchVector("county", weight="C")
         )
         prop_qs = (
-            Property.objects
-            .select_related("case")
+            Property.objects.select_related("case")
             .annotate(rank=SearchRank(prop_vector, search_query))
             .filter(rank__gt=0)
             .order_by("-rank")
@@ -2114,26 +2134,29 @@ def api_search(request):
         if raw_case_id:
             prop_qs = prop_qs.filter(case_id=raw_case_id)
         for p in prop_qs[:25]:
-            results.append({
-                "type": "entity",
-                "id": str(p.pk),
-                "title": p.address or p.parcel_number or str(p.pk)[:8],
-                "subtitle": f"Property — {p.county or 'Unknown'} County",
-                "snippet": f"Property — {p.county or 'Unknown'} County" + (f", Parcel: {p.parcel_number}" if p.parcel_number else ""),
-                "relevance": round(float(p.rank), 4),
-                "case_id": str(p.case_id),
-                "case_name": p.case.name,
-                "route": f"/entities/property/{p.pk}",
-            })
+            results.append(
+                {
+                    "type": "entity",
+                    "id": str(p.pk),
+                    "title": p.address or p.parcel_number or str(p.pk)[:8],
+                    "subtitle": f"Property — {p.county or 'Unknown'} County",
+                    "snippet": (
+                        f"Property — {p.county or 'Unknown'} County"
+                        + (f", Parcel: {p.parcel_number}" if p.parcel_number else "")
+                    ),
+                    "relevance": round(float(p.rank), 4),
+                    "case_id": str(p.case_id),
+                    "case_name": p.case.name,
+                    "route": f"/entities/property/{p.pk}",
+                }
+            )
 
         # Financial Instruments — search filing_number and instrument_type
-        fi_vector = (
-            SearchVector("filing_number", weight="A")
-            + SearchVector("instrument_type", weight="B")
+        fi_vector = SearchVector("filing_number", weight="A") + SearchVector(
+            "instrument_type", weight="B"
         )
         fi_qs = (
-            FinancialInstrument.objects
-            .select_related("case")
+            FinancialInstrument.objects.select_related("case")
             .annotate(rank=SearchRank(fi_vector, search_query))
             .filter(rank__gt=0)
             .order_by("-rank")
@@ -2141,27 +2164,31 @@ def api_search(request):
         if raw_case_id:
             fi_qs = fi_qs.filter(case_id=raw_case_id)
         for fi in fi_qs[:25]:
-            results.append({
-                "type": "entity",
-                "id": str(fi.pk),
-                "title": f"{fi.instrument_type} {fi.filing_number or ''}".strip(),
-                "subtitle": f"Financial Instrument — {fi.instrument_type}",
-                "snippet": f"Financial Instrument — {fi.instrument_type}",
-                "relevance": round(float(fi.rank), 4),
-                "case_id": str(fi.case_id),
-                "case_name": fi.case.name,
-                "route": f"/entities/financial_instrument/{fi.pk}",
-            })
+            results.append(
+                {
+                    "type": "entity",
+                    "id": str(fi.pk),
+                    "title": f"{fi.instrument_type} {fi.filing_number or ''}".strip(),
+                    "subtitle": f"Financial Instrument — {fi.instrument_type}",
+                    "snippet": f"Financial Instrument — {fi.instrument_type}",
+                    "relevance": round(float(fi.rank), 4),
+                    "case_id": str(fi.case_id),
+                    "case_name": fi.case.name,
+                    "route": f"/entities/financial_instrument/{fi.pk}",
+                }
+            )
 
     # Sort by relevance descending, then alphabetically by title
     results.sort(key=lambda r: (-r["relevance"], r["title"]))
 
-    return JsonResponse({
-        "query": raw_query,
-        "total": len(results),
-        "ai_overview": "",
-        "results": results,
-    })
+    return JsonResponse(
+        {
+            "query": raw_query,
+            "total": len(results),
+            "ai_overview": "",
+            "results": results,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2230,7 +2257,9 @@ def api_case_export(request, pk):
             "persons": [serialize_person(p) for p in persons],
             "organizations": [serialize_organization(o) for o in organizations],
             "properties": [serialize_property(p) for p in properties],
-            "financial_instruments": [serialize_financial_instrument(fi) for fi in financial_instruments],
+            "financial_instruments": [
+                serialize_financial_instrument(fi) for fi in financial_instruments
+            ],
             "exported_at": timezone.now().isoformat(),
         }
 
@@ -2240,11 +2269,13 @@ def api_case_export(request, pk):
             json_mod.dump(export_data, fh, indent=2)
 
         download_url = f"/{settings.MEDIA_URL}exports/{filename}"
-        return JsonResponse({
-            "format": "json",
-            "filename": filename,
-            "download_url": download_url,
-        })
+        return JsonResponse(
+            {
+                "format": "json",
+                "filename": filename,
+                "download_url": download_url,
+            }
+        )
 
     # CSV export — one section per entity type, separated by headers
     import csv
@@ -2256,84 +2287,131 @@ def api_case_export(request, pk):
     # Case summary
     writer.writerow(["=== CASE SUMMARY ==="])
     writer.writerow(["ID", "Name", "Status", "Notes", "Referral Ref", "Created At"])
-    writer.writerow([
-        str(case.pk), case.name, case.status,
-        case.notes or "", case.referral_ref or "",
-        case.created_at.isoformat() if case.created_at else "",
-    ])
+    writer.writerow(
+        [
+            str(case.pk),
+            case.name,
+            case.status,
+            case.notes or "",
+            case.referral_ref or "",
+            case.created_at.isoformat() if case.created_at else "",
+        ]
+    )
     writer.writerow([])
 
     # Documents
     writer.writerow(["=== DOCUMENTS ==="])
     writer.writerow(["ID", "Filename", "Doc Type", "File Size", "OCR Status", "Uploaded At"])
     for d in documents:
-        writer.writerow([
-            str(d.pk), d.filename, d.doc_type, d.file_size,
-            d.ocr_status, d.uploaded_at.isoformat() if d.uploaded_at else "",
-        ])
+        writer.writerow(
+            [
+                str(d.pk),
+                d.filename,
+                d.doc_type,
+                d.file_size,
+                d.ocr_status,
+                d.uploaded_at.isoformat() if d.uploaded_at else "",
+            ]
+        )
     writer.writerow([])
 
     # Signals
     writer.writerow(["=== SIGNALS ==="])
     writer.writerow(["ID", "Rule ID", "Severity", "Status", "Summary", "Detected At"])
     for s in signals:
-        writer.writerow([
-            str(s.pk), s.rule_id, s.severity, s.status,
-            s.detected_summary or "", s.detected_at.isoformat() if s.detected_at else "",
-        ])
+        writer.writerow(
+            [
+                str(s.pk),
+                s.rule_id,
+                s.severity,
+                s.status,
+                s.detected_summary or "",
+                s.detected_at.isoformat() if s.detected_at else "",
+            ]
+        )
     writer.writerow([])
 
     # Persons
     writer.writerow(["=== PERSONS ==="])
     writer.writerow(["ID", "Full Name", "Aliases", "Role Tags", "Date of Death", "Notes"])
     for p in persons:
-        writer.writerow([
-            str(p.pk), p.full_name, "; ".join(p.aliases),
-            "; ".join(p.role_tags), p.date_of_death or "", p.notes or "",
-        ])
+        writer.writerow(
+            [
+                str(p.pk),
+                p.full_name,
+                "; ".join(p.aliases),
+                "; ".join(p.role_tags),
+                p.date_of_death or "",
+                p.notes or "",
+            ]
+        )
     writer.writerow([])
 
     # Organizations
     writer.writerow(["=== ORGANIZATIONS ==="])
     writer.writerow(["ID", "Name", "Type", "EIN", "State", "Status", "Formation Date"])
     for o in organizations:
-        writer.writerow([
-            str(o.pk), o.name, o.org_type, o.ein or "",
-            o.registration_state or "", o.status, o.formation_date or "",
-        ])
+        writer.writerow(
+            [
+                str(o.pk),
+                o.name,
+                o.org_type,
+                o.ein or "",
+                o.registration_state or "",
+                o.status,
+                o.formation_date or "",
+            ]
+        )
     writer.writerow([])
 
     # Properties
     writer.writerow(["=== PROPERTIES ==="])
-    writer.writerow(["ID", "Parcel Number", "Address", "County", "Assessed Value", "Purchase Price"])
+    writer.writerow(
+        ["ID", "Parcel Number", "Address", "County", "Assessed Value", "Purchase Price"]
+    )
     for p in properties:
-        writer.writerow([
-            str(p.pk), p.parcel_number or "", p.address or "",
-            p.county or "", str(p.assessed_value) if p.assessed_value else "",
-            str(p.purchase_price) if p.purchase_price else "",
-        ])
+        writer.writerow(
+            [
+                str(p.pk),
+                p.parcel_number or "",
+                p.address or "",
+                p.county or "",
+                str(p.assessed_value) if p.assessed_value else "",
+                str(p.purchase_price) if p.purchase_price else "",
+            ]
+        )
     writer.writerow([])
 
     # Financial Instruments
     writer.writerow(["=== FINANCIAL INSTRUMENTS ==="])
     writer.writerow(["ID", "Type", "Filing Number", "Filing Date", "Amount", "Anomaly Flags"])
     for fi in financial_instruments:
-        writer.writerow([
-            str(fi.pk), fi.instrument_type, fi.filing_number or "",
-            fi.filing_date or "", str(fi.amount) if fi.amount else "",
-            "; ".join(fi.anomaly_flags),
-        ])
+        writer.writerow(
+            [
+                str(fi.pk),
+                fi.instrument_type,
+                fi.filing_number or "",
+                fi.filing_date or "",
+                str(fi.amount) if fi.amount else "",
+                "; ".join(fi.anomaly_flags),
+            ]
+        )
     writer.writerow([])
 
     # Referrals
     writer.writerow(["=== REFERRALS ==="])
     writer.writerow(["ID", "Agency", "Status", "Submission ID", "Filing Date", "Notes"])
     for r in referrals:
-        writer.writerow([
-            r.referral_id, r.agency_name or "", r.status,
-            r.submission_id or "", r.filing_date.isoformat() if r.filing_date else "",
-            r.notes or "",
-        ])
+        writer.writerow(
+            [
+                r.referral_id,
+                r.agency_name or "",
+                r.status,
+                r.submission_id or "",
+                r.filing_date.isoformat() if r.filing_date else "",
+                r.notes or "",
+            ]
+        )
 
     filename = f"catalyst_case_{case.pk}.csv"
     filepath = os.path.join(exports_dir, filename)
@@ -2341,11 +2419,13 @@ def api_case_export(request, pk):
         fh.write(output.getvalue())
 
     download_url = f"/{settings.MEDIA_URL}exports/{filename}"
-    return JsonResponse({
-        "format": "csv",
-        "filename": filename,
-        "download_url": download_url,
-    })
+    return JsonResponse(
+        {
+            "format": "csv",
+            "filename": filename,
+            "download_url": download_url,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2369,9 +2449,14 @@ def api_entity_detail(request, entity_type, entity_id):
     """
     if entity_type not in ENTITY_TYPE_MAP:
         return JsonResponse(
-            {"errors": {"entity_type": [
-                f"Invalid entity type. Expected one of: {', '.join(sorted(ENTITY_TYPE_MAP.keys()))}."
-            ]}},
+            {
+                "errors": {
+                    "entity_type": [
+                        f"Invalid entity type. Expected one of: "
+                        f"{', '.join(sorted(ENTITY_TYPE_MAP.keys()))}."
+                    ]
+                }
+            },
             status=400,
         )
 
@@ -2436,11 +2521,15 @@ def api_entity_detail(request, entity_type, entity_id):
             for por in org_roles
         ]
     elif entity_type == "property":
-        transactions = PropertyTransaction.objects.filter(property=entity).select_related("document")
+        transactions = PropertyTransaction.objects.filter(property=entity).select_related(
+            "document"
+        )
         data["transactions"] = [
             {
                 "id": str(pt.pk),
-                "transaction_date": pt.transaction_date.isoformat() if pt.transaction_date else None,
+                "transaction_date": (
+                    pt.transaction_date.isoformat() if pt.transaction_date else None
+                ),
                 "buyer_id": str(pt.buyer_id) if pt.buyer_id else None,
                 "seller_id": str(pt.seller_id) if pt.seller_id else None,
                 "price": str(pt.price) if pt.price else None,
@@ -2458,7 +2547,13 @@ def api_entity_detail(request, entity_type, entity_id):
 # ---------------------------------------------------------------------------
 
 FINDING_SORT_FIELDS = {
-    "created_at", "updated_at", "severity", "confidence", "status", "title", "id",
+    "created_at",
+    "updated_at",
+    "severity",
+    "confidence",
+    "status",
+    "title",
+    "id",
 }
 
 
@@ -2479,7 +2574,8 @@ def api_case_finding_collection(request, pk):
 
     if request.method == "GET":
         qs = Finding.objects.filter(case=case).prefetch_related(
-            "entity_links", "document_links",
+            "entity_links",
+            "document_links",
         )
 
         # Filters
@@ -2505,16 +2601,18 @@ def api_case_finding_collection(request, pk):
         if err:
             return err
         total = qs.count()
-        page = qs[offset: offset + limit]
+        page = qs[offset : offset + limit]
 
-        return JsonResponse({
-            "count": total,
-            "limit": limit,
-            "offset": offset,
-            "next_offset": offset + limit if offset + limit < total else None,
-            "previous_offset": max(0, offset - limit) if offset > 0 else None,
-            "results": [serialize_finding(f) for f in page],
-        })
+        return JsonResponse(
+            {
+                "count": total,
+                "limit": limit,
+                "offset": offset,
+                "next_offset": offset + limit if offset + limit < total else None,
+                "previous_offset": max(0, offset - limit) if offset > 0 else None,
+                "results": [serialize_finding(f) for f in page],
+            }
+        )
 
     # POST — create a new finding
     payload, err = _parse_json_body(request)
@@ -2531,7 +2629,11 @@ def api_case_finding_collection(request, pk):
         table_name="findings",
         record_id=finding.pk,
         case_id=case.pk,
-        after_state={"title": finding.title, "severity": finding.severity, "status": finding.status},
+        after_state={
+            "title": finding.title,
+            "severity": finding.severity,
+            "status": finding.status,
+        },
         performed_by=getattr(request, "api_token", None),
     )
     return JsonResponse(serialize_finding(finding), status=201)
@@ -2633,7 +2735,9 @@ def api_case_note_collection(request, pk):
         return pagination_error
 
     order_by, direction, sort_error = _parse_sort_params(
-        request, allowed_fields=NOTE_SORT_FIELDS, default_field="created_at",
+        request,
+        allowed_fields=NOTE_SORT_FIELDS,
+        default_field="created_at",
     )
     if sort_error is not None:
         return sort_error
@@ -2654,14 +2758,16 @@ def api_case_note_collection(request, pk):
     next_offset = offset + limit if (offset + limit) < total_count else None
     previous_offset = max(offset - limit, 0) if offset > 0 else None
 
-    return JsonResponse({
-        "count": total_count,
-        "limit": limit,
-        "offset": offset,
-        "next_offset": next_offset,
-        "previous_offset": previous_offset,
-        "results": [serialize_note(n) for n in paged],
-    })
+    return JsonResponse(
+        {
+            "count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "next_offset": next_offset,
+            "previous_offset": previous_offset,
+            "results": [serialize_note(n) for n in paged],
+        }
+    )
 
 
 @csrf_exempt
@@ -2714,6 +2820,7 @@ def api_case_note_detail(request, pk, note_id):
 
 SIGNAL_SORT_FIELDS = {"detected_at", "severity", "status", "rule_id", "id"}
 
+
 @require_http_methods(["GET"])
 def api_signal_collection(request):
     """Cross-case signal list with filters.
@@ -2727,7 +2834,9 @@ def api_signal_collection(request):
         return pagination_error
 
     order_by, direction, sort_error = _parse_sort_params(
-        request, allowed_fields=SIGNAL_SORT_FIELDS, default_field="detected_at",
+        request,
+        allowed_fields=SIGNAL_SORT_FIELDS,
+        default_field="detected_at",
     )
     if sort_error is not None:
         return sort_error
@@ -2763,19 +2872,22 @@ def api_signal_collection(request):
         data["case_name"] = signal.case.name
         results.append(data)
 
-    return JsonResponse({
-        "count": total_count,
-        "limit": limit,
-        "offset": offset,
-        "next_offset": next_offset,
-        "previous_offset": previous_offset,
-        "results": results,
-    })
+    return JsonResponse(
+        {
+            "count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "next_offset": next_offset,
+            "previous_offset": previous_offset,
+            "results": results,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Cross-case referrals list
 # ---------------------------------------------------------------------------
+
 
 @require_http_methods(["GET"])
 def api_referral_collection(request):
@@ -2813,14 +2925,16 @@ def api_referral_collection(request):
         data["case_name"] = referral.case.name if referral.case else ""
         results.append(data)
 
-    return JsonResponse({
-        "count": total_count,
-        "limit": limit,
-        "offset": offset,
-        "next_offset": next_offset,
-        "previous_offset": previous_offset,
-        "results": results,
-    })
+    return JsonResponse(
+        {
+            "count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "next_offset": next_offset,
+            "previous_offset": previous_offset,
+            "results": results,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2835,7 +2949,10 @@ def api_case_graph(request, pk):
     Response shape:
         {
             "nodes": [{ "id", "type", "label", "metadata": {...} }, ...],
-            "edges": [{ "source", "target", "relationship", "label", "weight", "metadata": {...} }, ...],
+            "edges": [
+                { "source", "target", "relationship", "label", "weight",
+                  "metadata": {...} }, ...
+            ],
             "stats": { "total_nodes", "total_edges", "node_types": {...} }
         }
 
@@ -2855,10 +2972,7 @@ def api_case_graph(request, pk):
     # by entity_id to get how many signals reference each entity.
     entity_signal_counts = {}
     for row in (
-        EntitySignal.objects
-        .filter(signal__case=case)
-        .values("entity_id")
-        .annotate(cnt=Count("id"))
+        EntitySignal.objects.filter(signal__case=case).values("entity_id").annotate(cnt=Count("id"))
     ):
         entity_signal_counts[str(row["entity_id"])] = row["cnt"]
 
@@ -2905,19 +3019,21 @@ def api_case_graph(request, pk):
         node_ids.add(pid)
         node_type_counts["person"] += 1
         doc_count = PersonDocument.objects.filter(person=p).count()
-        nodes.append({
-            "id": pid,
-            "type": "person",
-            "label": p.full_name,
-            "metadata": {
-                "role_tags": p.role_tags or [],
-                "aliases": p.aliases or [],
-                "date_of_death": p.date_of_death.isoformat() if p.date_of_death else None,
-                "signal_count": entity_signal_counts.get(pid, 0),
-                "detection_count": _det_person_counts.get(pid, 0),
-                "doc_count": doc_count,
-            },
-        })
+        nodes.append(
+            {
+                "id": pid,
+                "type": "person",
+                "label": p.full_name,
+                "metadata": {
+                    "role_tags": p.role_tags or [],
+                    "aliases": p.aliases or [],
+                    "date_of_death": p.date_of_death.isoformat() if p.date_of_death else None,
+                    "signal_count": entity_signal_counts.get(pid, 0),
+                    "detection_count": _det_person_counts.get(pid, 0),
+                    "doc_count": doc_count,
+                },
+            }
+        )
 
     # Organizations
     for o in Organization.objects.filter(case=case):
@@ -2925,59 +3041,65 @@ def api_case_graph(request, pk):
         node_ids.add(oid)
         node_type_counts["organization"] += 1
         doc_count = OrgDocument.objects.filter(org=o).count()
-        nodes.append({
-            "id": oid,
-            "type": "organization",
-            "label": o.name,
-            "metadata": {
-                "org_type": o.org_type,
-                "ein": o.ein,
-                "status": o.status,
-                "signal_count": entity_signal_counts.get(oid, 0),
-                "detection_count": _det_org_counts.get(oid, 0),
-                "doc_count": doc_count,
-            },
-        })
+        nodes.append(
+            {
+                "id": oid,
+                "type": "organization",
+                "label": o.name,
+                "metadata": {
+                    "org_type": o.org_type,
+                    "ein": o.ein,
+                    "status": o.status,
+                    "signal_count": entity_signal_counts.get(oid, 0),
+                    "detection_count": _det_org_counts.get(oid, 0),
+                    "doc_count": doc_count,
+                },
+            }
+        )
 
     # Properties
     for prop in Property.objects.filter(case=case):
         propid = str(prop.pk)
         node_ids.add(propid)
         node_type_counts["property"] += 1
-        nodes.append({
-            "id": propid,
-            "type": "property",
-            "label": prop.address or prop.parcel_number or propid[:8],
-            "metadata": {
-                "parcel_number": prop.parcel_number,
-                "county": prop.county,
-                "assessed_value": str(prop.assessed_value) if prop.assessed_value else None,
-                "purchase_price": str(prop.purchase_price) if prop.purchase_price else None,
-                "signal_count": entity_signal_counts.get(propid, 0),
-                "detection_count": _det_prop_counts.get(propid, 0),
-                "doc_count": 0,
-            },
-        })
+        nodes.append(
+            {
+                "id": propid,
+                "type": "property",
+                "label": prop.address or prop.parcel_number or propid[:8],
+                "metadata": {
+                    "parcel_number": prop.parcel_number,
+                    "county": prop.county,
+                    "assessed_value": str(prop.assessed_value) if prop.assessed_value else None,
+                    "purchase_price": str(prop.purchase_price) if prop.purchase_price else None,
+                    "signal_count": entity_signal_counts.get(propid, 0),
+                    "detection_count": _det_prop_counts.get(propid, 0),
+                    "doc_count": 0,
+                },
+            }
+        )
 
     # Financial Instruments
     for fi in FinancialInstrument.objects.filter(case=case):
         fiid = str(fi.pk)
         node_ids.add(fiid)
         node_type_counts["financial_instrument"] += 1
-        nodes.append({
-            "id": fiid,
-            "type": "financial_instrument",
-            "label": f"{fi.instrument_type} {fi.filing_number or ''}".strip() or fiid[:8],
-            "metadata": {
-                "instrument_type": fi.instrument_type,
-                "filing_number": fi.filing_number,
-                "filing_date": fi.filing_date.isoformat() if fi.filing_date else None,
-                "amount": str(fi.amount) if fi.amount else None,
-                "signal_count": entity_signal_counts.get(fiid, 0),
-                "detection_count": _det_fi_counts.get(fiid, 0),
-                "doc_count": 0,
-            },
-        })
+        nodes.append(
+            {
+                "id": fiid,
+                "type": "financial_instrument",
+                "label": f"{fi.instrument_type} {fi.filing_number or ''}".strip() or fiid[:8],
+                "metadata": {
+                    "instrument_type": fi.instrument_type,
+                    "filing_number": fi.filing_number,
+                    "filing_date": fi.filing_date.isoformat() if fi.filing_date else None,
+                    "amount": str(fi.amount) if fi.amount else None,
+                    "signal_count": entity_signal_counts.get(fiid, 0),
+                    "detection_count": _det_fi_counts.get(fiid, 0),
+                    "doc_count": 0,
+                },
+            }
+        )
 
     # ── 2. Derive edges ───────────────────────────────────────────────
 
@@ -2986,17 +3108,19 @@ def api_case_graph(request, pk):
         src = str(po.person_id)
         tgt = str(po.org_id)
         if src in node_ids and tgt in node_ids:
-            edges.append({
-                "source": src,
-                "target": tgt,
-                "relationship": "OFFICER_OF",
-                "label": po.role or "Member",
-                "weight": 3,
-                "metadata": {
-                    "start_date": po.start_date.isoformat() if po.start_date else None,
-                    "end_date": po.end_date.isoformat() if po.end_date else None,
-                },
-            })
+            edges.append(
+                {
+                    "source": src,
+                    "target": tgt,
+                    "relationship": "OFFICER_OF",
+                    "label": po.role or "Member",
+                    "weight": 3,
+                    "metadata": {
+                        "start_date": po.start_date.isoformat() if po.start_date else None,
+                        "end_date": po.end_date.isoformat() if po.end_date else None,
+                    },
+                }
+            )
 
     # PersonDocument → CO_APPEARS_IN (person ↔ person via shared documents)
     # Build a lookup: document_id → list of person_ids
@@ -3018,18 +3142,20 @@ def api_case_graph(request, pk):
     for doc_id, person_ids in _doc_persons.items():
         # Person ↔ Person (same document)
         for i, pa in enumerate(person_ids):
-            for pb in person_ids[i + 1:]:
+            for pb in person_ids[i + 1 :]:
                 pair = tuple(sorted([pa, pb]))
                 if pair not in _seen_co_appear:
                     _seen_co_appear.add(pair)
-                    edges.append({
-                        "source": pa,
-                        "target": pb,
-                        "relationship": "CO_APPEARS_IN",
-                        "label": "Co-appears in document",
-                        "weight": 1,
-                        "metadata": {"document_ids": [doc_id]},
-                    })
+                    edges.append(
+                        {
+                            "source": pa,
+                            "target": pb,
+                            "relationship": "CO_APPEARS_IN",
+                            "label": "Co-appears in document",
+                            "weight": 1,
+                            "metadata": {"document_ids": [doc_id]},
+                        }
+                    )
 
         # Person ↔ Organization (same document)
         org_ids = _doc_orgs.get(doc_id, [])
@@ -3038,30 +3164,34 @@ def api_case_graph(request, pk):
                 pair = tuple(sorted([pa, oa]))
                 if pair not in _seen_co_appear:
                     _seen_co_appear.add(pair)
-                    edges.append({
-                        "source": pa,
-                        "target": oa,
-                        "relationship": "CO_APPEARS_IN",
-                        "label": "Co-appears in document",
-                        "weight": 1,
-                        "metadata": {"document_ids": [doc_id]},
-                    })
+                    edges.append(
+                        {
+                            "source": pa,
+                            "target": oa,
+                            "relationship": "CO_APPEARS_IN",
+                            "label": "Co-appears in document",
+                            "weight": 1,
+                            "metadata": {"document_ids": [doc_id]},
+                        }
+                    )
 
     # Org ↔ Org (same document)
     for doc_id, org_ids in _doc_orgs.items():
         for i, oa in enumerate(org_ids):
-            for ob in org_ids[i + 1:]:
+            for ob in org_ids[i + 1 :]:
                 pair = tuple(sorted([oa, ob]))
                 if pair not in _seen_co_appear:
                     _seen_co_appear.add(pair)
-                    edges.append({
-                        "source": oa,
-                        "target": ob,
-                        "relationship": "CO_APPEARS_IN",
-                        "label": "Co-appears in document",
-                        "weight": 1,
-                        "metadata": {"document_ids": [doc_id]},
-                    })
+                    edges.append(
+                        {
+                            "source": oa,
+                            "target": ob,
+                            "relationship": "CO_APPEARS_IN",
+                            "label": "Co-appears in document",
+                            "weight": 1,
+                            "metadata": {"document_ids": [doc_id]},
+                        }
+                    )
 
     # Consolidate CO_APPEARS_IN: merge edges that share (source, target)
     # to accumulate all document_ids into one edge and increase weight.
@@ -3092,42 +3222,48 @@ def api_case_graph(request, pk):
         }
         # Buyer → Property (PURCHASED)
         if tx.buyer_id and str(tx.buyer_id) in node_ids:
-            edges.append({
-                "source": str(tx.buyer_id),
-                "target": prop_id,
-                "relationship": "PURCHASED",
-                "label": f"Bought{(' $' + str(tx.price)) if tx.price else ''}",
-                "weight": 2,
-                "metadata": tx_meta,
-            })
+            edges.append(
+                {
+                    "source": str(tx.buyer_id),
+                    "target": prop_id,
+                    "relationship": "PURCHASED",
+                    "label": f"Bought{(' $' + str(tx.price)) if tx.price else ''}",
+                    "weight": 2,
+                    "metadata": tx_meta,
+                }
+            )
         # Property → Seller (SOLD_BY)
         if tx.seller_id and str(tx.seller_id) in node_ids:
-            edges.append({
-                "source": prop_id,
-                "target": str(tx.seller_id),
-                "relationship": "SOLD_BY",
-                "label": f"Sold by{(' $' + str(tx.price)) if tx.price else ''}",
-                "weight": 2,
-                "metadata": tx_meta,
-            })
+            edges.append(
+                {
+                    "source": prop_id,
+                    "target": str(tx.seller_id),
+                    "relationship": "SOLD_BY",
+                    "label": f"Sold by{(' $' + str(tx.price)) if tx.price else ''}",
+                    "weight": 2,
+                    "metadata": tx_meta,
+                }
+            )
 
     # Relationship → direct person-to-person typed edges
     for rel in Relationship.objects.filter(case=case).select_related("person_a", "person_b"):
         src = str(rel.person_a_id)
         tgt = str(rel.person_b_id)
         if src in node_ids and tgt in node_ids:
-            edges.append({
-                "source": src,
-                "target": tgt,
-                "relationship": rel.relationship_type,
-                "label": rel.relationship_type.replace("_", " ").title(),
-                "weight": max(1, int(rel.confidence * 3)),
-                "metadata": {
-                    "source_type": rel.source,
-                    "confidence": rel.confidence,
-                    "notes": rel.notes or "",
-                },
-            })
+            edges.append(
+                {
+                    "source": src,
+                    "target": tgt,
+                    "relationship": rel.relationship_type,
+                    "label": rel.relationship_type.replace("_", " ").title(),
+                    "weight": max(1, int(rel.confidence * 3)),
+                    "metadata": {
+                        "source_type": rel.source,
+                        "confidence": rel.confidence,
+                        "notes": rel.notes or "",
+                    },
+                }
+            )
 
     # SocialMediaConnection → SOCIAL_CONNECTION edges
     for sc in SocialMediaConnection.objects.filter(case=case).select_related("person"):
@@ -3135,17 +3271,19 @@ def api_case_graph(request, pk):
         if sc.connected_person_id:
             tgt = str(sc.connected_person_id)
             if src in node_ids and tgt in node_ids:
-                edges.append({
-                    "source": src,
-                    "target": tgt,
-                    "relationship": "SOCIAL_CONNECTION",
-                    "label": f"{sc.platform} {sc.connection_type}".strip(),
-                    "weight": 1,
-                    "metadata": {
-                        "platform": sc.platform,
-                        "connection_type": sc.connection_type,
-                    },
-                })
+                edges.append(
+                    {
+                        "source": src,
+                        "target": tgt,
+                        "relationship": "SOCIAL_CONNECTION",
+                        "label": f"{sc.platform} {sc.connection_type}".strip(),
+                        "weight": 1,
+                        "metadata": {
+                            "platform": sc.platform,
+                            "connection_type": sc.connection_type,
+                        },
+                    }
+                )
 
     # ── 3. Collect timeline events ────────────────────────────────────
     from .models import FinancialSnapshot
@@ -3157,85 +3295,97 @@ def api_case_graph(request, pk):
         "pk", "display_name", "filename", "uploaded_at", "doc_type"
     ):
         if doc.uploaded_at:
-            timeline_events.append({
-                "id": str(doc.pk),
-                "layer": "document",
-                "date": doc.uploaded_at.isoformat(),
-                "label": doc.display_name or doc.filename,
-                "metadata": {"doc_type": doc.doc_type},
-            })
+            timeline_events.append(
+                {
+                    "id": str(doc.pk),
+                    "layer": "document",
+                    "date": doc.uploaded_at.isoformat(),
+                    "label": doc.display_name or doc.filename,
+                    "metadata": {"doc_type": doc.doc_type},
+                }
+            )
 
     # Signals layer — detected_at
     for sig in Signal.objects.filter(case=case).only(
         "pk", "rule_id", "severity", "detected_at", "detected_summary", "trigger_entity_id"
     ):
         if sig.detected_at:
-            timeline_events.append({
-                "id": str(sig.pk),
-                "layer": "signal",
-                "date": sig.detected_at.isoformat(),
-                "label": f"{sig.rule_id}: {(sig.detected_summary or '')[:60]}",
-                "metadata": {
-                    "severity": sig.severity,
-                    "rule_id": sig.rule_id,
-                    "entity_id": str(sig.trigger_entity_id) if sig.trigger_entity_id else None,
-                },
-            })
+            timeline_events.append(
+                {
+                    "id": str(sig.pk),
+                    "layer": "signal",
+                    "date": sig.detected_at.isoformat(),
+                    "label": f"{sig.rule_id}: {(sig.detected_summary or '')[:60]}",
+                    "metadata": {
+                        "severity": sig.severity,
+                        "rule_id": sig.rule_id,
+                        "entity_id": str(sig.trigger_entity_id) if sig.trigger_entity_id else None,
+                    },
+                }
+            )
 
     # Financial layer — tax_year (converted to Jan 1 of that year)
     for snap in FinancialSnapshot.objects.filter(case=case).only(
         "pk", "tax_year", "total_revenue", "total_expenses", "ein", "organization_id"
     ):
-        timeline_events.append({
-            "id": str(snap.pk),
-            "layer": "financial",
-            "date": f"{snap.tax_year}-01-01T00:00:00+00:00",
-            "label": f"FY{snap.tax_year} 990 Filing",
-            "metadata": {
-                "tax_year": snap.tax_year,
-                "total_revenue": str(snap.total_revenue) if snap.total_revenue else None,
-                "total_expenses": str(snap.total_expenses) if snap.total_expenses else None,
-                "entity_id": str(snap.organization_id) if snap.organization_id else None,
-            },
-        })
+        timeline_events.append(
+            {
+                "id": str(snap.pk),
+                "layer": "financial",
+                "date": f"{snap.tax_year}-01-01T00:00:00+00:00",
+                "label": f"FY{snap.tax_year} 990 Filing",
+                "metadata": {
+                    "tax_year": snap.tax_year,
+                    "total_revenue": str(snap.total_revenue) if snap.total_revenue else None,
+                    "total_expenses": str(snap.total_expenses) if snap.total_expenses else None,
+                    "entity_id": str(snap.organization_id) if snap.organization_id else None,
+                },
+            }
+        )
 
     # Property transactions layer — transaction_date
     for tx in PropertyTransaction.objects.filter(property__case=case).select_related("property"):
         if tx.transaction_date:
-            timeline_events.append({
-                "id": str(tx.pk),
-                "layer": "transaction",
-                "date": f"{tx.transaction_date.isoformat()}T00:00:00+00:00",
-                "label": f"{tx.property.address or tx.property.parcel_number or 'Property'}: {tx.buyer_name or '?'} ← {tx.seller_name or '?'}",
-                "metadata": {
-                    "price": str(tx.price) if tx.price else None,
-                    "property_id": str(tx.property_id),
-                    "buyer_id": str(tx.buyer_id) if tx.buyer_id else None,
-                    "seller_id": str(tx.seller_id) if tx.seller_id else None,
-                },
-            })
+            prop_label = tx.property.address or tx.property.parcel_number or "Property"
+            timeline_events.append(
+                {
+                    "id": str(tx.pk),
+                    "layer": "transaction",
+                    "date": f"{tx.transaction_date.isoformat()}T00:00:00+00:00",
+                    "label": (f"{prop_label}: {tx.buyer_name or '?'} ← {tx.seller_name or '?'}"),
+                    "metadata": {
+                        "price": str(tx.price) if tx.price else None,
+                        "property_id": str(tx.property_id),
+                        "buyer_id": str(tx.buyer_id) if tx.buyer_id else None,
+                        "seller_id": str(tx.seller_id) if tx.seller_id else None,
+                    },
+                }
+            )
 
     # Sort events by date
     timeline_events.sort(key=lambda e: e["date"])
 
     # ── 4. Build response ─────────────────────────────────────────────
 
-    return JsonResponse({
-        "nodes": nodes,
-        "edges": edges,
-        "timeline_events": timeline_events,
-        "stats": {
-            "total_nodes": len(nodes),
-            "total_edges": len(edges),
-            "total_events": len(timeline_events),
-            "node_types": node_type_counts,
-        },
-    })
+    return JsonResponse(
+        {
+            "nodes": nodes,
+            "edges": edges,
+            "timeline_events": timeline_events,
+            "stats": {
+                "total_nodes": len(nodes),
+                "total_edges": len(edges),
+                "total_events": len(timeline_events),
+                "node_types": node_type_counts,
+            },
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Cross-case entity list
 # ---------------------------------------------------------------------------
+
 
 @require_http_methods(["GET"])
 def api_entity_collection(request):
@@ -3253,7 +3403,8 @@ def api_entity_collection(request):
     results = []
 
     entity_types = (
-        [raw_type] if raw_type in ("person", "organization", "property", "financial_instrument")
+        [raw_type]
+        if raw_type in ("person", "organization", "property", "financial_instrument")
         else ["person", "organization", "property", "financial_instrument"]
     )
 
@@ -3307,17 +3458,20 @@ def api_entity_collection(request):
     total = len(results)
     paged = results[offset : offset + limit]
 
-    return JsonResponse({
-        "count": total,
-        "limit": limit,
-        "offset": offset,
-        "results": paged,
-    })
+    return JsonResponse(
+        {
+            "count": total,
+            "limit": limit,
+            "offset": offset,
+            "results": paged,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Activity feed (recent audit log entries)
 # ---------------------------------------------------------------------------
+
 
 @require_http_methods(["GET"])
 def api_activity_feed(request):
@@ -3446,9 +3600,17 @@ def api_case_document_bulk_upload(request, pk):
             # to avoid leaking internal details (SEC-013)
             logger.exception(
                 "bulk_upload_file_failed",
-                extra={"case_id": str(case.pk), "filename": uploaded_file.name},
+                extra={
+                    "case_id": str(case.pk),
+                    "filename": uploaded_file.name,
+                },
             )
-            errors.append({"filename": uploaded_file.name, "error": "Internal error processing file."})
+            errors.append(
+                {
+                    "filename": uploaded_file.name,
+                    "error": "Internal error processing file.",
+                }
+            )
 
     status_code = 201 if created else 400
     return JsonResponse({"created": created, "errors": errors}, status=status_code)
@@ -3592,7 +3754,14 @@ def api_case_referral_detail(request, pk, referral_id):
 # Detection collection + detail  (Milestone 2)
 # ---------------------------------------------------------------------------
 
-DETECTION_SORT_FIELDS = {"detected_at", "severity", "status", "signal_type", "confidence_score", "id"}
+DETECTION_SORT_FIELDS = {
+    "detected_at",
+    "severity",
+    "status",
+    "signal_type",
+    "confidence_score",
+    "id",
+}
 
 
 @require_http_methods(["GET", "POST"])
@@ -3642,7 +3811,13 @@ def api_case_detection_collection(request, pk):
         valid_statuses = {c[0] for c in Detection._meta.get_field("status").choices}
         if raw_status not in valid_statuses:
             return JsonResponse(
-                {"errors": {"status": [f"Invalid status. Expected one of: {', '.join(sorted(valid_statuses))}."]}},
+                {
+                    "errors": {
+                        "status": [
+                            f"Invalid status. Expected one of: {', '.join(sorted(valid_statuses))}."
+                        ]
+                    }
+                },
                 status=400,
             )
         qs = qs.filter(status=raw_status)
@@ -3652,7 +3827,14 @@ def api_case_detection_collection(request, pk):
         valid_severities = {c[0] for c in Detection._meta.get_field("severity").choices}
         if raw_severity not in valid_severities:
             return JsonResponse(
-                {"errors": {"severity": [f"Invalid severity. Expected one of: {', '.join(sorted(valid_severities))}."]}},
+                {
+                    "errors": {
+                        "severity": [
+                            f"Invalid severity. Expected one of: "
+                            f"{', '.join(sorted(valid_severities))}."
+                        ]
+                    }
+                },
                 status=400,
             )
         qs = qs.filter(severity=raw_severity)
@@ -3744,6 +3926,7 @@ def api_case_detection_detail(request, pk, detection_id):
 # Re-evaluate signals  (Milestone 2)
 # ---------------------------------------------------------------------------
 
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_case_reevaluate_signals(request, pk):
@@ -3757,9 +3940,11 @@ def api_case_reevaluate_signals(request, pk):
     from .signal_rules import evaluate_case, evaluate_document, persist_signals
 
     all_triggers = []
-    documents = list(case.documents.filter(
-        extracted_text__isnull=False,
-    ).exclude(extracted_text=""))
+    documents = list(
+        case.documents.filter(
+            extracted_text__isnull=False,
+        ).exclude(extracted_text="")
+    )
 
     for doc in documents:
         all_triggers.extend(evaluate_document(case, doc))
@@ -3782,11 +3967,13 @@ def api_case_reevaluate_signals(request, pk):
         notes="reevaluate_signals",
     )
 
-    return JsonResponse({
-        "documents_evaluated": len(documents),
-        "triggers_found": len(all_triggers),
-        "new_detections": [serialize_detection(d) for d in new_detections],
-    })
+    return JsonResponse(
+        {
+            "documents_evaluated": len(documents),
+            "triggers_found": len(all_triggers),
+            "new_detections": [serialize_detection(d) for d in new_detections],
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -3819,10 +4006,8 @@ def api_case_dashboard(request, pk):
         "pipeline": { "extraction_success_rate": 0.95, "ai_enhanced_count": N }
       }
     """
-    from collections import Counter
-    from decimal import Decimal
 
-    from django.db.models import Count, Q, Sum
+    from django.db.models import Count, Sum
 
     case = get_object_or_404(Case, pk=pk)
 
@@ -3832,20 +4017,16 @@ def api_case_dashboard(request, pk):
         docs.values_list("doc_type").annotate(n=Count("id")).values_list("doc_type", "n")
     )
     ext_status_counts = dict(
-        docs.values_list("extraction_status").annotate(n=Count("id")).values_list(
-            "extraction_status", "n"
-        )
+        docs.values_list("extraction_status")
+        .annotate(n=Count("id"))
+        .values_list("extraction_status", "n")
     )
     total_docs = docs.count()
     completed_extractions = ext_status_counts.get("COMPLETED", 0)
-    extraction_rate = (
-        round(completed_extractions / total_docs, 2) if total_docs > 0 else 0.0
-    )
+    extraction_rate = round(completed_extractions / total_docs, 2) if total_docs > 0 else 0.0
 
     # Count AI-enhanced documents (have ingestion_metadata with ai_proposals > 0)
-    ai_enhanced = docs.filter(
-        ingestion_metadata__meta__ai_proposals__gt=0
-    ).count()
+    ai_enhanced = docs.filter(ingestion_metadata__meta__ai_proposals__gt=0).count()
 
     # Renamed files (have a display_name set)
     renamed_count = docs.exclude(display_name="").exclude(display_name__isnull=True).count()
@@ -3867,14 +4048,9 @@ def api_case_dashboard(request, pk):
     )
 
     # Top triggered rules
-    rule_counts = (
-        signals.values("rule_id", "summary")
-        .annotate(n=Count("id"))
-        .order_by("-n")[:10]
-    )
+    rule_counts = signals.values("rule_id", "summary").annotate(n=Count("id")).order_by("-n")[:10]
     top_rules = [
-        {"rule_id": r["rule_id"], "summary": r["summary"], "count": r["n"]}
-        for r in rule_counts
+        {"rule_id": r["rule_id"], "summary": r["summary"], "count": r["n"]} for r in rule_counts
     ]
 
     # ── Detections ─────────────────────────────────────────────
@@ -3925,55 +4101,57 @@ def api_case_dashboard(request, pk):
         for y in yearly
     ]
 
-    return JsonResponse({
-        "case": {
-            "id": str(case.pk),
-            "name": case.name,
-            "status": case.status,
-            "created_at": case.created_at.isoformat(),
-            "referral_ref": case.referral_ref or "",
-        },
-        "documents": {
-            "total": total_docs,
-            "by_type": doc_type_counts,
-            "by_extraction_status": ext_status_counts,
-            "renamed_count": renamed_count,
-        },
-        "entities": {
-            "persons": person_count,
-            "organizations": org_count,
-            "properties": property_count,
-            "financial_instruments": instrument_count,
-            "total": person_count + org_count + property_count + instrument_count,
-        },
-        "signals": {
-            "total": signal_total,
-            "by_severity": sev_counts,
-            "by_status": status_counts,
-            "top_rules": top_rules,
-        },
-        "detections": {
-            "total": detection_total,
-            "confirmed": detection_confirmed,
-            "pending": detection_pending,
-        },
-        "findings": {
-            "total": finding_total,
-            "by_severity": finding_sev,
-            "by_status": finding_status,
-        },
-        "financials": {
-            "years_covered": years_covered,
-            "total_revenue": total_revenue,
-            "total_expenses": total_expenses,
-            "timeline": financial_timeline,
-        },
-        "pipeline": {
-            "extraction_success_rate": extraction_rate,
-            "ai_enhanced_count": ai_enhanced,
-            "total_documents_processed": total_docs,
-        },
-    })
+    return JsonResponse(
+        {
+            "case": {
+                "id": str(case.pk),
+                "name": case.name,
+                "status": case.status,
+                "created_at": case.created_at.isoformat(),
+                "referral_ref": case.referral_ref or "",
+            },
+            "documents": {
+                "total": total_docs,
+                "by_type": doc_type_counts,
+                "by_extraction_status": ext_status_counts,
+                "renamed_count": renamed_count,
+            },
+            "entities": {
+                "persons": person_count,
+                "organizations": org_count,
+                "properties": property_count,
+                "financial_instruments": instrument_count,
+                "total": person_count + org_count + property_count + instrument_count,
+            },
+            "signals": {
+                "total": signal_total,
+                "by_severity": sev_counts,
+                "by_status": status_counts,
+                "top_rules": top_rules,
+            },
+            "detections": {
+                "total": detection_total,
+                "confirmed": detection_confirmed,
+                "pending": detection_pending,
+            },
+            "findings": {
+                "total": finding_total,
+                "by_severity": finding_sev,
+                "by_status": finding_status,
+            },
+            "financials": {
+                "years_covered": years_covered,
+                "total_revenue": total_revenue,
+                "total_expenses": total_expenses,
+                "timeline": financial_timeline,
+            },
+            "pipeline": {
+                "extraction_success_rate": extraction_rate,
+                "ai_enhanced_count": ai_enhanced,
+                "total_documents_processed": total_docs,
+            },
+        }
+    )
 
 
 @require_http_methods(["GET"])
@@ -4016,27 +4194,30 @@ def api_case_coverage(request, pk):
     active_rules = total_rules - len(blind_rule_ids)
     coverage_score = round(active_rules / total_rules, 2) if total_rules > 0 else 0.0
 
-    return JsonResponse({
-        "gaps": [
-            {
-                "rule_id": g.rule_id,
-                "rule_title": g.rule_title,
-                "gap_type": g.gap_type,
-                "message": g.message,
-                "recommendation": g.recommendation,
-            }
-            for g in gaps
-        ],
-        "coverage_score": coverage_score,
-        "total_rules": total_rules,
-        "active_rules": active_rules,
-        "blind_rules": len(blind_rule_ids),
-    })
+    return JsonResponse(
+        {
+            "gaps": [
+                {
+                    "rule_id": g.rule_id,
+                    "rule_title": g.rule_title,
+                    "gap_type": g.gap_type,
+                    "message": g.message,
+                    "recommendation": g.recommendation,
+                }
+                for g in gaps
+            ],
+            "coverage_score": coverage_score,
+            "total_rules": total_rules,
+            "active_rules": active_rules,
+            "blind_rules": len(blind_rule_ids),
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Referral memo generation stub  (full AI in Milestone 3)
 # ---------------------------------------------------------------------------
+
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -4095,7 +4276,11 @@ def api_case_referral_memo(request, pk):
         table_name="documents",
         record_id=document.pk,
         case_id=case.pk,
-        after_state={"filename": document.filename, "doc_type": "REFERRAL_MEMO", "is_generated": True},
+        after_state={
+            "filename": document.filename,
+            "doc_type": "REFERRAL_MEMO",
+            "is_generated": True,
+        },
         performed_by=getattr(request, "api_token", None),
         notes="referral_memo_stub",
     )
@@ -4106,6 +4291,7 @@ def api_case_referral_memo(request, pk):
 # ---------------------------------------------------------------------------
 # AI endpoints (Phase 5)
 # ---------------------------------------------------------------------------
+
 
 @require_http_methods(["POST"])
 def api_ai_summarize(request, pk):
@@ -4124,9 +4310,7 @@ def api_ai_summarize(request, pk):
     target_type = body.get("target_type", "")
     target_id = body.get("target_id", "")
     if not target_type or not target_id:
-        return JsonResponse(
-            {"error": "Both target_type and target_id are required"}, status=400
-        )
+        return JsonResponse({"error": "Both target_type and target_id are required"}, status=400)
 
     from .ai_proxy import ai_summarize
 
@@ -4177,9 +4361,7 @@ def api_ai_narrative(request, pk):
 
     detection_ids = body.get("detection_ids", [])
     if not detection_ids or not isinstance(detection_ids, list):
-        return JsonResponse(
-            {"error": "detection_ids must be a non-empty list"}, status=400
-        )
+        return JsonResponse({"error": "detection_ids must be a non-empty list"}, status=400)
 
     tone = body.get("tone", "formal")
     if tone not in ("formal", "executive", "technical"):

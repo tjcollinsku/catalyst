@@ -467,8 +467,8 @@ def fetch_filings(ein: int) -> list[Filing]:
 # SEC-016: Allowed domains for ProPublica PDF URLs
 _PROPUBLICA_ALLOWED_DOMAINS = {
     "projects.propublica.org",
-    "pp990s3.s3.amazonaws.com",       # legacy S3 hosting
-    "apps.irs.gov",                     # IRS direct links sometimes appear
+    "pp990s3.s3.amazonaws.com",  # legacy S3 hosting
+    "apps.irs.gov",  # IRS direct links sometimes appear
 }
 
 

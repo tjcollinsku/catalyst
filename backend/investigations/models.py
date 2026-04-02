@@ -54,6 +54,7 @@ class OcrStatus(models.TextChoices):
 
 class ExtractionStatus(models.TextChoices):
     """SEC-027/028: Track whether post-OCR analysis steps succeeded."""
+
     PENDING = "PENDING", "Pending"
     COMPLETED = "COMPLETED", "Completed"
     PARTIAL = "PARTIAL", "Partial — some steps failed"
@@ -362,7 +363,9 @@ class Property(UUIDPrimaryKeyModel):
     address = models.CharField(max_length=500, blank=True, null=True)
     county = models.CharField(max_length=100, blank=True, null=True)
     state = models.CharField(
-        max_length=2, blank=True, default="OH",
+        max_length=2,
+        blank=True,
+        default="OH",
         help_text="State abbreviation. Defaults to OH for Ohio cases.",
     )
     assessed_value = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
@@ -374,20 +377,30 @@ class Property(UUIDPrimaryKeyModel):
         null=True,
     )
     acreage = models.DecimalField(
-        max_digits=10, decimal_places=2, blank=True, null=True,
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
         help_text="Property size in acres, if known.",
     )
     property_type = models.CharField(
-        max_length=50, blank=True, default="",
+        max_length=50,
+        blank=True,
+        default="",
         help_text="E.g. RESIDENTIAL, COMMERCIAL, AGRICULTURAL, VACANT_LAND.",
     )
     current_owner_name = models.CharField(
-        max_length=255, blank=True, default="",
+        max_length=255,
+        blank=True,
+        default="",
         help_text="Owner per most recent auditor/parcel record.",
     )
     # Link to normalized Address for nexus detection
     normalized_address = models.ForeignKey(
-        "Address", on_delete=models.SET_NULL, blank=True, null=True,
+        "Address",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
         related_name="properties",
         help_text="Link to normalized Address record for nexus detection.",
     )
@@ -424,7 +437,8 @@ class FinancialInstrument(UUIDPrimaryKeyModel):
     # "all farm equipment, livestock, crops, and proceeds" — this is a
     # major red flag when the debtor is also running a charity.
     collateral_description = models.TextField(
-        blank=True, default="",
+        blank=True,
+        default="",
         help_text="UCC collateral description (e.g. 'all farm equipment, livestock').",
     )
     is_blanket_lien = models.BooleanField(
@@ -432,24 +446,33 @@ class FinancialInstrument(UUIDPrimaryKeyModel):
         help_text="True if filing covers 'all assets' or equivalent blanket language.",
     )
     lapse_date = models.DateField(
-        blank=True, null=True,
+        blank=True,
+        null=True,
         help_text="Date the UCC filing lapses (typically 5 years from filing).",
     )
     continuation_date = models.DateField(
-        blank=True, null=True,
+        blank=True,
+        null=True,
         help_text="Date a continuation statement was filed to extend the lien.",
     )
     amendment_type = models.CharField(
-        max_length=50, blank=True, default="",
+        max_length=50,
+        blank=True,
+        default="",
         help_text="INITIAL, AMENDMENT, CONTINUATION, TERMINATION, ASSIGNMENT.",
     )
     parent_filing = models.ForeignKey(
-        "self", on_delete=models.SET_NULL, blank=True, null=True,
+        "self",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
         related_name="amendments",
         help_text="For amendments/continuations, links to the original filing.",
     )
     filing_state = models.CharField(
-        max_length=2, blank=True, default="",
+        max_length=2,
+        blank=True,
+        default="",
         help_text="State where the UCC was filed (e.g. 'OH').",
     )
     # ── End UCC-specific fields ──────────────────────────────────────
@@ -537,28 +560,40 @@ class PropertyTransaction(UUIDPrimaryKeyModel):
     # Buyer fields — polymorphic: could be a Person or Organization
     buyer_id = models.UUIDField(blank=True, null=True)
     buyer_type = models.CharField(
-        max_length=20, choices=TransactionPartyType.choices, blank=True, default="",
+        max_length=20,
+        choices=TransactionPartyType.choices,
+        blank=True,
+        default="",
         help_text="Whether the buyer is a Person or Organization.",
     )
     buyer_name = models.CharField(
-        max_length=255, blank=True, default="",
+        max_length=255,
+        blank=True,
+        default="",
         help_text="Denormalized buyer name for quick display.",
     )
 
     # Seller fields
     seller_id = models.UUIDField(blank=True, null=True)
     seller_type = models.CharField(
-        max_length=20, choices=TransactionPartyType.choices, blank=True, default="",
+        max_length=20,
+        choices=TransactionPartyType.choices,
+        blank=True,
+        default="",
         help_text="Whether the seller is a Person or Organization.",
     )
     seller_name = models.CharField(
-        max_length=255, blank=True, default="",
+        max_length=255,
+        blank=True,
+        default="",
         help_text="Denormalized seller name for quick display.",
     )
 
     price = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     instrument_number = models.CharField(
-        max_length=100, blank=True, default="",
+        max_length=100,
+        blank=True,
+        default="",
         help_text="Recorder instrument number from county records.",
     )
     notes = models.TextField(blank=True, null=True)
@@ -625,11 +660,13 @@ class Address(UUIDPrimaryKeyModel):
         max_length=20, choices=AddressType.choices, default=AddressType.OTHER
     )
     first_seen_date = models.DateField(
-        blank=True, null=True,
+        blank=True,
+        null=True,
         help_text="Earliest document date where this address appeared.",
     )
     last_seen_date = models.DateField(
-        blank=True, null=True,
+        blank=True,
+        null=True,
         help_text="Most recent document date where this address appeared.",
     )
     source_document = models.ForeignKey(
@@ -665,9 +702,7 @@ class PersonAddress(UUIDPrimaryKeyModel):
     )
     effective_date = models.DateField(blank=True, null=True)
     end_date = models.DateField(blank=True, null=True)
-    source_document = models.ForeignKey(
-        Document, on_delete=models.SET_NULL, blank=True, null=True
-    )
+    source_document = models.ForeignKey(Document, on_delete=models.SET_NULL, blank=True, null=True)
 
     class Meta:
         db_table = "person_address"
@@ -689,9 +724,7 @@ class OrgAddress(UUIDPrimaryKeyModel):
     )
     effective_date = models.DateField(blank=True, null=True)
     end_date = models.DateField(blank=True, null=True)
-    source_document = models.ForeignKey(
-        Document, on_delete=models.SET_NULL, blank=True, null=True
-    )
+    source_document = models.ForeignKey(Document, on_delete=models.SET_NULL, blank=True, null=True)
 
     class Meta:
         db_table = "org_address"
@@ -761,14 +794,15 @@ class Relationship(UUIDPrimaryKeyModel):
     person_b = models.ForeignKey(
         Person, on_delete=models.CASCADE, related_name="relationships_as_b"
     )
-    relationship_type = models.CharField(
-        max_length=30, choices=RelationshipType.choices
-    )
+    relationship_type = models.CharField(max_length=30, choices=RelationshipType.choices)
     source = models.CharField(
         max_length=20, choices=RelationshipSource.choices, default=RelationshipSource.INVESTIGATOR
     )
     source_document = models.ForeignKey(
-        Document, on_delete=models.SET_NULL, blank=True, null=True,
+        Document,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
         related_name="relationship_evidence",
     )
     confidence = models.FloatField(
@@ -854,15 +888,22 @@ class TransactionChain(UUIDPrimaryKeyModel):
         help_text="Human-readable label, e.g. 'ExampleOwner → Example Charity swap (SR-068)'",
     )
     total_value = models.DecimalField(
-        max_digits=14, decimal_places=2, blank=True, null=True,
+        max_digits=14,
+        decimal_places=2,
+        blank=True,
+        null=True,
         help_text="Sum of all transaction prices in the chain.",
     )
     time_span_days = models.IntegerField(
-        blank=True, null=True,
+        blank=True,
+        null=True,
         help_text="Days between first and last transaction in chain.",
     )
     signal = models.ForeignKey(
-        "Signal", on_delete=models.SET_NULL, blank=True, null=True,
+        "Signal",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
         related_name="transaction_chains",
         help_text="The Signal record that triggered creation of this chain.",
     )
@@ -887,9 +928,7 @@ class TransactionChainLink(UUIDPrimaryKeyModel):
     position in the sequence (sequence_number).
     """
 
-    chain = models.ForeignKey(
-        TransactionChain, on_delete=models.CASCADE, related_name="links"
-    )
+    chain = models.ForeignKey(TransactionChain, on_delete=models.CASCADE, related_name="links")
     transaction = models.ForeignKey(
         PropertyTransaction, on_delete=models.CASCADE, related_name="chain_links"
     )
@@ -897,16 +936,16 @@ class TransactionChainLink(UUIDPrimaryKeyModel):
         help_text="Order in chain: 1 = first transaction, 2 = second, etc."
     )
     role_description = models.CharField(
-        max_length=255, blank=True, default="",
+        max_length=255,
+        blank=True,
+        default="",
         help_text="E.g. 'Charity purchases from ExampleOwner' or 'Insider receives property'",
     )
 
     class Meta:
         db_table = "transaction_chain_links"
         constraints = [
-            models.UniqueConstraint(
-                fields=["chain", "transaction"], name="uniq_chain_transaction"
-            ),
+            models.UniqueConstraint(fields=["chain", "transaction"], name="uniq_chain_transaction"),
             models.UniqueConstraint(
                 fields=["chain", "sequence_number"], name="uniq_chain_sequence"
             ),
@@ -952,16 +991,23 @@ class SocialMediaConnection(UUIDPrimaryKeyModel):
 
     case = models.ForeignKey(Case, on_delete=models.RESTRICT, related_name="social_connections")
     person = models.ForeignKey(
-        Person, on_delete=models.CASCADE, related_name="social_connections",
+        Person,
+        on_delete=models.CASCADE,
+        related_name="social_connections",
         help_text="The case person whose social profile was examined.",
     )
     connected_person = models.ForeignKey(
-        Person, on_delete=models.SET_NULL, blank=True, null=True,
+        Person,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
         related_name="social_connected_by",
         help_text="If the connected party is already a Person in this case.",
     )
     external_name = models.CharField(
-        max_length=255, blank=True, default="",
+        max_length=255,
+        blank=True,
+        default="",
         help_text="Name as it appears on the social platform (before linking to a Person).",
     )
     platform = models.CharField(max_length=20, choices=SocialPlatform.choices)
@@ -1474,9 +1520,7 @@ class InvestigatorNote(models.Model):
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    case = models.ForeignKey(
-        "Case", on_delete=models.CASCADE, related_name="investigator_notes"
-    )
+    case = models.ForeignKey("Case", on_delete=models.CASCADE, related_name="investigator_notes")
     target_type = models.CharField(
         max_length=50,
         help_text=(
