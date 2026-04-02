@@ -1,0 +1,248 @@
+/* Dashboard View Styles */
+
+.dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.dashboardLoading {
+    padding: 2rem;
+    color: var(--text-soft);
+}
+
+.kpiRow {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
+}
+
+.kpiCard {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.1s;
+    text-align: left;
+    font-family: inherit;
+    color: var(--text-main);
+}
+
+.kpiCard:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+}
+
+.kpiValue {
+    font-size: 1.75rem;
+    font-weight: 600;
+}
+
+.kpiLabel {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-soft);
+}
+
+.kpiSub {
+    font-size: 0.72rem;
+    color: var(--text-soft);
+    opacity: 0.7;
+}
+
+.kpiSignals .kpiValue {
+    color: var(--danger);
+}
+
+.dashboardGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+
+.dashCard {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+}
+
+.dashCard h3 {
+    margin: 0 0 0.75rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.dashCardWide {
+    grid-column: 1 / -1;
+}
+
+.dashEmpty {
+    color: var(--text-soft);
+    font-size: 0.8rem;
+}
+
+/* Severity bars */
+.severityBars {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.severityBarRow {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.severityBarLabel {
+    width: 70px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-soft);
+    text-align: right;
+}
+
+.severityBarTrack {
+    flex: 1;
+    height: 18px;
+    background: var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.severityBarFill {
+    height: 100%;
+    border-radius: 4px;
+    min-width: 2px;
+    transition: width 0.4s ease;
+}
+
+.severityBarCount {
+    width: 28px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-align: right;
+}
+
+/* Recent cases */
+.recentCasesList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.recentCaseRow {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: none;
+    border: none;
+    padding: 0.4rem 0.5rem;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    color: var(--text-main);
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.recentCaseRow:hover {
+    background: var(--sidebar-hover);
+}
+
+.recentCaseName {
+    flex: 1;
+    font-weight: 500;
+    font-size: 0.85rem;
+}
+
+.recentCaseTime {
+    font-size: 0.72rem;
+    color: var(--text-soft);
+}
+
+/* Activity feed */
+.activityFeed {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.activityEntry {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: baseline;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.8rem;
+}
+
+.activityAction {
+    font-weight: 500;
+}
+
+.activityTable {
+    color: var(--accent-strong);
+}
+
+.activityUser {
+    color: var(--text-soft);
+}
+
+.activityTime {
+    color: var(--text-soft);
+    font-size: 0.72rem;
+    margin-left: auto;
+}
+
+.activityNote {
+    width: 100%;
+    color: var(--text-soft);
+    font-size: 0.72rem;
+}
+
+/* Status pills */
+.statusPill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    background: var(--surface-strong);
+    color: var(--text-soft);
+    border: 1px solid var(--border);
+}
+
+.statusPillActive {
+    color: var(--accent-strong);
+    border-color: var(--accent);
+}
+
+.statusPillPaused {
+    color: var(--warn);
+    border-color: var(--warn);
+}
+
+.statusPillReferred {
+    color: #a78bfa;
+    border-color: #a78bfa;
+}
+
+.statusPillClosed {
+    color: var(--text-soft);
+    opacity: 0.7;
+}

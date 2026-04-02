@@ -11,12 +11,16 @@ export default defineConfig({
                 changeOrigin: true,
                 timeout: 600000,
                 proxyTimeout: 600000
+            },
+            "/media": {
+                target: "http://127.0.0.1:8000",
+                changeOrigin: true
             }
         }
     },
     test: {
         environment: "jsdom",
-        setupFiles: ["src/test/setup.ts"],
-        include: ["src/**/*.test.ts", "src/**/*.test.tsx"]
-    }
+        globals: true,
+        setupFiles: ["./src/test/setup.ts"],
+    },
 });

@@ -1,0 +1,51 @@
+.root {
+    border: 1px dashed var(--control-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    background: var(--empty-state-bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.4rem;
+}
+
+.icon {
+    font-size: 2rem;
+    margin-bottom: 0.3rem;
+    opacity: 0.6;
+}
+
+.root strong {
+    display: block;
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.root p {
+    color: var(--text-soft);
+    font-size: var(--text-sm);
+    margin: 0;
+    max-width: 320px;
+    line-height: 1.5;
+}
+
+.actionBtn {
+    margin-top: 0.6rem;
+    padding: 0.4rem 0.9rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+    font: inherit;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.actionBtn:hover {
+    background: var(--accent);
+    color: #fff;
+}

@@ -14,6 +14,7 @@ const selectedCase = {
         {
             id: "doc-1",
             filename: "deed.pdf",
+            display_name: "",
             file_path: "cases/deed.pdf",
             sha256_hash: "abc",
             file_size: 2048,

@@ -1,0 +1,53 @@
+/*
+ * SeverityBadge
+ * Consistent severity indicator used on signal cards, detection cards, entities.
+ * CRITICAL gets a pulse animation to draw attention.
+ */
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.critical {
+    background: var(--tag-critical-bg);
+    color: var(--tag-critical-color);
+    animation: pulse-critical 2s ease-in-out infinite;
+}
+
+.high {
+    background: var(--tag-high-bg);
+    color: var(--tag-high-color);
+}
+
+.medium {
+    background: var(--tag-med-bg);
+    color: var(--tag-med-color);
+}
+
+.low {
+    background: var(--tag-low-bg);
+    color: var(--tag-low-color);
+}
+
+.informational {
+    background: var(--tag-neutral-bg);
+    color: var(--tag-neutral-color);
+}
+
+/* Dot indicator before text */
+.dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+}

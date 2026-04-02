@@ -1,0 +1,14 @@
+/* Referrals Tab — Referral Management & Exports */
+
+.exportButtons {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.memoHint {
+    color: var(--text-soft);
+    font-size: 0.84rem;
+    line-height: 1.45;
+    margin-top: 0.35rem !important;
+}

@@ -1,0 +1,184 @@
+/* PDF Viewer Module */
+
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    display: flex;
+    justify-content: flex-end;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.overlay.open {
+    pointer-events: auto;
+    opacity: 1;
+}
+
+.backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.panel {
+    position: relative;
+    width: min(680px, 90vw);
+    height: 100vh;
+    background: var(--bg-deep, #121820);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.2s ease;
+    z-index: 1;
+}
+
+.panel.open {
+    transform: translateX(0);
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.title strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.close {
+    background: none;
+    border: none;
+    color: var(--text-soft);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+
+.close:hover {
+    background: var(--sidebar-hover);
+    color: var(--text-main);
+}
+
+/* Tab bar */
+.tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    overflow-x: auto;
+}
+
+.tab {
+    padding: 8px 16px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text-soft);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.tab:hover {
+    color: var(--text-main);
+}
+
+.tabActive {
+    color: var(--accent-strong, var(--accent));
+    border-bottom-color: var(--accent-strong, var(--accent));
+}
+
+/* Body */
+.body {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: #fff;
+}
+
+.fallback {
+    padding: 32px 24px;
+    text-align: center;
+    color: var(--text-soft);
+}
+
+.data {
+    padding: 16px;
+}
+
+/* Embed section */
+.embed {
+    padding: 32px 24px;
+    text-align: center;
+    color: var(--text-soft);
+}
+
+.placeholder {
+    margin: 0;
+}
+
+/* Entities section */
+.entities {
+    padding: 16px;
+}
+
+/* Financials section */
+.financials {
+    padding: 16px;
+}
+
+/* Info section */
+.info {
+    padding: 16px;
+}
+
+/* Footer */
+.footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+    font-size: 0.82rem;
+}
+
+.action {
+    color: var(--accent-strong, var(--accent));
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.action:hover {
+    text-decoration: underline;
+}
+
+.meta {
+    margin-left: auto;
+    color: var(--text-soft);
+}

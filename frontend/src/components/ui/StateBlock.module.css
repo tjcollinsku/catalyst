@@ -1,0 +1,3 @@
+.root { border: 1px dashed var(--control-border); border-radius: 12px; padding: 0.85rem 0.95rem; background: var(--state-block-bg); }
+.loading { margin: 0; }
+.detail { margin: 0.3rem 0 0; color: var(--text-soft); font-size: 0.84rem; line-height: 1.45; }

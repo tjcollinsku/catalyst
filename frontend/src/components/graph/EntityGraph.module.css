@@ -1,0 +1,166 @@
+/*
+ * EntityGraph
+ * D3 force-directed entity relationship graph.
+ * Full-width SVG canvas with zoom/pan and themed nodes + edges.
+ */
+
+.container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 400px;
+    background: var(--graph-bg);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    transition: width var(--transition-panel);
+}
+
+.svg {
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+}
+
+.svg:active {
+    cursor: grabbing;
+}
+
+/* ── Toolbar (zoom controls, legend toggle) ─────────────── */
+
+.toolbar {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    z-index: 2;
+}
+
+.toolbarBtn {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--surface-1);
+    color: var(--text-main);
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background var(--transition-fast);
+}
+
+.toolbarBtn:hover {
+    background: var(--surface-2);
+}
+
+/* ── Legend ──────────────────────────────────────────────── */
+
+.legend {
+    position: absolute;
+    bottom: 0.75rem;
+    left: 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    z-index: 2;
+}
+
+.legendItem {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: var(--text-xs);
+    color: var(--text-soft);
+}
+
+.legendDot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.legendDotPerson {
+    background: var(--graph-node-person);
+}
+
+.legendDotOrg {
+    background: var(--graph-node-org);
+}
+
+.legendDotProperty {
+    background: var(--graph-node-property);
+}
+
+.legendDotFinancial {
+    background: var(--graph-node-financial);
+}
+
+/* ── Empty state ────────────────────────────────────────── */
+
+.empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-soft);
+    font-size: var(--text-sm);
+}
+
+/* ── Tooltip ────────────────────────────────────────────── */
+
+.tooltip {
+    position: absolute;
+    pointer-events: none;
+    padding: 0.5rem 0.75rem;
+    background: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+    max-width: 260px;
+    transition: opacity 0.15s ease;
+}
+
+.tooltipLabel {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-main);
+    margin: 0 0 0.15rem;
+}
+
+.tooltipType {
+    font-size: var(--text-xs);
+    color: var(--text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.tooltipMeta {
+    font-size: var(--text-xs);
+    color: var(--text-soft);
+    margin-top: 0.25rem;
+}
+
+/* ── Stats badge ─────────────────────────────────────────── */
+
+.stats {
+    position: absolute;
+    top: 0.75rem;
+    left: 0.75rem;
+    padding: 0.35rem 0.6rem;
+    background: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-xs);
+    color: var(--text-soft);
+    z-index: 2;
+}

@@ -1,0 +1,125 @@
+/* ── Base skeleton shimmer ────────────────────────────────── */
+
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        var(--state-block-bg) 25%,
+        rgba(145, 163, 182, 0.08) 50%,
+        var(--state-block-bg) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: var(--radius-sm);
+}
+
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+/* ── Graph skeleton ──────────────────────────────────────── */
+
+.graphSkeleton {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 400px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--graph-bg);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.graphShimmer {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 25%,
+        rgba(69, 137, 255, 0.04) 50%,
+        transparent 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s ease-in-out infinite;
+}
+
+.graphLabel {
+    position: relative;
+    z-index: 1;
+    color: var(--text-soft);
+    font-size: var(--text-sm);
+    font-weight: 500;
+}
+
+/* ── Pipeline card skeleton ──────────────────────────────── */
+
+.cardStack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.cardSkeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 0.75rem 1rem;
+    animation: fade-in 400ms ease both;
+}
+
+.cardSkeletonHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+@keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* ── Timeline skeleton ───────────────────────────────────── */
+
+.timelineSkeleton {
+    position: relative;
+    width: 100%;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.timelineShimmerBar {
+    position: absolute;
+    top: 50%;
+    left: 1rem;
+    right: 1rem;
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(
+        90deg,
+        var(--state-block-bg) 25%,
+        rgba(145, 163, 182, 0.1) 50%,
+        var(--state-block-bg) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.timelineLabel {
+    position: relative;
+    z-index: 1;
+    color: var(--text-soft);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    margin-top: 1.5rem;
+}

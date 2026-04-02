@@ -1,11 +1,13 @@
-# .gitignore — files Git should never track
+# ═══════════════════════════════════════════════════════════════
+# .gitignore — Catalyst Intelligence Triage Platform
+# ═══════════════════════════════════════════════════════════════
 
-# Environment variables — CRITICAL, never commit these
+# ── Environment variables (CRITICAL — never commit) ───────────
 .env
 .env.*
 !.env.example
 
-# Python
+# ── Python ────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *.pyo
@@ -20,30 +22,31 @@ venv/
 *.egg-info/
 dist/
 build/
+pytest-cache-files-*/
 
-# Django
+# ── Django ────────────────────────────────────────────────────
 *.sqlite3
 db.sqlite3
 staticfiles/
 media/
 
-# Docker
+# ── Docker ────────────────────────────────────────────────────
 *.log
 docker-compose.override.yml
 
-# OS
+# ── OS ────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 Desktop.ini
 *.swp
 *~
 
-# IDE
+# ── IDE ───────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.code-workspace
 
-# Binary documents — keep docs in markdown
+# ── Binary documents (keep docs in markdown) ──────────────────
 *.docx
 *.doc
 *.xlsx
@@ -51,14 +54,31 @@ Desktop.ini
 *.pptx
 ~$*
 
-# Investigation evidence and archives
+# ── Frontend (Node/Vite) ─────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+node_modules/
+
+# ── Investigation data (never commit case evidence) ──────────
+# The case_data/ directory contains investigation-specific files:
+# evidence PDFs, IRS bulk data, analysis artifacts, reports.
+# These are NOT part of the software project.
+case_data/
 Example Project Files/
 *.zip
 *.bak
 evidence/
 To The AG/
 
-# Frontend (Node/Vite)
-frontend/node_modules/
-frontend/dist/
-node_modules/
+# ── Runtime artifacts ─────────────────────────────────────────
+chromadb_data/
+database/
+
+# ── Legacy directories (can be deleted locally) ──────────────
+Irs 990 XML/
+
+# ── Vite temp files ──────────────────────────────────────────
+*.timestamp-*.mjs
+
+# ── Claude / Cowork session artifacts ────────────────────────
+.claude/

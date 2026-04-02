@@ -1,3 +1,5 @@
+import styles from "./ToastStack.module.css";
+
 export interface ToastItem {
     id: number;
     tone: "error" | "success";
@@ -15,13 +17,13 @@ export function ToastStack({ toasts, onDismiss }: ToastStackProps) {
     }
 
     return (
-        <div className="toast-stack" aria-live="polite" aria-atomic="false">
+        <div className={styles.stack} aria-live="polite" aria-atomic="false">
             {toasts.map((toast) => (
-                <div key={toast.id} className={`toast toast-${toast.tone}`} role="status">
+                <div key={toast.id} className={`${styles.toast} ${styles[toast.tone]}`} role="status">
                     <p>{toast.message}</p>
                     <button
                         type="button"
-                        className="toast-dismiss"
+                        className={styles.dismiss}
                         onClick={() => onDismiss(toast.id)}
                         aria-label="Dismiss notification"
                     >

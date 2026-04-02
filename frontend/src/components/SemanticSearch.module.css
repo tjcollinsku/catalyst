@@ -1,0 +1,60 @@
+/* SemanticSearch styles */
+
+.semanticSearchBar {
+    margin-bottom: 1rem;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    backdrop-filter: blur(8px);
+    padding: 0.6rem 0.9rem;
+}
+
+.semanticSearchRow {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.semanticSearchInput {
+    flex: 1;
+    min-width: 200px;
+}
+
+.semanticScopeToggle {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    color: var(--text-soft);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.semanticIndexStatus {
+    margin: 0.4rem 0 0;
+    font-size: 0.8rem;
+    color: var(--accent-strong);
+}
+
+.semanticError {
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.7rem;
+    border-radius: 8px;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    font-size: 0.85rem;
+}
+
+.semanticResults {
+    margin-top: 0.6rem;
+    max-height: 50vh;
+    overflow-y: auto;
+    padding-right: 0.25rem;
+}
+
+.semanticEmpty {
+    margin-top: 0.5rem;
+    color: var(--text-soft);
+    font-size: 0.85rem;
+}

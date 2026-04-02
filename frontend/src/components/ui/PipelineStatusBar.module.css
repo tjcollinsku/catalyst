@@ -1,0 +1,163 @@
+/*
+ * PipelineStatusBar
+ * Horizontal status bar showing 5 investigation stages with counts.
+ * Click a stage to filter. Inspired by Splunk SOAR pipeline visualization.
+ */
+
+.bar {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    padding: 0.5rem;
+    background: var(--pipeline-bar-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-bottom: 1rem;
+}
+
+/* ── Stage button ────────────────────────────────────── */
+
+.stage {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-soft);
+    font: inherit;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    position: relative;
+}
+
+.stage:hover {
+    background: var(--sidebar-hover);
+    color: var(--text-main);
+}
+
+.stageActive {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-md);
+    background: var(--sidebar-active);
+    color: var(--accent-strong);
+    font: inherit;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    position: relative;
+}
+
+/* ── Stage icon ──────────────────────────────────────── */
+
+.stageIcon {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+/* ── Stage label ─────────────────────────────────────── */
+
+.stageLabel {
+    white-space: nowrap;
+}
+
+/* ── Count badge ─────────────────────────────────────── */
+
+.count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.4rem;
+    height: 1.4rem;
+    padding: 0 0.35rem;
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    font-family: var(--font-mono);
+    background: var(--tag-neutral-bg);
+    color: var(--text-soft);
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.countNew {
+    background: var(--pipeline-new);
+    color: #fff;
+}
+
+.countReviewing {
+    background: var(--pipeline-reviewing);
+    color: #fff;
+}
+
+.countConfirmed {
+    background: var(--pipeline-confirmed);
+    color: #fff;
+}
+
+.countDraft {
+    background: var(--pipeline-draft);
+    color: #fff;
+}
+
+.countPublished {
+    background: var(--pipeline-published);
+    color: #fff;
+}
+
+/* ── Arrow connector between stages ──────────────────── */
+
+.arrow {
+    display: flex;
+    align-items: center;
+    color: var(--text-soft);
+    font-size: 0.7rem;
+    padding: 0 0.15rem;
+    opacity: 0.5;
+}
+
+/* ── "All" filter button ─────────────────────────────── */
+
+.allBtn {
+    padding: 0.6rem 1rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-soft);
+    font: inherit;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+    white-space: nowrap;
+}
+
+.allBtn:hover {
+    background: var(--sidebar-hover);
+    color: var(--text-main);
+}
+
+.allBtnActive {
+    padding: 0.6rem 1rem;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-md);
+    background: var(--sidebar-active);
+    color: var(--accent-strong);
+    font: inherit;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+    white-space: nowrap;
+}

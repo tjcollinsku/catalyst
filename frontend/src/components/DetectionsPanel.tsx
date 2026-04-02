@@ -4,6 +4,7 @@ import { Button } from "./ui/Button";
 import { EmptyState } from "./ui/EmptyState";
 import { FormSelect } from "./ui/FormSelect";
 import { FormTextarea } from "./ui/FormTextarea";
+import styles from "./DetectionsPanel.module.css";
 
 const SEVERITY_CLASS: Record<string, string> = {
     CRITICAL: "critical",
@@ -38,6 +39,15 @@ const SIGNAL_TYPE_LABELS: Record<string, string> = {
     CHARTER_CONFLICT: "Charter status conflict",
     ADDRESS_NEXUS: "Address nexus",
     ASSET_DISCREPANCY: "990 vs deed asset discrepancy",
+    BLANKET_LIEN: "Blanket lien indicator",
+    RAPID_FLIP: "Rapid property flip",
+    GOVERNANCE_GAP: "Governance gap",
+    FAMILY_NETWORK: "Family network density",
+    SOCIAL_CLUSTER: "Social cluster overlap",
+    ENTITY_FORMATION_TIMING: "Entity formation timing",
+    CONDUIT_PATTERN: "Conduit entity pattern",
+    RELATED_PARTY_TX: "Related party transaction",
+    EXPENSE_RATIO: "Low program expense ratio",
 };
 
 const STATUS_OPTIONS: DetectionStatus[] = ["OPEN", "REVIEWED", "CONFIRMED", "DISMISSED", "ESCALATED"];
@@ -48,6 +58,7 @@ interface DetectionsPanelProps {
     savingDetectionId: string | null;
     onUpdateDetection: (detectionId: string, payload: DetectionUpdatePayload) => void;
     onDeleteDetection: (detectionId: string) => void;
+    onEscalateToFinding?: (detection: DetectionItem) => void;
     formatDate: (value: string) => string;
 }
 
@@ -62,6 +73,7 @@ export function DetectionsPanel({
     savingDetectionId,
     onUpdateDetection,
     onDeleteDetection,
+    onEscalateToFinding,
     formatDate,
 }: DetectionsPanelProps) {
     const [drafts, setDrafts] = useState<Record<string, ReviewDraft>>({});
@@ -88,18 +100,18 @@ export function DetectionsPanel({
 
     if (loadingDetections) {
         return (
-            <article className="info-card">
+            <article className={styles.infoCard}>
                 <h3>Detections</h3>
-                <p className="signal-subhead">Loading detections…</p>
+                <p className={styles.signalSubhead}>Loading detections…</p>
             </article>
         );
     }
 
     return (
-        <article className="info-card">
-            <div className="card-toolbar">
+        <article className={styles.infoCard}>
+            <div className={styles.cardToolbar}>
                 <h3>Detections ({filtered.length}/{detections.length})</h3>
-                <div className="compact-filters">
+                <div className={styles.compactFilters}>
                     <FormSelect
                         value={severityFilter}
                         onChange={(e) => setSeverityFilter(e.target.value)}
@@ -133,7 +145,7 @@ export function DetectionsPanel({
                         : "Try broadening severity or status filters."}
                 />
             ) : (
-                <ul className="signal-list">
+                <ul className={styles.signalList}>
                     {filtered.map((detection) => {
                         const draft = getDraft(detection);
                         const isSaving = savingDetectionId === detection.id;
@@ -143,7 +155,7 @@ export function DetectionsPanel({
                         return (
                             <li key={detection.id}>
                                 <div
-                                    className={isActive ? "signal-card active-signal" : "signal-card"}
+                                    className={isActive ? `${styles.signalCard} ${styles.activeSignal}` : styles.signalCard}
                                     role="button"
                                     tabIndex={0}
                                     onClick={() => setActiveId(isActive ? null : detection.id)}
@@ -156,22 +168,22 @@ export function DetectionsPanel({
                                     aria-label={`Review detection: ${SIGNAL_TYPE_LABELS[detection.signal_type] ?? detection.signal_type}`}
                                 >
                                     <strong>{SIGNAL_TYPE_LABELS[detection.signal_type] ?? detection.signal_type}</strong>
-                                    <p className="signal-subhead">{detection.detection_method === "INVESTIGATOR_MANUAL" ? "Manual flag" : "Auto-detected"} · {formatDate(detection.detected_at)}</p>
+                                    <p className={styles.signalSubhead}>{detection.detection_method === "INVESTIGATOR_MANUAL" ? "Manual flag" : "Auto-detected"} · {formatDate(detection.detected_at)}</p>
                                     {evidenceKeys.length > 0 && (
-                                        <ul className="signal-subhead" style={{ margin: "4px 0 0", paddingLeft: "1rem" }}>
+                                        <ul className={styles.signalSubhead} style={{ margin: "4px 0 0", paddingLeft: "1rem" }}>
                                             {evidenceKeys.map((k) => (
                                                 <li key={k}><strong>{k}:</strong> {String(detection.evidence_snapshot[k])}</li>
                                             ))}
                                         </ul>
                                     )}
                                     {detection.investigator_note && (
-                                        <p className="signal-subhead" style={{ marginTop: 4 }}>
+                                        <p className={styles.signalSubhead} style={{ marginTop: 4 }}>
                                             Note: {detection.investigator_note}
                                         </p>
                                     )}
                                 </div>
 
-                                <div className="signal-badges">
+                                <div className={styles.signalBadges}>
                                     <span className={`tag ${SEVERITY_CLASS[detection.severity] ?? "neutral"}`}>
                                         {detection.severity}
                                     </span>
@@ -180,7 +192,7 @@ export function DetectionsPanel({
                                     {isActive && (
                                         <>
                                             <FormSelect
-                                                className="triage-select"
+                                                className={styles.triageSelect}
                                                 value={draft.status}
                                                 onChange={(e) => setDraft(detection.id, { ...draft, status: e.target.value as DetectionStatus })}
                                             >
@@ -189,15 +201,15 @@ export function DetectionsPanel({
                                                 ))}
                                             </FormSelect>
                                             <FormTextarea
-                                                className="triage-note"
+                                                className={styles.triageNote}
                                                 placeholder="Investigator note (required to dismiss)"
                                                 value={draft.note}
                                                 onChange={(e) => setDraft(detection.id, { ...draft, note: e.target.value })}
                                                 rows={2}
                                             />
-                                            <div style={{ display: "flex", gap: "6px" }}>
+                                            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                                                 <Button
-                                                    className="triage-save"
+                                                    className={styles.triageSave}
                                                     disabled={isSaving}
                                                     onClick={() => onUpdateDetection(detection.id, {
                                                         status: draft.status,
@@ -206,6 +218,17 @@ export function DetectionsPanel({
                                                 >
                                                     {isSaving ? "Saving…" : "Save"}
                                                 </Button>
+                                                {onEscalateToFinding && (
+                                                    <Button
+                                                        disabled={isSaving}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onEscalateToFinding(detection);
+                                                        }}
+                                                    >
+                                                        Escalate to Finding
+                                                    </Button>
+                                                )}
                                                 <Button
                                                     variant="secondary"
                                                     disabled={isSaving}

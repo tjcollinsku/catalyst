@@ -147,6 +147,11 @@ def resolve_person(
     case: "Case",
     document: "Document | None" = None,
     context_note: str = "",
+    role: str | None = None,
+    address: str | None = None,
+    phone: str | None = None,
+    aliases: list[str] | None = None,
+    notes: str | None = None,
 ) -> PersonResolutionResult:
     """
     Resolve a raw person name against existing Person records in the case.
@@ -196,6 +201,7 @@ def resolve_person(
     for existing in existing_persons:
         # Check full_name
         if normalize_person_name(existing.full_name) == incoming_norm:
+            _enrich_person(existing, role=role, address=address, phone=phone)
             _maybe_link_person_document(existing, document, context_note)
             logger.debug(
                 "resolve_person: exact match on full_name — %r → id=%s",
@@ -252,10 +258,19 @@ def resolve_person(
     fuzzy_candidates.sort(key=lambda c: c.similarity, reverse=True)
 
     # --- Tier 1 miss — create new Person record -----------------------------
-    person = Person.objects.create(
-        case=case,
-        full_name=raw_name.strip(),
-    )
+    create_kwargs: dict = {"case": case, "full_name": raw_name.strip()}
+    if address:
+        create_kwargs["address"] = address
+    if phone:
+        create_kwargs["phone"] = phone
+    if aliases:
+        create_kwargs["aliases"] = aliases
+    if notes:
+        create_kwargs["notes"] = notes
+    if role:
+        create_kwargs["role_tags"] = [_role_to_tag(role)]
+
+    person = Person.objects.create(**create_kwargs)
     _maybe_link_person_document(person, document, context_note)
     logger.debug("resolve_person: created new Person %r id=%s", raw_name, person.id)
 
@@ -286,6 +301,58 @@ def _maybe_link_person_document(
     )
 
 
+def _role_to_tag(role: str) -> str:
+    """Map a free-text role string to a PersonRole enum tag."""
+    low = role.lower()
+    mapping = {
+        "president": "OFFICER",
+        "vice president": "OFFICER",
+        "vice preside": "OFFICER",
+        "treasurer": "OFFICER",
+        "secretary": "OFFICER",
+        "ceo": "OFFICER",
+        "cfo": "OFFICER",
+        "executive director": "OFFICER",
+        "director": "BOARD_MEMBER",
+        "trustee": "TRUSTEE",
+        "chairman": "BOARD_MEMBER",
+        "board member": "BOARD_MEMBER",
+        "member": "BOARD_MEMBER",
+        "tax preparer": "TAX_PREPARER",
+        "principal officer": "OFFICER",
+        "registered agent": "REGISTERED_AGENT",
+        "attorney": "ATTORNEY",
+    }
+    for key, tag in mapping.items():
+        if key in low:
+            return tag
+    return "OFFICER"
+
+
+def _enrich_person(
+    person: "Person",
+    role: str | None = None,
+    address: str | None = None,
+    phone: str | None = None,
+) -> None:
+    """Fill in blank fields on an existing Person if we have new data."""
+    updated = False
+    if address and not person.address:
+        person.address = address
+        updated = True
+    if phone and not person.phone:
+        person.phone = phone
+        updated = True
+    if role:
+        tag = _role_to_tag(role)
+        if tag not in (person.role_tags or []):
+            person.role_tags = list(person.role_tags or []) + [tag]
+            updated = True
+    if updated:
+        person.save()
+        logger.debug("_enrich_person: updated Person %s with new fields", person.id)
+
+
 # ---------------------------------------------------------------------------
 # Organization resolution
 # ---------------------------------------------------------------------------
@@ -296,6 +363,12 @@ def resolve_org(
     case: "Case",
     document: "Document | None" = None,
     context_note: str = "",
+    ein: str | None = None,
+    address: str | None = None,
+    phone: str | None = None,
+    org_type: str | None = None,
+    registration_state: str | None = None,
+    notes: str | None = None,
 ) -> OrgResolutionResult:
     """
     Resolve a raw organization name against existing Organization records
@@ -327,6 +400,7 @@ def resolve_org(
     # --- Tier 1: Exact match ------------------------------------------------
     for existing in existing_orgs:
         if normalize_org_name(existing.name) == incoming_norm:
+            _enrich_org(existing, ein=ein, address=address, phone=phone)
             _maybe_link_org_document(existing, document, context_note)
             logger.debug(
                 "resolve_org: exact match — %r → id=%s",
@@ -365,10 +439,21 @@ def resolve_org(
     fuzzy_candidates.sort(key=lambda c: c.similarity, reverse=True)
 
     # --- Create new Org record ----------------------------------------------
-    org = Organization.objects.create(
-        case=case,
-        name=raw_name.strip(),
-    )
+    create_kwargs: dict = {"case": case, "name": raw_name.strip()}
+    if ein:
+        create_kwargs["ein"] = ein
+    if address:
+        create_kwargs["address"] = address
+    if phone:
+        create_kwargs["phone"] = phone
+    if org_type:
+        create_kwargs["org_type"] = org_type
+    if registration_state:
+        create_kwargs["registration_state"] = registration_state
+    if notes:
+        create_kwargs["notes"] = notes
+
+    org = Organization.objects.create(**create_kwargs)
     _maybe_link_org_document(org, document, context_note)
     logger.debug("resolve_org: created new Organization %r id=%s", raw_name, org.id)
 
@@ -377,6 +462,28 @@ def resolve_org(
         created=True,
         fuzzy_candidates=fuzzy_candidates,
     )
+
+
+def _enrich_org(
+    org: "Organization",
+    ein: str | None = None,
+    address: str | None = None,
+    phone: str | None = None,
+) -> None:
+    """Fill in blank fields on an existing Organization if we have new data."""
+    updated = False
+    if ein and not org.ein:
+        org.ein = ein
+        updated = True
+    if address and not org.address:
+        org.address = address
+        updated = True
+    if phone and not org.phone:
+        org.phone = phone
+        updated = True
+    if updated:
+        org.save()
+        logger.debug("_enrich_org: updated Organization %s with new fields", org.id)
 
 
 def _maybe_link_org_document(
@@ -445,13 +552,24 @@ def resolve_all_entities(
     """
     summary = ResolutionSummary()
 
+    meta = extraction_result.get("meta", {})
+
     for person_hit in extraction_result.get("persons", []):
         result = resolve_person(
             raw_name=person_hit["raw"],
             case=case,
             document=document,
             context_note=person_hit.get("context", ""),
+            role=person_hit.get("role"),
+            address=person_hit.get("address"),
+            phone=person_hit.get("phone"),
+            aliases=person_hit.get("aliases"),
+            notes=person_hit.get("notes"),
         )
+        # If this is a 990 preparer, link them to the firm org
+        if person_hit.get("source") == "990_preparer" and meta.get("preparer_firm"):
+            _link_person_to_firm(result.person, meta["preparer_firm"], case, document)
+
         if result.created:
             summary.persons_created += 1
         else:
@@ -464,12 +582,19 @@ def resolve_all_entities(
             case=case,
             document=document,
             context_note=org_hit.get("context", ""),
+            ein=org_hit.get("ein"),
+            address=org_hit.get("address"),
+            phone=org_hit.get("phone"),
         )
         if result.created:
             summary.orgs_created += 1
         else:
             summary.orgs_matched += 1
         summary.fuzzy_candidates.extend(result.fuzzy_candidates)
+
+    # If we got the org's EIN from the 990, enrich the main org
+    if meta.get("org_ein"):
+        _enrich_case_org_ein(case, meta["org_ein"])
 
     # Sort all fuzzy candidates by similarity descending
     summary.fuzzy_candidates.sort(key=lambda c: c.similarity, reverse=True)
@@ -484,3 +609,48 @@ def resolve_all_entities(
     )
 
     return summary
+
+
+def _link_person_to_firm(
+    person: "Person",
+    firm_name: str,
+    case: "Case",
+    document: "Document | None",
+) -> None:
+    """Create a PersonOrganization link between a preparer and their firm."""
+    from .entity_normalization import normalize_org_name
+    from .models import Organization, PersonOrganization
+
+    target_norm = normalize_org_name(firm_name)
+    for org in Organization.objects.filter(case=case):
+        if normalize_org_name(org.name) == target_norm:
+            PersonOrganization.objects.get_or_create(
+                person=person,
+                org=org,
+                defaults={"role": "Tax Preparer"},
+            )
+            logger.debug(
+                "_link_person_to_firm: linked %s → %s",
+                person.full_name,
+                org.name,
+            )
+            return
+
+
+def _enrich_case_org_ein(case: "Case", ein: str) -> None:
+    """
+    If the case has an org with no EIN that matches the case name,
+    fill in the EIN from the 990.
+    """
+    from .models import Organization
+
+    orgs = Organization.objects.filter(case=case, ein__isnull=True) | Organization.objects.filter(
+        case=case, ein=""
+    )
+    for org in orgs:
+        # Heuristic: if the org name appears in the case name or vice versa
+        if org.name.lower() in case.name.lower() or case.name.lower() in org.name.lower():
+            org.ein = ein
+            org.save()
+            logger.debug("_enrich_case_org_ein: set EIN %s on org %s", ein, org.name)
+            return
