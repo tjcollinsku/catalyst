@@ -110,7 +110,7 @@ ASGI_APPLICATION = "catalyst.asgi.application"
 # Railway (and similar platforms) provide a DATABASE_URL env var.
 # If present, use it. Otherwise fall back to individual env vars for local dev.
 # ---------------------------------------------------------------------------
-_database_url = os.getenv("DATABASE_URL")
+_database_url = os.getenv("DATABASE_URL") or os.getenv("DATABASE_PUBLIC_URL")
 if _database_url:
     DATABASES = {
         "default": dj_database_url.parse(
@@ -120,9 +120,7 @@ if _database_url:
         )
     }
 else:
-    _db_password = os.getenv("DB_PASSWORD")
-    if not _db_password:
-        raise RuntimeError("DB_PASSWORD environment variable is not set. Add it to your .env file.")
+    _db_password = os.getenv("DB_PASSWORD", "")
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
