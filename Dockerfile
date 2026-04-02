@@ -53,19 +53,16 @@ COPY backend/ .
 # WhiteNoise will serve these files in production
 COPY --from=frontend-build /frontend/dist/ /app/static/frontend/
 
-# Collect all static files into STATIC_ROOT
-# This needs a SECRET_KEY to run, so we provide a dummy one for the build step
-RUN DJANGO_SECRET_KEY="build-step-placeholder" \
-    DATABASE_URL="sqlite:///dev-null" \
-    python manage.py collectstatic --noinput
-
-# Create media directory for uploads
-RUN mkdir -p /app/media
+# Create directories for static files and uploads
+RUN mkdir -p /app/staticfiles /app/media
 
 EXPOSE 8000
 
-# Run with Gunicorn — Railway sets PORT env var automatically
-CMD gunicorn catalyst.wsgi:application \
+# Run collectstatic at startup (needs real env vars), then launch Gunicorn.
+# Railway sets PORT env var automatically.
+CMD python manage.py collectstatic --noinput && \
+    python manage.py migrate --noinput && \
+    gunicorn catalyst.wsgi:application \
     --bind 0.0.0.0:${PORT:-8000} \
     --workers 2 \
     --timeout 120 \
