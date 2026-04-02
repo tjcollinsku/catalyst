@@ -618,9 +618,8 @@ def _link_person_to_firm(
     document: "Document | None",
 ) -> None:
     """Create a PersonOrganization link between a preparer and their firm."""
-    from .models import Organization, PersonOrganization
-
     from .entity_normalization import normalize_org_name
+    from .models import Organization, PersonOrganization
 
     target_norm = normalize_org_name(firm_name)
     for org in Organization.objects.filter(case=case):

@@ -1,9 +1,9 @@
 """Tests for the 4 new Phase D endpoints:
-    - GET  /api/search/
-    - GET  /api/cases/<uuid>/export/
-    - GET  /api/entities/<type>/<uuid>/
-    - GET/POST /api/cases/<uuid>/notes/
-    - GET/PATCH/DELETE /api/cases/<uuid>/notes/<uuid>/
+- GET  /api/search/
+- GET  /api/cases/<uuid>/export/
+- GET  /api/entities/<type>/<uuid>/
+- GET/POST /api/cases/<uuid>/notes/
+- GET/PATCH/DELETE /api/cases/<uuid>/notes/<uuid>/
 """
 
 import json
@@ -11,7 +11,6 @@ import uuid
 
 from django.test import Client, TestCase
 from django.urls import reverse
-from django.utils import timezone
 
 from ..models import (
     Case,
@@ -92,16 +91,14 @@ class SearchApiTests(TestCase):
 
     def test_search_filters_by_type(self):
         Person.objects.create(case=self.case, full_name="Smith Person")
-        response = self.client.get(
-            reverse("api_search"), data={"q": "Smith", "type": "entity"}
-        )
+        response = self.client.get(reverse("api_search"), data={"q": "Smith", "type": "entity"})
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         types = set(r["type"] for r in payload["results"])
         self.assertEqual(types, {"entity"})
 
     def test_search_filters_by_case_id(self):
-        other_case = Case.objects.create(name="Smith Other Case")
+        _other_case = Case.objects.create(name="Smith Other Case")
         response = self.client.get(
             reverse("api_search"),
             data={"q": "Smith", "case_id": str(self.case.pk)},
@@ -112,15 +109,11 @@ class SearchApiTests(TestCase):
             self.assertEqual(r["case_id"], str(self.case.pk))
 
     def test_search_rejects_invalid_type(self):
-        response = self.client.get(
-            reverse("api_search"), data={"q": "test", "type": "badtype"}
-        )
+        response = self.client.get(reverse("api_search"), data={"q": "test", "type": "badtype"})
         self.assertEqual(response.status_code, 400)
 
     def test_search_returns_empty_for_no_matches(self):
-        response = self.client.get(
-            reverse("api_search"), data={"q": "zzzznonexistent"}
-        )
+        response = self.client.get(reverse("api_search"), data={"q": "zzzznonexistent"})
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["total"], 0)
@@ -167,9 +160,7 @@ class CaseExportApiTests(TestCase):
         self.assertIn(".csv", payload["filename"])
 
     def test_export_defaults_to_json(self):
-        response = self.client.get(
-            reverse("api_case_export", args=[self.case.pk])
-        )
+        response = self.client.get(reverse("api_case_export", args=[self.case.pk]))
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["format"], "json")
@@ -184,9 +175,7 @@ class CaseExportApiTests(TestCase):
         self.assertIn("format", payload["errors"])
 
     def test_export_returns_404_for_missing_case(self):
-        response = self.client.get(
-            reverse("api_case_export", args=[uuid.uuid4()])
-        )
+        response = self.client.get(reverse("api_case_export", args=[uuid.uuid4()]))
         self.assertEqual(response.status_code, 404)
 
 
@@ -201,9 +190,7 @@ class EntityDetailApiTests(TestCase):
             full_name="Jane Smith",
             role_tags=["OFFICER", "BOARD_MEMBER"],
         )
-        response = self.client.get(
-            reverse("api_entity_detail", args=["person", person.pk])
-        )
+        response = self.client.get(reverse("api_entity_detail", args=["person", person.pk]))
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["name"], "Jane Smith")
@@ -214,24 +201,16 @@ class EntityDetailApiTests(TestCase):
         self.assertIn("organization_roles", payload)
 
     def test_organization_detail_returns_full_data(self):
-        org = Organization.objects.create(
-            case=self.case, name="Acme LLC", org_type="LLC"
-        )
-        response = self.client.get(
-            reverse("api_entity_detail", args=["organization", org.pk])
-        )
+        org = Organization.objects.create(case=self.case, name="Acme LLC", org_type="LLC")
+        response = self.client.get(reverse("api_entity_detail", args=["organization", org.pk]))
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["name"], "Acme LLC")
         self.assertEqual(payload["entity_type"], "organization")
 
     def test_property_detail_includes_transactions(self):
-        prop = Property.objects.create(
-            case=self.case, address="123 Main St", county="Franklin"
-        )
-        response = self.client.get(
-            reverse("api_entity_detail", args=["property", prop.pk])
-        )
+        prop = Property.objects.create(case=self.case, address="123 Main St", county="Franklin")
+        response = self.client.get(reverse("api_entity_detail", args=["property", prop.pk]))
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["entity_type"], "property")
@@ -267,9 +246,7 @@ class EntityDetailApiTests(TestCase):
             page_reference="p.3",
             context_note="Named as grantor",
         )
-        response = self.client.get(
-            reverse("api_entity_detail", args=["person", person.pk])
-        )
+        response = self.client.get(reverse("api_entity_detail", args=["person", person.pk]))
         payload = response.json()
         self.assertEqual(len(payload["related_documents"]), 1)
         self.assertEqual(payload["related_documents"][0]["filename"], "person_doc.pdf")
@@ -283,25 +260,17 @@ class EntityDetailApiTests(TestCase):
             severity="CRITICAL",
             detected_summary="Deceased person found",
         )
-        EntitySignal.objects.create(
-            signal=signal, entity_id=person.pk, entity_type="person"
-        )
-        response = self.client.get(
-            reverse("api_entity_detail", args=["person", person.pk])
-        )
+        EntitySignal.objects.create(signal=signal, entity_id=person.pk, entity_type="person")
+        response = self.client.get(reverse("api_entity_detail", args=["person", person.pk]))
         payload = response.json()
         self.assertEqual(len(payload["related_signals"]), 1)
 
     def test_entity_detail_rejects_invalid_type(self):
-        response = self.client.get(
-            reverse("api_entity_detail", args=["badtype", uuid.uuid4()])
-        )
+        response = self.client.get(reverse("api_entity_detail", args=["badtype", uuid.uuid4()]))
         self.assertEqual(response.status_code, 400)
 
     def test_entity_detail_returns_404_for_missing_entity(self):
-        response = self.client.get(
-            reverse("api_entity_detail", args=["person", uuid.uuid4()])
-        )
+        response = self.client.get(reverse("api_entity_detail", args=["person", uuid.uuid4()]))
         self.assertEqual(response.status_code, 404)
 
 
@@ -313,12 +282,14 @@ class InvestigatorNoteApiTests(TestCase):
     def test_create_note(self):
         response = self.client.post(
             reverse("api_case_note_collection", args=[self.case.pk]),
-            data=json.dumps({
-                "target_type": "case",
-                "target_id": str(self.case.pk),
-                "content": "Initial investigation note.",
-                "created_by": "Investigator Adams",
-            }),
+            data=json.dumps(
+                {
+                    "target_type": "case",
+                    "target_id": str(self.case.pk),
+                    "content": "Initial investigation note.",
+                    "created_by": "Investigator Adams",
+                }
+            ),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 201)
@@ -330,11 +301,13 @@ class InvestigatorNoteApiTests(TestCase):
     def test_create_note_rejects_empty_content(self):
         response = self.client.post(
             reverse("api_case_note_collection", args=[self.case.pk]),
-            data=json.dumps({
-                "target_type": "case",
-                "target_id": str(self.case.pk),
-                "content": "",
-            }),
+            data=json.dumps(
+                {
+                    "target_type": "case",
+                    "target_id": str(self.case.pk),
+                    "content": "",
+                }
+            ),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
@@ -344,11 +317,13 @@ class InvestigatorNoteApiTests(TestCase):
     def test_create_note_rejects_invalid_target_type(self):
         response = self.client.post(
             reverse("api_case_note_collection", args=[self.case.pk]),
-            data=json.dumps({
-                "target_type": "invalidtype",
-                "target_id": str(self.case.pk),
-                "content": "Some note.",
-            }),
+            data=json.dumps(
+                {
+                    "target_type": "invalidtype",
+                    "target_id": str(self.case.pk),
+                    "content": "Some note.",
+                }
+            ),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
@@ -358,11 +333,13 @@ class InvestigatorNoteApiTests(TestCase):
     def test_create_note_rejects_invalid_target_id(self):
         response = self.client.post(
             reverse("api_case_note_collection", args=[self.case.pk]),
-            data=json.dumps({
-                "target_type": "case",
-                "target_id": "not-a-uuid",
-                "content": "Some note.",
-            }),
+            data=json.dumps(
+                {
+                    "target_type": "case",
+                    "target_id": "not-a-uuid",
+                    "content": "Some note.",
+                }
+            ),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
@@ -415,9 +392,7 @@ class InvestigatorNoteApiTests(TestCase):
             target_id=self.case.pk,
             content="Detail note.",
         )
-        response = self.client.get(
-            reverse("api_case_note_detail", args=[self.case.pk, note.pk])
-        )
+        response = self.client.get(reverse("api_case_note_detail", args=[self.case.pk, note.pk]))
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["content"], "Detail note.")
@@ -459,9 +434,7 @@ class InvestigatorNoteApiTests(TestCase):
             target_id=self.case.pk,
             content="Deletable note.",
         )
-        response = self.client.delete(
-            reverse("api_case_note_detail", args=[self.case.pk, note.pk])
-        )
+        response = self.client.delete(reverse("api_case_note_detail", args=[self.case.pk, note.pk]))
         self.assertEqual(response.status_code, 204)
         self.assertFalse(InvestigatorNote.objects.filter(pk=note.pk).exists())
 
@@ -473,13 +446,9 @@ class InvestigatorNoteApiTests(TestCase):
             target_id=other_case.pk,
             content="Wrong case note.",
         )
-        response = self.client.get(
-            reverse("api_case_note_detail", args=[self.case.pk, note.pk])
-        )
+        response = self.client.get(reverse("api_case_note_detail", args=[self.case.pk, note.pk]))
         self.assertEqual(response.status_code, 404)
 
     def test_note_collection_returns_404_for_missing_case(self):
-        response = self.client.get(
-            reverse("api_case_note_collection", args=[uuid.uuid4()])
-        )
+        response = self.client.get(reverse("api_case_note_collection", args=[uuid.uuid4()]))
         self.assertEqual(response.status_code, 404)

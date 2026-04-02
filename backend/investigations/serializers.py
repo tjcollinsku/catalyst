@@ -10,8 +10,6 @@ from .models import (
     Document,
     Finding,
     FindingConfidence,
-    FindingDocument,
-    FindingEntity,
     FindingSeverity,
     FindingStatus,
     GovernmentReferral,
@@ -931,6 +929,7 @@ class ReferralUpdateSerializer:
 # Entity serializers (cross-case)
 # ---------------------------------------------------------------------------
 
+
 def serialize_person(person) -> dict:
     return {
         "id": str(person.pk),
@@ -984,7 +983,7 @@ def serialize_financial_instrument(fi) -> dict:
     return {
         "id": str(fi.pk),
         "entity_type": "financial_instrument",
-        "name": f"{fi.instrument_type} {fi.filing_number or ''}" .strip() or str(fi.pk)[:8],
+        "name": f"{fi.instrument_type} {fi.filing_number or ''}".strip() or str(fi.pk)[:8],
         "case_id": str(fi.case_id),
         "instrument_type": fi.instrument_type,
         "filing_number": fi.filing_number,
@@ -1027,7 +1026,6 @@ _VALID_NOTE_TARGET_TYPES = {
 
 
 def serialize_note(note) -> dict:
-    from .models import InvestigatorNote
 
     return {
         "id": str(note.pk),
@@ -1123,9 +1121,7 @@ class NoteIntakeSerializer:
             raise ValueError("Call is_valid() before save().")
         from .models import InvestigatorNote
 
-        self.instance = InvestigatorNote.objects.create(
-            case=self.case, **self.validated_data
-        )
+        self.instance = InvestigatorNote.objects.create(case=self.case, **self.validated_data)
         return self.instance
 
 
@@ -1248,8 +1244,15 @@ class FindingIntakeSerializer:
     """Validates data for creating a new Finding."""
 
     _ALLOWED_FIELDS = {
-        "title", "narrative", "severity", "confidence", "status",
-        "signal_type", "signal_rule_id", "legal_refs", "detection_id",
+        "title",
+        "narrative",
+        "severity",
+        "confidence",
+        "status",
+        "signal_type",
+        "signal_rule_id",
+        "legal_refs",
+        "detection_id",
     }
 
     def __init__(self, data: dict, case):
@@ -1285,14 +1288,16 @@ class FindingIntakeSerializer:
         severity = data.get("severity", FindingSeverity.MEDIUM)
         if severity not in _VALID_FINDING_SEVERITIES:
             errors["severity"] = [
-                f"Invalid severity. Expected one of: {', '.join(sorted(_VALID_FINDING_SEVERITIES))}."
+                f"Invalid severity. Expected one of: "
+                f"{', '.join(sorted(_VALID_FINDING_SEVERITIES))}."
             ]
 
         # confidence — optional
         confidence = data.get("confidence", FindingConfidence.POSSIBLE)
         if confidence not in _VALID_FINDING_CONFIDENCES:
             errors["confidence"] = [
-                f"Invalid confidence. Expected one of: {', '.join(sorted(_VALID_FINDING_CONFIDENCES))}."
+                f"Invalid confidence. Expected one of: "
+                f"{', '.join(sorted(_VALID_FINDING_CONFIDENCES))}."
             ]
 
         # status — optional
@@ -1311,6 +1316,7 @@ class FindingIntakeSerializer:
         detection_id = data.get("detection_id")
         if detection_id is not None:
             import uuid as _uuid
+
             try:
                 detection_id = str(_uuid.UUID(str(detection_id)))
             except (ValueError, AttributeError):
@@ -1348,8 +1354,15 @@ class FindingUpdateSerializer:
     """Validates data for patching an existing Finding."""
 
     _ALLOWED_FIELDS = {
-        "title", "narrative", "severity", "confidence", "status",
-        "signal_type", "signal_rule_id", "legal_refs", "detection_id",
+        "title",
+        "narrative",
+        "severity",
+        "confidence",
+        "status",
+        "signal_type",
+        "signal_rule_id",
+        "legal_refs",
+        "detection_id",
     }
 
     def __init__(self, data: dict, instance: Finding):
@@ -1392,7 +1405,8 @@ class FindingUpdateSerializer:
         if "severity" in data:
             if data["severity"] not in _VALID_FINDING_SEVERITIES:
                 errors["severity"] = [
-                    f"Invalid severity. Expected one of: {', '.join(sorted(_VALID_FINDING_SEVERITIES))}."
+                    f"Invalid severity. Expected one of: "
+                    f"{', '.join(sorted(_VALID_FINDING_SEVERITIES))}."
                 ]
             else:
                 update_fields["severity"] = data["severity"]
@@ -1400,7 +1414,8 @@ class FindingUpdateSerializer:
         if "confidence" in data:
             if data["confidence"] not in _VALID_FINDING_CONFIDENCES:
                 errors["confidence"] = [
-                    f"Invalid confidence. Expected one of: {', '.join(sorted(_VALID_FINDING_CONFIDENCES))}."
+                    f"Invalid confidence. Expected one of: "
+                    f"{', '.join(sorted(_VALID_FINDING_CONFIDENCES))}."
                 ]
             else:
                 update_fields["confidence"] = data["confidence"]
@@ -1408,7 +1423,8 @@ class FindingUpdateSerializer:
         if "status" in data:
             if data["status"] not in _VALID_FINDING_STATUSES:
                 errors["status"] = [
-                    f"Invalid status. Expected one of: {', '.join(sorted(_VALID_FINDING_STATUSES))}."
+                    f"Invalid status. Expected one of: "
+                    f"{', '.join(sorted(_VALID_FINDING_STATUSES))}."
                 ]
             else:
                 update_fields["status"] = data["status"]
@@ -1430,6 +1446,7 @@ class FindingUpdateSerializer:
             det_id = data["detection_id"]
             if det_id is not None:
                 import uuid as _uuid
+
                 try:
                     det_id = str(_uuid.UUID(str(det_id)))
                 except (ValueError, AttributeError):

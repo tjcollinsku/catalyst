@@ -41,46 +41,224 @@ from typing import Any
 
 _PERSON_STOPWORDS: set[str] = {
     # US state abbreviations (two-letter)
-    "al", "ak", "az", "ar", "ca", "co", "ct", "de", "fl", "ga",
-    "hi", "id", "il", "in", "ia", "ks", "ky", "la", "me", "md",
-    "ma", "mi", "mn", "ms", "mo", "mt", "ne", "nv", "nh", "nj",
-    "nm", "ny", "nc", "nd", "oh", "ok", "or", "pa", "ri", "sc",
-    "sd", "tn", "tx", "ut", "vt", "va", "wa", "wv", "wi", "wy",
+    "al",
+    "ak",
+    "az",
+    "ar",
+    "ca",
+    "co",
+    "ct",
+    "de",
+    "fl",
+    "ga",
+    "hi",
+    "id",
+    "il",
+    "in",
+    "ia",
+    "ks",
+    "ky",
+    "la",
+    "me",
+    "md",
+    "ma",
+    "mi",
+    "mn",
+    "ms",
+    "mo",
+    "mt",
+    "ne",
+    "nv",
+    "nh",
+    "nj",
+    "nm",
+    "ny",
+    "nc",
+    "nd",
+    "oh",
+    "ok",
+    "or",
+    "pa",
+    "ri",
+    "sc",
+    "sd",
+    "tn",
+    "tx",
+    "ut",
+    "vt",
+    "va",
+    "wa",
+    "wv",
+    "wi",
+    "wy",
     "dc",
     # Roman numerals
-    "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x",
-    "xi", "xii", "xiii", "xiv", "xv", "xvi",
+    "i",
+    "ii",
+    "iii",
+    "iv",
+    "v",
+    "vi",
+    "vii",
+    "viii",
+    "ix",
+    "x",
+    "xi",
+    "xii",
+    "xiii",
+    "xiv",
+    "xv",
+    "xvi",
     # IRS 990 form labels and section markers
-    "section", "part", "line", "lines", "schedule", "form",
-    "type", "types", "sections", "page", "pages",
-    "exhibit", "appendix", "attachment", "item",
+    "section",
+    "part",
+    "line",
+    "lines",
+    "schedule",
+    "form",
+    "type",
+    "types",
+    "sections",
+    "page",
+    "pages",
+    "exhibit",
+    "appendix",
+    "attachment",
+    "item",
     # Common form field words (not person names)
-    "date", "sign", "signature", "name", "title", "address",
-    "street", "city", "state", "zip", "phone", "fax", "email",
-    "number", "amount", "total", "year", "return", "tax", "payroll", "liability",
-    "code", "description", "status", "check", "box", "key",
-    "here", "from", "and", "the", "for", "not", "yes", "no",
-    "other", "see", "instructions", "above", "below",
-    "organization", "employer", "revenue", "expenses",
-    "compensation", "assets", "liabilities", "net", "gross",
-    "beginning", "end", "current", "prior", "amended",
-    "initial", "final", "terminated", "group",
+    "date",
+    "sign",
+    "signature",
+    "name",
+    "title",
+    "address",
+    "street",
+    "city",
+    "state",
+    "zip",
+    "phone",
+    "fax",
+    "email",
+    "number",
+    "amount",
+    "total",
+    "year",
+    "return",
+    "tax",
+    "payroll",
+    "liability",
+    "code",
+    "description",
+    "status",
+    "check",
+    "box",
+    "key",
+    "here",
+    "from",
+    "and",
+    "the",
+    "for",
+    "not",
+    "yes",
+    "no",
+    "other",
+    "see",
+    "instructions",
+    "above",
+    "below",
+    "organization",
+    "employer",
+    "revenue",
+    "expenses",
+    "compensation",
+    "assets",
+    "liabilities",
+    "net",
+    "gross",
+    "beginning",
+    "end",
+    "current",
+    "prior",
+    "amended",
+    "initial",
+    "final",
+    "terminated",
+    "group",
     # Geographic words that appear in OCR'd addresses
-    "county", "township", "village", "road", "rd", "ave", "avenue",
-    "blvd", "drive", "dr", "lane", "ln", "court", "ct", "place", "pl",
-    "suite", "ste", "floor", "building", "room", "po", "box",
-    "street", "st", "main", "north", "south", "east", "west",
-    "hwy", "highway", "pkwy", "parkway", "circle", "cir",
+    "county",
+    "township",
+    "village",
+    "road",
+    "rd",
+    "ave",
+    "avenue",
+    "blvd",
+    "drive",
+    "dr",
+    "lane",
+    "ln",
+    "court",
+    "ct",
+    "place",
+    "pl",
+    "suite",
+    "ste",
+    "floor",
+    "building",
+    "room",
+    "po",
+    "box",
+    "street",
+    "st",
+    "main",
+    "north",
+    "south",
+    "east",
+    "west",
+    "hwy",
+    "highway",
+    "pkwy",
+    "parkway",
+    "circle",
+    "cir",
     # Professional credential abbreviations (appear after names: "BROERING, EA")
-    "ea", "cpa", "jd", "esq", "md", "do", "phd", "rn", "lpn",
-    "cfp", "cfa", "mba", "macc", "dba",
+    "ea",
+    "cpa",
+    "jd",
+    "esq",
+    "md",
+    "do",
+    "phd",
+    "rn",
+    "lpn",
+    "cfp",
+    "cfa",
+    "mba",
+    "macc",
+    "dba",
     # Legal designators that leak into person matches
-    "llc", "inc", "corp", "ltd",
+    "llc",
+    "inc",
+    "corp",
+    "ltd",
     # Common OCR junk
-    "celina", "osgood", "maria", "stein",  # Do Good case city names
-    "executive", "ceo", "director", "officer", "president",
-    "secretary", "treasurer", "chairman", "vice", "board",
-    "member", "trustee", "manager",
+    "celina",
+    "osgood",
+    "maria",
+    "stein",  # Do Good case city names
+    "executive",
+    "ceo",
+    "director",
+    "officer",
+    "president",
+    "secretary",
+    "treasurer",
+    "chairman",
+    "vice",
+    "board",
+    "member",
+    "trustee",
+    "manager",
 }
 
 
@@ -135,38 +313,149 @@ def _is_plausible_person_name(name: str) -> bool:
 
 _ORG_STOPWORDS: set[str] = {
     # IRS 990 form section / field words
-    "section", "part", "line", "lines", "schedule", "form", "forms",
-    "page", "exhibit", "appendix", "attachment", "item", "type",
-    "return", "tax", "exempt", "exemption", "status",
-    "officers", "directors", "trustees", "employees",
-    "governance", "management", "policies", "compensation",
-    "revenue", "expenses", "income", "assets", "liabilities",
-    "net", "gross", "adjusted", "total", "beginning", "end",
-    "current", "prior", "amended", "initial", "final",
-    "organization", "employer", "public", "private",
-    "statement", "financial", "balance", "sheet",
-    "contributions", "grants", "program", "fundraising",
-    "investment", "investments",
+    "section",
+    "part",
+    "line",
+    "lines",
+    "schedule",
+    "form",
+    "forms",
+    "page",
+    "exhibit",
+    "appendix",
+    "attachment",
+    "item",
+    "type",
+    "return",
+    "tax",
+    "exempt",
+    "exemption",
+    "status",
+    "officers",
+    "directors",
+    "trustees",
+    "employees",
+    "governance",
+    "management",
+    "policies",
+    "compensation",
+    "revenue",
+    "expenses",
+    "income",
+    "assets",
+    "liabilities",
+    "net",
+    "gross",
+    "adjusted",
+    "total",
+    "beginning",
+    "end",
+    "current",
+    "prior",
+    "amended",
+    "initial",
+    "final",
+    "organization",
+    "employer",
+    "public",
+    "private",
+    "statement",
+    "financial",
+    "balance",
+    "sheet",
+    "contributions",
+    "grants",
+    "program",
+    "fundraising",
+    "investment",
+    "investments",
     # Roman numerals
-    "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x",
-    "xi", "xii", "xiii", "xiv", "xv", "xvi",
+    "i",
+    "ii",
+    "iii",
+    "iv",
+    "v",
+    "vi",
+    "vii",
+    "viii",
+    "ix",
+    "x",
+    "xi",
+    "xii",
+    "xiii",
+    "xiv",
+    "xv",
+    "xvi",
     # Generic words that aren't org-name-specific
-    "the", "a", "an", "of", "from", "for", "and", "or", "in",
-    "to", "on", "at", "by", "with", "as", "is", "are", "was",
-    "see", "check", "list", "other", "all", "any", "each",
+    "the",
+    "a",
+    "an",
+    "of",
+    "from",
+    "for",
+    "and",
+    "or",
+    "in",
+    "to",
+    "on",
+    "at",
+    "by",
+    "with",
+    "as",
+    "is",
+    "are",
+    "was",
+    "see",
+    "check",
+    "list",
+    "other",
+    "all",
+    "any",
+    "each",
     # IRS form identifiers that get mashed into org names
-    "w-2g", "1099", "w-2", "990", "990-t", "990-ez", "990-pf",
-    "1040", "1120", "8868",
+    "w-2g",
+    "1099",
+    "w-2",
+    "990",
+    "990-t",
+    "990-ez",
+    "990-pf",
+    "1040",
+    "1120",
+    "8868",
     # Designators themselves (already the anchor — if they're the only
     # substantive word, the match is junk like "LI Association")
-    "inc", "incorporated", "llc", "corp", "corporation",
-    "foundation", "association", "assoc", "trust", "company",
-    "co", "partners", "partnership", "lp", "llp",
-    "management", "services", "group", "enterprises", "ventures",
-    "cic", "nfp", "non-profit", "nonprofit",
-    "associates", "ministries",
+    "inc",
+    "incorporated",
+    "llc",
+    "corp",
+    "corporation",
+    "foundation",
+    "association",
+    "assoc",
+    "trust",
+    "company",
+    "co",
+    "partners",
+    "partnership",
+    "lp",
+    "llp",
+    "management",
+    "services",
+    "group",
+    "enterprises",
+    "ventures",
+    "cic",
+    "nfp",
+    "non-profit",
+    "nonprofit",
+    "associates",
+    "ministries",
     # Common OCR artifacts from PDF timestamps/headers
-    "pm", "am", "ul", "li",
+    "pm",
+    "am",
+    "ul",
+    "li",
 }
 
 
@@ -542,11 +831,13 @@ def extract_entities(text: str, doc_type: str = "OTHER") -> dict[str, list[dict[
         key = normalized.lower()
         if key not in seen_persons and _is_plausible_person_name(normalized):
             seen_persons.add(key)
-            persons.append({
-                "raw": normalized,
-                "context": _get_context(text, m),
-                "source": "labeled",
-            })
+            persons.append(
+                {
+                    "raw": normalized,
+                    "context": _get_context(text, m),
+                    "source": "labeled",
+                }
+            )
 
     # Pass 2: Inverted names (HOMAN, JOHN A.)
     for m in _PERSON_INVERTED_PATTERN.finditer(text):
@@ -557,11 +848,13 @@ def extract_entities(text: str, doc_type: str = "OTHER") -> dict[str, list[dict[
         key = raw_inverted.lower()
         if key not in seen_persons and _is_plausible_person_name(raw_inverted):
             seen_persons.add(key)
-            persons.append({
-                "raw": raw_inverted,
-                "context": _get_context(text, m),
-                "source": "inverted",
-            })
+            persons.append(
+                {
+                    "raw": raw_inverted,
+                    "context": _get_context(text, m),
+                    "source": "inverted",
+                }
+            )
 
     # --- Organization extraction ---
 
@@ -571,10 +864,12 @@ def extract_entities(text: str, doc_type: str = "OTHER") -> dict[str, list[dict[
         key = normalized.lower()
         if key not in seen_orgs and _is_plausible_org_name(normalized):
             seen_orgs.add(key)
-            orgs.append({
-                "raw": normalized,
-                "context": _get_context(text, m),
-            })
+            orgs.append(
+                {
+                    "raw": normalized,
+                    "context": _get_context(text, m),
+                }
+            )
 
     # --- Date extraction ---
 
@@ -607,11 +902,13 @@ def extract_entities(text: str, doc_type: str = "OTHER") -> dict[str, list[dict[
         amount_key = str(normalized_val)
         if amount_key not in seen_amounts:
             seen_amounts.add(amount_key)
-            amounts.append({
-                "raw": raw,
-                "normalized": normalized_val,
-                "context": _get_context(text, m),
-            })
+            amounts.append(
+                {
+                    "raw": raw,
+                    "normalized": normalized_val,
+                    "context": _get_context(text, m),
+                }
+            )
 
     # --- Parcel number extraction ---
 
@@ -620,10 +917,12 @@ def extract_entities(text: str, doc_type: str = "OTHER") -> dict[str, list[dict[
         raw = m.group(1).strip()
         if raw not in seen_parcels:
             seen_parcels.add(raw)
-            parcels.append({
-                "raw": raw,
-                "context": _get_context(text, m),
-            })
+            parcels.append(
+                {
+                    "raw": raw,
+                    "context": _get_context(text, m),
+                }
+            )
 
     # --- Filing reference extraction ---
 
@@ -632,10 +931,12 @@ def extract_entities(text: str, doc_type: str = "OTHER") -> dict[str, list[dict[
         raw = m.group(1).strip()
         if raw not in seen_refs:
             seen_refs.add(raw)
-            filing_refs.append({
-                "raw": raw,
-                "context": _get_context(text, m),
-            })
+            filing_refs.append(
+                {
+                    "raw": raw,
+                    "context": _get_context(text, m),
+                }
+            )
 
     # --- IRS 990 financial extraction (doc_type-specific) ---
 
@@ -680,30 +981,50 @@ def extract_entities(text: str, doc_type: str = "OTHER") -> dict[str, list[dict[
 # ---------------------------------------------------------------------------
 
 _990_LINE_PATTERNS = [
-    ("total_revenue", re.compile(
-        r"total\s+revenue[^\n$]*?\$?\s*([\d,]{4,}(?:\.\d{2})?)", re.IGNORECASE
-    )),
-    ("total_expenses", re.compile(
-        r"total\s+(?:functional\s+)?expenses[^\n$]*?\$?\s*([\d,]{4,}(?:\.\d{2})?)", re.IGNORECASE
-    )),
-    ("net_income", re.compile(
-        r"revenue\s+less\s+expenses[^\n$]*?\$?\s*([\d,]{4,}(?:\.\d{2})?)", re.IGNORECASE
-    )),
-    ("total_assets_eoy", re.compile(
-        r"total\s+assets[^\n$]*?\$?\s*([\d,]{4,}(?:\.\d{2})?)", re.IGNORECASE
-    )),
-    ("total_liabilities_eoy", re.compile(
-        r"total\s+liabilities[^\n$]*?\$?\s*([\d,]{4,}(?:\.\d{2})?)", re.IGNORECASE
-    )),
-    ("net_assets_eoy", re.compile(
-        r"net\s+assets?\s+or\s+fund\s+balances?[^\n$]*?\$?\s*([\d,]{4,}(?:\.\d{2})?)", re.IGNORECASE
-    )),
-    ("contributions_and_grants", re.compile(
-        r"contributions\s+and\s+grants[^\n$]*?\$?\s*([\d,]{4,}(?:\.\d{2})?)", re.IGNORECASE
-    )),
-    ("program_service_revenue", re.compile(
-        r"program\s+service\s+revenue[^\n$]*?\$?\s*([\d,]{4,}(?:\.\d{2})?)", re.IGNORECASE
-    )),
+    (
+        "total_revenue",
+        re.compile(r"total\s+revenue[^\n$]*?\$?\s*([\d,]{4,}(?:\.\d{2})?)", re.IGNORECASE),
+    ),
+    (
+        "total_expenses",
+        re.compile(
+            r"total\s+(?:functional\s+)?expenses[^\n$]*?\$?\s*([\d,]{4,}(?:\.\d{2})?)",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "net_income",
+        re.compile(
+            r"revenue\s+less\s+expenses[^\n$]*?\$?\s*([\d,]{4,}(?:\.\d{2})?)", re.IGNORECASE
+        ),
+    ),
+    (
+        "total_assets_eoy",
+        re.compile(r"total\s+assets[^\n$]*?\$?\s*([\d,]{4,}(?:\.\d{2})?)", re.IGNORECASE),
+    ),
+    (
+        "total_liabilities_eoy",
+        re.compile(r"total\s+liabilities[^\n$]*?\$?\s*([\d,]{4,}(?:\.\d{2})?)", re.IGNORECASE),
+    ),
+    (
+        "net_assets_eoy",
+        re.compile(
+            r"net\s+assets?\s+or\s+fund\s+balances?[^\n$]*?\$?\s*([\d,]{4,}(?:\.\d{2})?)",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "contributions_and_grants",
+        re.compile(
+            r"contributions\s+and\s+grants[^\n$]*?\$?\s*([\d,]{4,}(?:\.\d{2})?)", re.IGNORECASE
+        ),
+    ),
+    (
+        "program_service_revenue",
+        re.compile(
+            r"program\s+service\s+revenue[^\n$]*?\$?\s*([\d,]{4,}(?:\.\d{2})?)", re.IGNORECASE
+        ),
+    ),
 ]
 
 # Tax year pattern — 990 forms have "Tax year beginning ... ending ..."
@@ -728,20 +1049,24 @@ def _extract_990_financials(text: str) -> list[dict[str, Any]]:
                 value = float(raw.replace(",", ""))
             except ValueError:
                 continue
-            results.append({
-                "field": field_name,
-                "raw": raw,
-                "value": value,
-            })
+            results.append(
+                {
+                    "field": field_name,
+                    "raw": raw,
+                    "value": value,
+                }
+            )
 
     # Try to extract tax year
     year_match = _TAX_YEAR_PATTERN.search(text)
     if year_match:
-        results.append({
-            "field": "tax_year",
-            "raw": year_match.group(1),
-            "value": int(year_match.group(1)),
-        })
+        results.append(
+            {
+                "field": "tax_year",
+                "raw": year_match.group(1),
+                "value": int(year_match.group(1)),
+            }
+        )
 
     return results
 
@@ -773,24 +1098,27 @@ def _extract_990_financials(text: str) -> list[dict[str, Any]]:
 #   - Signal rules SR-003 (valuation anomaly) and SR-005 (zero consideration)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ParcelSale:
     """A single sale transaction from a parcel card's Sales table."""
-    date: str | None = None           # "9/15/2022"
-    buyer: str | None = None          # "DO GOOD IN HIS NAME INC"
-    seller: str | None = None         # "WINNER KYLE J"
+
+    date: str | None = None  # "9/15/2022"
+    buyer: str | None = None  # "DO GOOD IN HIS NAME INC"
+    seller: str | None = None  # "WINNER KYLE J"
     conveyance_number: str | None = None
-    deed_type: str | None = None      # "WARRANTY DEED"
-    book: str | None = None           # "558"
-    page: str | None = None           # "861"
-    valid: str | None = None          # "YES" / "NO"
+    deed_type: str | None = None  # "WARRANTY DEED"
+    book: str | None = None  # "558"
+    page: str | None = None  # "861"
+    valid: str | None = None  # "YES" / "NO"
     parcels_in_sale: int | None = None
-    amount: float | None = None       # 300000.00
+    amount: float | None = None  # 300000.00
 
 
 @dataclass
 class ValuationYear:
     """A single row from the valuation history table."""
+
     year: int
     land_appraised: float | None = None
     improvements_appraised: float | None = None
@@ -808,6 +1136,7 @@ class AuditorParcelCard:
     This is the output of parse_auditor_parcel_card(). All fields are
     optional because OCR may fail to capture any given section.
     """
+
     # Location
     parcel_number: str | None = None
     owner: str | None = None
@@ -841,8 +1170,8 @@ class AuditorParcelCard:
     tax_rate: float | None = None
 
     # History
-    valuation_history: list = field(default_factory=list)   # list[ValuationYear]
-    sales_history: list = field(default_factory=list)        # list[ParcelSale]
+    valuation_history: list = field(default_factory=list)  # list[ValuationYear]
+    sales_history: list = field(default_factory=list)  # list[ParcelSale]
 
 
 def _parse_dollar(text: str | None) -> float | None:
@@ -918,15 +1247,17 @@ def _extract_valuation_history(text: str) -> list:
                     j += 1  # skip non-value lines
 
             if len(vals) == 6:
-                results.append(ValuationYear(
-                    year=year,
-                    land_appraised=vals[0],
-                    improvements_appraised=vals[1],
-                    total_appraised=vals[2],
-                    land_assessed=vals[3],
-                    improvements_assessed=vals[4],
-                    total_assessed=vals[5],
-                ))
+                results.append(
+                    ValuationYear(
+                        year=year,
+                        land_appraised=vals[0],
+                        improvements_appraised=vals[1],
+                        total_appraised=vals[2],
+                        land_assessed=vals[3],
+                        improvements_assessed=vals[4],
+                        total_assessed=vals[5],
+                    )
+                )
             i = j
         else:
             i += 1
@@ -964,12 +1295,12 @@ def _extract_sales_history(text: str) -> list:
     if not sales_match:
         return results
 
-    sales_text = text[sales_match.end():]
+    sales_text = text[sales_match.end() :]
 
     # Cut off at "Land\n" section header to avoid bleeding
     land_cutoff = re.search(r"\nLand\s*\nLand\s+Type\b", sales_text)
     if land_cutoff:
-        sales_text = sales_text[:land_cutoff.start()]
+        sales_text = sales_text[: land_cutoff.start()]
 
     lines = [ln.strip() for ln in sales_text.split("\n") if ln.strip()]
 
@@ -1034,7 +1365,7 @@ def _extract_sales_history(text: str) -> list:
                 sale.conveyance_number = tail[conv_idx]
 
             # Remaining lines after conveyance: deed type, book, page, book/page, valid, parcels
-            after_conv = tail[conv_idx + 1:]
+            after_conv = tail[conv_idx + 1 :]
 
             # Look for book/page pattern
             for line in after_conv:
@@ -1056,7 +1387,8 @@ def _extract_sales_history(text: str) -> list:
                 r"(WD|QC|LC|FI|SH)"
                 r"[-\s]*(WARRANTY\s+DEED|QUIT\s+CLAIM|LAND\s+CONTRACT|"
                 r"FIDUCIARY|SHERIFF)",
-                after_text, re.IGNORECASE,
+                after_text,
+                re.IGNORECASE,
             )
             if deed_match:
                 sale.deed_type = deed_match.group(0).strip()
@@ -1140,8 +1472,8 @@ def _split_buyer_seller(name_lines: list[str]) -> list[str]:
     if designator_matches:
         # Use the FIRST designator as the end of buyer name
         first_des = designator_matches[0]
-        buyer = full[:first_des.end()].strip()
-        seller_part = full[first_des.end():].strip()
+        buyer = full[: first_des.end()].strip()
+        seller_part = full[first_des.end() :].strip()
 
         if seller_part:
             return [buyer, seller_part]

@@ -7,12 +7,10 @@ middleware behaviour, and view-level HTTP validation.
 """
 
 import json
-import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
-from django.urls import resolve, reverse
-
+from django.test import RequestFactory, SimpleTestCase
+from django.urls import resolve
 
 # ---------------------------------------------------------------------------
 # 1.  URL resolution — all new endpoints resolve to the correct view
@@ -66,6 +64,7 @@ class ImportIntegrityTests(SimpleTestCase):
 
     def test_views_import(self):
         from investigations import views
+
         # Check new view functions exist
         self.assertTrue(callable(views.api_search))
         self.assertTrue(callable(views.api_case_export))
@@ -77,24 +76,24 @@ class ImportIntegrityTests(SimpleTestCase):
 
     def test_serializers_import(self):
         from investigations.serializers import (
-            FindingIntakeSerializer,
-            FindingUpdateSerializer,
-            NoteIntakeSerializer,
-            NoteUpdateSerializer,
             serialize_finding,
             serialize_note,
         )
+
         self.assertTrue(callable(serialize_finding))
         self.assertTrue(callable(serialize_note))
 
     def test_middleware_import(self):
         from investigations.middleware import TokenAuthMiddleware
+
         self.assertTrue(callable(TokenAuthMiddleware))
 
     def test_postgres_search_import(self):
         """Ensure the PG full-text search imports are present in views."""
-        from investigations import views
         import inspect
+
+        from investigations import views
+
         source = inspect.getsource(views)
         self.assertIn("SearchVector", source)
         self.assertIn("SearchQuery", source)
@@ -110,8 +109,10 @@ class SearchResponseShapeTests(SimpleTestCase):
     """Verify the search view returns the correct field names."""
 
     def _get_search_view_source(self):
-        from investigations import views
         import inspect
+
+        from investigations import views
+
         return inspect.getsource(views.api_search)
 
     def test_uses_relevance_not_score(self):
@@ -144,8 +145,10 @@ class ExportResponseShapeTests(SimpleTestCase):
     """Verify the export view returns {format, filename, download_url}."""
 
     def _get_export_view_source(self):
-        from investigations import views
         import inspect
+
+        from investigations import views
+
         return inspect.getsource(views.api_case_export)
 
     def test_returns_format_key(self):
@@ -176,6 +179,7 @@ class FindingIntakeSerializerTests(SimpleTestCase):
 
     def _make_serializer(self, data):
         from investigations.serializers import FindingIntakeSerializer
+
         mock_case = MagicMock()
         return FindingIntakeSerializer(data=data, case=mock_case)
 
@@ -194,65 +198,99 @@ class FindingIntakeSerializerTests(SimpleTestCase):
         self.assertIn("narrative", s.errors)
 
     def test_invalid_severity(self):
-        s = self._make_serializer({
-            "title": "Test", "narrative": "Text", "severity": "MEGA_BAD",
-        })
+        s = self._make_serializer(
+            {
+                "title": "Test",
+                "narrative": "Text",
+                "severity": "MEGA_BAD",
+            }
+        )
         self.assertFalse(s.is_valid())
         self.assertIn("severity", s.errors)
 
     def test_valid_severity(self):
-        s = self._make_serializer({
-            "title": "Test", "narrative": "Text", "severity": "HIGH",
-        })
+        s = self._make_serializer(
+            {
+                "title": "Test",
+                "narrative": "Text",
+                "severity": "HIGH",
+            }
+        )
         self.assertTrue(s.is_valid())
 
     def test_invalid_confidence(self):
-        s = self._make_serializer({
-            "title": "Test", "narrative": "Text", "confidence": "MAYBE",
-        })
+        s = self._make_serializer(
+            {
+                "title": "Test",
+                "narrative": "Text",
+                "confidence": "MAYBE",
+            }
+        )
         self.assertFalse(s.is_valid())
         self.assertIn("confidence", s.errors)
 
     def test_invalid_status(self):
-        s = self._make_serializer({
-            "title": "Test", "narrative": "Text", "status": "PUBLISHED",
-        })
+        s = self._make_serializer(
+            {
+                "title": "Test",
+                "narrative": "Text",
+                "status": "PUBLISHED",
+            }
+        )
         self.assertFalse(s.is_valid())
         self.assertIn("status", s.errors)
 
     def test_unexpected_fields(self):
-        s = self._make_serializer({
-            "title": "Test", "narrative": "Text", "foo": "bar",
-        })
+        s = self._make_serializer(
+            {
+                "title": "Test",
+                "narrative": "Text",
+                "foo": "bar",
+            }
+        )
         self.assertFalse(s.is_valid())
         self.assertIn("__all__", s.errors)
 
     def test_legal_refs_must_be_list(self):
-        s = self._make_serializer({
-            "title": "Test", "narrative": "Text", "legal_refs": "not a list",
-        })
+        s = self._make_serializer(
+            {
+                "title": "Test",
+                "narrative": "Text",
+                "legal_refs": "not a list",
+            }
+        )
         self.assertFalse(s.is_valid())
         self.assertIn("legal_refs", s.errors)
 
     def test_valid_legal_refs(self):
-        s = self._make_serializer({
-            "title": "Test", "narrative": "Text",
-            "legal_refs": ["18 U.S.C. § 1343", "ORC 2913.02"],
-        })
+        s = self._make_serializer(
+            {
+                "title": "Test",
+                "narrative": "Text",
+                "legal_refs": ["18 U.S.C. § 1343", "ORC 2913.02"],
+            }
+        )
         self.assertTrue(s.is_valid())
 
     def test_invalid_detection_id(self):
-        s = self._make_serializer({
-            "title": "Test", "narrative": "Text", "detection_id": "not-a-uuid",
-        })
+        s = self._make_serializer(
+            {
+                "title": "Test",
+                "narrative": "Text",
+                "detection_id": "not-a-uuid",
+            }
+        )
         self.assertFalse(s.is_valid())
         self.assertIn("detection_id", s.errors)
 
     def test_valid_detection_id(self):
-        s = self._make_serializer({
-            "title": "Test", "narrative": "Text",
-            "detection_id": "00000000-0000-0000-0000-000000000001",
-        })
+        s = self._make_serializer(
+            {
+                "title": "Test",
+                "narrative": "Text",
+                "detection_id": "00000000-0000-0000-0000-000000000001",
+            }
+        )
         self.assertTrue(s.is_valid())
 
 
@@ -261,6 +299,7 @@ class FindingUpdateSerializerTests(SimpleTestCase):
 
     def _make_serializer(self, data):
         from investigations.serializers import FindingUpdateSerializer
+
         mock_instance = MagicMock()
         return FindingUpdateSerializer(data=data, instance=mock_instance)
 
@@ -324,13 +363,13 @@ class TokenAuthMiddlewareTests(SimpleTestCase):
         """When CATALYST_API_TOKENS is empty, all requests pass through."""
         mw, get_response = self._make_middleware(tokens=[])
         request = self._make_request()
-        response = mw(request)
+        _response = mw(request)
         get_response.assert_called_once_with(request)
 
     def test_valid_token_passes(self):
         mw, get_response = self._make_middleware(tokens=["my-secret-token"])
         request = self._make_request(auth_header="Bearer my-secret-token")
-        response = mw(request)
+        _response = mw(request)
         get_response.assert_called_once_with(request)
         self.assertEqual(request.api_token, "my-secret-token")
 
@@ -356,7 +395,7 @@ class TokenAuthMiddlewareTests(SimpleTestCase):
         """Non-/api/ paths should not require authentication."""
         mw, get_response = self._make_middleware(tokens=["my-secret-token"])
         request = self._make_request(path="/admin/")
-        response = mw(request)
+        _response = mw(request)
         get_response.assert_called_once_with(request)
 
     def test_require_auth_with_empty_tokens(self):
@@ -377,6 +416,7 @@ class SearchValidationTests(SimpleTestCase):
 
     def setUp(self):
         import django.conf
+
         django.conf.settings.ALLOWED_HOSTS = ["*"]
 
     def test_short_query_rejected(self):
@@ -393,8 +433,10 @@ class SearchValidationTests(SimpleTestCase):
 
     def test_export_view_exists_and_validates_format(self):
         """Verify the export view validates format before querying the DB."""
-        from investigations import views
         import inspect
+
+        from investigations import views
+
         src = inspect.getsource(views.api_case_export)
         # Format validation should happen (the view checks for json/csv)
         self.assertIn('"json"', src)
@@ -412,6 +454,7 @@ class FindingViewConfigTests(SimpleTestCase):
 
     def test_finding_sort_fields_exist(self):
         from investigations.views import FINDING_SORT_FIELDS
+
         self.assertIn("created_at", FINDING_SORT_FIELDS)
         self.assertIn("severity", FINDING_SORT_FIELDS)
         self.assertIn("status", FINDING_SORT_FIELDS)
@@ -420,6 +463,7 @@ class FindingViewConfigTests(SimpleTestCase):
     def test_url_patterns_count(self):
         """We should now have at least 30 URL patterns (28 + 2 new finding paths)."""
         from investigations.urls import urlpatterns
+
         self.assertGreaterEqual(len(urlpatterns), 30)
 
 
@@ -433,6 +477,7 @@ class SettingsVerificationTests(SimpleTestCase):
 
     def test_middleware_registered(self):
         from django.conf import settings
+
         self.assertIn(
             "investigations.middleware.TokenAuthMiddleware",
             settings.MIDDLEWARE,
@@ -440,10 +485,12 @@ class SettingsVerificationTests(SimpleTestCase):
 
     def test_token_settings_exist(self):
         from django.conf import settings
+
         self.assertTrue(hasattr(settings, "CATALYST_API_TOKENS"))
         self.assertTrue(hasattr(settings, "CATALYST_REQUIRE_AUTH"))
 
     def test_default_tokens_empty(self):
         """By default, auth is disabled (empty token set)."""
         from django.conf import settings
+
         self.assertEqual(len(settings.CATALYST_API_TOKENS), 0)

@@ -293,9 +293,9 @@ def _normalize_pdf_date(raw: str) -> str:
 
     # Match: YYYYMMDDHHMMSS with optional timezone
     m = re.match(
-        r"(\d{4})(\d{2})(\d{2})"        # YYYYMMDD
-        r"(?:(\d{2})(\d{2})(\d{2}))?"    # HHMMSS (optional)
-        r"(?:[+\-Z].*)?",                 # timezone (ignored)
+        r"(\d{4})(\d{2})(\d{2})"  # YYYYMMDD
+        r"(?:(\d{2})(\d{2})(\d{2}))?"  # HHMMSS (optional)
+        r"(?:[+\-Z].*)?",  # timezone (ignored)
         cleaned,
     )
     if not m:

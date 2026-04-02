@@ -122,11 +122,18 @@ def _check_rate_limit(case_id: str) -> bool:
 # Context builders — gather case data into prompt-friendly text
 # ---------------------------------------------------------------------------
 
+
 def _build_case_context(case, max_chars: int = MAX_CONTEXT_CHARS) -> str:
     """Build a text summary of the case for use as AI context."""
     from .models import (
-        Person, Organization, Property, FinancialInstrument,
-        Signal, Detection, Finding, Document,
+        Detection,
+        Document,
+        FinancialInstrument,
+        Finding,
+        Organization,
+        Person,
+        Property,
+        Signal,
     )
 
     parts = []
@@ -179,7 +186,8 @@ def _build_case_context(case, max_chars: int = MAX_CONTEXT_CHARS) -> str:
     if detections.exists():
         parts.append("DETECTIONS:")
         for d in detections[:10]:
-            parts.append(f"  - [{d.severity}] {d.signal_type} (confidence={d.confidence_score:.0%})")
+            conf = f"{d.confidence_score:.0%}"
+            parts.append(f"  - [{d.severity}] {d.signal_type} (confidence={conf})")
         parts.append("")
 
     # Findings
@@ -205,9 +213,16 @@ def _build_case_context(case, max_chars: int = MAX_CONTEXT_CHARS) -> str:
 def _build_entity_context(entity_type: str, entity_id: str, case) -> str:
     """Build focused context about a specific entity."""
     from .models import (
-        Person, Organization, Property, FinancialInstrument,
-        PersonOrganization, PersonDocument, OrgDocument,
-        Signal, EntitySignal, Detection,
+        Detection,
+        EntitySignal,
+        FinancialInstrument,
+        Organization,
+        OrgDocument,
+        Person,
+        PersonDocument,
+        PersonOrganization,
+        Property,
+        Signal,
     )
 
     parts = []
@@ -235,11 +250,13 @@ def _build_entity_context(entity_type: str, entity_id: str, case) -> str:
                 entity_id=entity_id, entity_type="person"
             ).values_list("signal_id", flat=True)
             for sig in Signal.objects.filter(pk__in=sig_ids):
-                parts.append(f"  Signal: [{sig.severity}] {sig.rule_id} — {(sig.detected_summary or '')[:100]}")
+                summary = (sig.detected_summary or "")[:100]
+                parts.append(f"  Signal: [{sig.severity}] {sig.rule_id} — {summary}")
 
             # Detections
             for det in Detection.objects.filter(person_id=entity_id):
-                parts.append(f"  Detection: [{det.severity}] {det.signal_type} (conf={det.confidence_score:.0%})")
+                conf = f"{det.confidence_score:.0%}"
+                parts.append(f"  Detection: [{det.severity}] {det.signal_type} (conf={conf})")
 
     elif entity_type == "organization":
         o = Organization.objects.filter(pk=entity_id, case=case).first()
@@ -257,12 +274,16 @@ def _build_entity_context(entity_type: str, entity_id: str, case) -> str:
         pr = Property.objects.filter(pk=entity_id, case=case).first()
         if pr:
             parts.append(f"PROPERTY: {pr.address or pr.parcel_number}")
-            parts.append(f"County: {pr.county}, Assessed: {pr.assessed_value}, Purchase: {pr.purchase_price}")
+            county_info = (
+                f"County: {pr.county}, Assessed: {pr.assessed_value}, Purchase: {pr.purchase_price}"
+            )
+            parts.append(county_info)
 
     elif entity_type == "financial_instrument":
         fi = FinancialInstrument.objects.filter(pk=entity_id, case=case).first()
         if fi:
-            parts.append(f"FINANCIAL INSTRUMENT: {fi.instrument_type} #{fi.filing_number}")
+            header = f"FINANCIAL INSTRUMENT: {fi.instrument_type} #{fi.filing_number}"
+            parts.append(header)
             parts.append(f"Amount: {fi.amount}, Filed: {fi.filing_date}")
 
     return "\n".join(parts)
@@ -278,7 +299,8 @@ def _build_signal_context(signal) -> str:
         f"Detected: {signal.detected_at}",
     ]
     if signal.trigger_doc:
-        parts.append(f"Trigger document: {signal.trigger_doc.display_name or signal.trigger_doc.filename}")
+        doc_name = signal.trigger_doc.display_name or signal.trigger_doc.filename
+        parts.append(f"Trigger document: {doc_name}")
         if signal.trigger_doc.extracted_text:
             parts.append(f"Document excerpt: {signal.trigger_doc.extracted_text[:2000]}")
     if signal.investigator_note:
@@ -290,8 +312,14 @@ def _build_signal_context(signal) -> str:
 # Core AI call wrapper
 # ---------------------------------------------------------------------------
 
-def _call_ai(system_prompt: str, user_message: str, model: str = MODEL_SONNET,
-             temperature: float = 0.2, max_tokens: int = MAX_TOKENS) -> dict:
+
+def _call_ai(
+    system_prompt: str,
+    user_message: str,
+    model: str = MODEL_SONNET,
+    temperature: float = 0.2,
+    max_tokens: int = MAX_TOKENS,
+) -> dict:
     """Make a Claude API call and return parsed JSON response."""
     client = _get_client()
     try:
@@ -309,7 +337,7 @@ def _call_ai(system_prompt: str, user_message: str, model: str = MODEL_SONNET,
         if cleaned.startswith("```"):
             # Strip markdown fences
             lines = cleaned.split("\n")
-            lines = [l for l in lines if not l.strip().startswith("```")]
+            lines = [line for line in lines if not line.strip().startswith("```")]
             cleaned = "\n".join(lines).strip()
 
         result = json.loads(cleaned)
@@ -339,7 +367,8 @@ Rules:
 - Be factual and specific. Cite names, dates, amounts.
 - Keep summary to 2-3 sentences.
 - If the evidence suggests fraud patterns, note them briefly.
-- Respond ONLY with valid JSON: {"summary": "...", "key_facts": ["...", "..."], "risk_level": "high|medium|low"}
+- Respond ONLY with valid JSON: {"summary": "...", "key_facts": [...],
+  "risk_level": "high|medium|low"}
 """
 
 
@@ -356,7 +385,10 @@ def ai_summarize(case, target_type: str, target_id: str) -> dict:
 
     if target_type == "signal":
         from .models import Signal
-        signal = Signal.objects.filter(pk=target_id, case=case).select_related("trigger_doc").first()
+
+        signal = (
+            Signal.objects.filter(pk=target_id, case=case).select_related("trigger_doc").first()
+        )
         if not signal:
             return {"error": "Signal not found."}
         context = _build_signal_context(signal)
@@ -384,7 +416,7 @@ def ai_summarize(case, target_type: str, target_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 CONNECTIONS_SYSTEM = """You are an AI assistant for a forensic fraud investigation platform.
-Analyze the case data and suggest potential connections between entities that the investigator may not have noticed.
+Analyze the case data and suggest potential connections between entities that may not be obvious.
 
 Focus on:
 - Shared addresses between persons and organizations
@@ -433,9 +465,10 @@ def ai_connections(case, entity_id: str | None = None) -> dict:
 
     user_msg = context
     if entity_id:
-        user_msg += "\n\nFocus your analysis on connections involving the FOCUS ENTITY above."
+        user_msg += "\n\nFocus analysis on connections involving the FOCUS ENTITY above."
     else:
-        user_msg += "\n\nAnalyze all entities and suggest connections the investigator may have missed."
+        focus_msg = "\n\nAnalyze all entities and suggest potential connections not yet explored."
+        user_msg += focus_msg
 
     result = _call_ai(
         CONNECTIONS_SYSTEM,
@@ -529,7 +562,7 @@ def ai_narrative(case, detection_ids: list[str], tone: str = "formal") -> dict:
 # 4. ASK — free-form case question (Sonnet, conversational)
 # ---------------------------------------------------------------------------
 
-ASK_SYSTEM = """You are an AI investigative analyst for the Catalyst forensic investigation platform.
+ASK_SYSTEM = """You are an AI investigative analyst for Catalyst, a forensic investigation platform.
 You have deep knowledge of nonprofit fraud, charity governance, property transaction analysis,
 IRS Form 990 analysis, and Ohio Revised Code.
 
@@ -545,8 +578,9 @@ Rules:
 Respond ONLY with valid JSON:
 {
   "answer": "your answer text",
-  "sources": [{"type": "document|entity|signal|detection", "name": "...", "relevance": "why this source supports the answer"}],
-  "follow_up_questions": ["suggested follow-up questions the investigator might want to ask"]
+  "sources": [{"type": "doc|entity|signal|detection", "name": "...",
+    "relevance": "why this supports answer"}],
+  "follow_up_questions": ["suggested follow-up questions for investigator"]
 }
 """
 
@@ -586,7 +620,7 @@ def ai_ask(case, question: str, conversation_history: list[dict] | None = None) 
         cleaned = raw.strip()
         if cleaned.startswith("```"):
             lines = cleaned.split("\n")
-            lines = [l for l in lines if not l.strip().startswith("```")]
+            lines = [line for line in lines if not line.strip().startswith("```")]
             cleaned = "\n".join(lines).strip()
 
         result = json.loads(cleaned)

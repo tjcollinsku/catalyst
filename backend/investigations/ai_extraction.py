@@ -31,7 +31,6 @@ Usage:
 import json
 import logging
 import os
-import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -52,9 +51,7 @@ def _get_api_key() -> str:
     if _API_KEY is None:
         _API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
     if not _API_KEY:
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY not set. Add it to your .env file."
-        )
+        raise RuntimeError("ANTHROPIC_API_KEY not set. Add it to your .env file.")
     return _API_KEY
 
 
@@ -90,6 +87,7 @@ TEMPERATURE = 0.0
 # Confidence tracking — every AI proposal carries a confidence score
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AIProposal:
     """
@@ -99,16 +97,18 @@ class AIProposal:
     certain it is about the extraction. Investigators see this in the UI
     and can accept/reject each proposal.
     """
-    entity_type: str          # "person", "org", "relationship", "date", "amount", etc.
-    data: dict[str, Any]      # The extracted fields
-    confidence: float         # 0.0–1.0, set by AI
-    source_text: str          # The snippet of text the AI extracted from
-    reasoning: str = ""       # Why the AI thinks this entity exists
+
+    entity_type: str  # "person", "org", "relationship", "date", "amount", etc.
+    data: dict[str, Any]  # The extracted fields
+    confidence: float  # 0.0–1.0, set by AI
+    source_text: str  # The snippet of text the AI extracted from
+    reasoning: str = ""  # Why the AI thinks this entity exists
 
 
 @dataclass
 class AIExtractionResult:
     """Container for all AI-extracted entities from a document."""
+
     proposals: list[AIProposal] = field(default_factory=list)
     model_used: str = ""
     input_tokens: int = 0
@@ -185,7 +185,11 @@ Response schema:
     {
       "person_or_org_1": "Name A",
       "person_or_org_2": "Name B",
-      "relationship_type": "officer_of|director_of|member_of|owner_of|spouse|parent_child|sibling|business_partner|contractor|grantor_grantee|employer_employee|other",
+      "relationship_type": (
+        "officer_of|director_of|member_of|owner_of|spouse|parent_child|"
+        "sibling|business_partner|contractor|grantor_grantee|"
+        "employer_employee|other"
+      ),
       "context": "The text that reveals this relationship",
       "confidence": 0.85,
       "reasoning": "Why"
@@ -324,7 +328,9 @@ You must respond with ONLY valid JSON matching this schema:
   "family_relationships": [
     {
       "person": "Full Name",
-      "relationship_to_deceased": "spouse|child|sibling|parent|grandchild|in_law|niece_nephew|other",
+      "relationship_to_deceased": (
+        "spouse|child|sibling|parent|grandchild|in_law|niece_nephew|other"
+      ),
       "status": "living|deceased",
       "spouse_name": "Their spouse's name if mentioned",
       "maiden_name": "If mentioned (née ...)",
@@ -352,6 +358,7 @@ You must respond with ONLY valid JSON matching this schema:
 # ---------------------------------------------------------------------------
 # Core extraction functions
 # ---------------------------------------------------------------------------
+
 
 def ai_extract_entities(
     text: str,
@@ -491,6 +498,7 @@ def ai_extract_obituary(
 # API call wrapper
 # ---------------------------------------------------------------------------
 
+
 def _call_claude(
     system_prompt: str,
     user_prompt: str,
@@ -550,6 +558,7 @@ def _call_claude(
 # Response parsers — convert Claude's JSON into AIProposal lists
 # ---------------------------------------------------------------------------
 
+
 def _safe_json_parse(raw_text: str) -> dict | None:
     """
     Parse JSON from Claude's response, tolerant of markdown code fences.
@@ -563,7 +572,7 @@ def _safe_json_parse(raw_text: str) -> dict | None:
     if text.startswith("```"):
         # Remove opening fence (```json or ```)
         first_newline = text.index("\n") if "\n" in text else len(text)
-        text = text[first_newline + 1:]
+        text = text[first_newline + 1 :]
     if text.endswith("```"):
         text = text[:-3]
 
@@ -586,88 +595,100 @@ def _parse_general_response(raw_text: str) -> AIExtractionResult:
 
     # --- Persons ---
     for p in data.get("persons", []):
-        proposals.append(AIProposal(
-            entity_type="person",
-            data={
-                "name": p.get("name", ""),
-                "role": p.get("role", "other"),
-                "title": p.get("title", ""),
-            },
-            confidence=float(p.get("confidence", 0.5)),
-            source_text=p.get("context", ""),
-            reasoning=p.get("reasoning", ""),
-        ))
+        proposals.append(
+            AIProposal(
+                entity_type="person",
+                data={
+                    "name": p.get("name", ""),
+                    "role": p.get("role", "other"),
+                    "title": p.get("title", ""),
+                },
+                confidence=float(p.get("confidence", 0.5)),
+                source_text=p.get("context", ""),
+                reasoning=p.get("reasoning", ""),
+            )
+        )
 
     # --- Organizations ---
     for o in data.get("organizations", []):
-        proposals.append(AIProposal(
-            entity_type="org",
-            data={
-                "name": o.get("name", ""),
-                "org_type": o.get("org_type", "other"),
-                "ein": o.get("ein", ""),
-                "state_of_formation": o.get("state_of_formation", ""),
-            },
-            confidence=float(o.get("confidence", 0.5)),
-            source_text=o.get("context", ""),
-            reasoning=o.get("reasoning", ""),
-        ))
+        proposals.append(
+            AIProposal(
+                entity_type="org",
+                data={
+                    "name": o.get("name", ""),
+                    "org_type": o.get("org_type", "other"),
+                    "ein": o.get("ein", ""),
+                    "state_of_formation": o.get("state_of_formation", ""),
+                },
+                confidence=float(o.get("confidence", 0.5)),
+                source_text=o.get("context", ""),
+                reasoning=o.get("reasoning", ""),
+            )
+        )
 
     # --- Relationships ---
     for r in data.get("relationships", []):
-        proposals.append(AIProposal(
-            entity_type="relationship",
-            data={
-                "entity_1": r.get("person_or_org_1", ""),
-                "entity_2": r.get("person_or_org_2", ""),
-                "relationship_type": r.get("relationship_type", "other"),
-            },
-            confidence=float(r.get("confidence", 0.5)),
-            source_text=r.get("context", ""),
-            reasoning=r.get("reasoning", ""),
-        ))
+        proposals.append(
+            AIProposal(
+                entity_type="relationship",
+                data={
+                    "entity_1": r.get("person_or_org_1", ""),
+                    "entity_2": r.get("person_or_org_2", ""),
+                    "relationship_type": r.get("relationship_type", "other"),
+                },
+                confidence=float(r.get("confidence", 0.5)),
+                source_text=r.get("context", ""),
+                reasoning=r.get("reasoning", ""),
+            )
+        )
 
     # --- Dates ---
     for d in data.get("dates", []):
-        proposals.append(AIProposal(
-            entity_type="date",
-            data={
-                "raw": d.get("raw", ""),
-                "normalized": d.get("normalized", ""),
-                "event": d.get("event", ""),
-            },
-            confidence=float(d.get("confidence", 0.5)),
-            source_text=d.get("raw", ""),
-        ))
+        proposals.append(
+            AIProposal(
+                entity_type="date",
+                data={
+                    "raw": d.get("raw", ""),
+                    "normalized": d.get("normalized", ""),
+                    "event": d.get("event", ""),
+                },
+                confidence=float(d.get("confidence", 0.5)),
+                source_text=d.get("raw", ""),
+            )
+        )
 
     # --- Amounts ---
     for a in data.get("amounts", []):
-        proposals.append(AIProposal(
-            entity_type="amount",
-            data={
-                "raw": a.get("raw", ""),
-                "normalized": a.get("normalized", 0.0),
-                "purpose": a.get("purpose", ""),
-            },
-            confidence=float(a.get("confidence", 0.5)),
-            source_text=a.get("raw", ""),
-        ))
+        proposals.append(
+            AIProposal(
+                entity_type="amount",
+                data={
+                    "raw": a.get("raw", ""),
+                    "normalized": a.get("normalized", 0.0),
+                    "purpose": a.get("purpose", ""),
+                },
+                confidence=float(a.get("confidence", 0.5)),
+                source_text=a.get("raw", ""),
+            )
+        )
 
     # --- Addresses ---
     for addr in data.get("addresses", []):
-        proposals.append(AIProposal(
-            entity_type="address",
-            data={
-                "raw": addr.get("raw", ""),
-                "street": addr.get("street", ""),
-                "city": addr.get("city", ""),
-                "state": addr.get("state", ""),
-                "zip": addr.get("zip", ""),
-                "associated_entity": addr.get("associated_entity", ""),
-            },
-            confidence=float(addr.get("confidence", 0.5)),
-            source_text=addr.get("raw", ""),
-        ))
+        proposals.append(
+            AIProposal(
+                entity_type="address",
+                data={
+                    "raw": addr.get("raw", ""),
+                    "street": addr.get("street", ""),
+                    "city": addr.get("city", ""),
+                    "state": addr.get("state", ""),
+                    "zip": addr.get("zip", ""),
+                    "associated_entity": addr.get("associated_entity", ""),
+                },
+                confidence=float(addr.get("confidence", 0.5)),
+                source_text=addr.get("raw", ""),
+            )
+        )
 
     return AIExtractionResult(proposals=proposals)
 
@@ -682,96 +703,106 @@ def _parse_990_response(raw_text: str) -> AIExtractionResult:
 
     # --- Officers ---
     for officer in data.get("officers", []):
-        proposals.append(AIProposal(
-            entity_type="person",
-            data={
-                "name": officer.get("name", ""),
-                "title": officer.get("title", ""),
-                "role": "officer",
-                "hours_per_week": officer.get("hours_per_week", 0),
-                "reportable_compensation": officer.get("reportable_compensation", 0),
-                "other_compensation": officer.get("other_compensation", 0),
-                "is_former": officer.get("is_former", False),
-            },
-            confidence=float(officer.get("confidence", 0.5)),
-            source_text=f"990 Part VII: {officer.get('name', '')}",
-        ))
+        proposals.append(
+            AIProposal(
+                entity_type="person",
+                data={
+                    "name": officer.get("name", ""),
+                    "title": officer.get("title", ""),
+                    "role": "officer",
+                    "hours_per_week": officer.get("hours_per_week", 0),
+                    "reportable_compensation": officer.get("reportable_compensation", 0),
+                    "other_compensation": officer.get("other_compensation", 0),
+                    "is_former": officer.get("is_former", False),
+                },
+                confidence=float(officer.get("confidence", 0.5)),
+                source_text=f"990 Part VII: {officer.get('name', '')}",
+            )
+        )
 
     # --- Part IV Checklist (the Yes/No answers signal rules need) ---
     checklist = data.get("part_iv_checklist", {})
     if checklist:
-        proposals.append(AIProposal(
-            entity_type="financial",
-            data={
-                "data_type": "990_part_iv_checklist",
-                "tax_year": data.get("tax_year", ""),
-                "ein": data.get("ein", ""),
-                "checklist": {
-                    key: {
-                        "answer": val.get("answer", ""),
-                        "confidence": float(val.get("confidence", 0.5)),
-                    }
-                    for key, val in checklist.items()
-                    if isinstance(val, dict)
+        proposals.append(
+            AIProposal(
+                entity_type="financial",
+                data={
+                    "data_type": "990_part_iv_checklist",
+                    "tax_year": data.get("tax_year", ""),
+                    "ein": data.get("ein", ""),
+                    "checklist": {
+                        key: {
+                            "answer": val.get("answer", ""),
+                            "confidence": float(val.get("confidence", 0.5)),
+                        }
+                        for key, val in checklist.items()
+                        if isinstance(val, dict)
+                    },
                 },
-            },
-            confidence=float(data.get("confidence_overall", 0.7)),
-            source_text="990 Part IV",
-        ))
+                confidence=float(data.get("confidence_overall", 0.7)),
+                source_text="990 Part IV",
+            )
+        )
 
     # --- Financial totals ---
     financials = data.get("financials", {})
     if financials:
-        proposals.append(AIProposal(
-            entity_type="financial",
-            data={
-                "data_type": "990_financials",
-                "tax_year": data.get("tax_year", ""),
-                "ein": data.get("ein", ""),
-                "total_revenue": financials.get("total_revenue", 0),
-                "total_expenses": financials.get("total_expenses", 0),
-                "net_assets_eoy": financials.get("net_assets_eoy", 0),
-                "program_service_expenses": financials.get("program_service_expenses", 0),
-                "management_expenses": financials.get("management_expenses", 0),
-                "fundraising_expenses": financials.get("fundraising_expenses", 0),
-                "total_compensation": financials.get("total_compensation", 0),
-                "number_voting_members": financials.get("number_voting_members", 0),
-                "number_independent_members": financials.get("number_independent_members", 0),
-                "number_employees": financials.get("number_employees", 0),
-                "number_volunteers": financials.get("number_volunteers", 0),
-                "unrelated_business_revenue": financials.get("unrelated_business_revenue", 0),
-            },
-            confidence=float(financials.get("confidence", 0.7)),
-            source_text="990 financial summary",
-        ))
+        proposals.append(
+            AIProposal(
+                entity_type="financial",
+                data={
+                    "data_type": "990_financials",
+                    "tax_year": data.get("tax_year", ""),
+                    "ein": data.get("ein", ""),
+                    "total_revenue": financials.get("total_revenue", 0),
+                    "total_expenses": financials.get("total_expenses", 0),
+                    "net_assets_eoy": financials.get("net_assets_eoy", 0),
+                    "program_service_expenses": financials.get("program_service_expenses", 0),
+                    "management_expenses": financials.get("management_expenses", 0),
+                    "fundraising_expenses": financials.get("fundraising_expenses", 0),
+                    "total_compensation": financials.get("total_compensation", 0),
+                    "number_voting_members": financials.get("number_voting_members", 0),
+                    "number_independent_members": financials.get("number_independent_members", 0),
+                    "number_employees": financials.get("number_employees", 0),
+                    "number_volunteers": financials.get("number_volunteers", 0),
+                    "unrelated_business_revenue": financials.get("unrelated_business_revenue", 0),
+                },
+                confidence=float(financials.get("confidence", 0.7)),
+                source_text="990 financial summary",
+            )
+        )
 
     # --- Contractors ---
     for contractor in data.get("contractors", []):
-        proposals.append(AIProposal(
-            entity_type="person",
-            data={
-                "name": contractor.get("name", ""),
-                "role": "contractor",
-                "services": contractor.get("services", ""),
-                "compensation": contractor.get("compensation", 0),
-            },
-            confidence=float(contractor.get("confidence", 0.5)),
-            source_text=f"990 Part VII contractors: {contractor.get('name', '')}",
-        ))
+        proposals.append(
+            AIProposal(
+                entity_type="person",
+                data={
+                    "name": contractor.get("name", ""),
+                    "role": "contractor",
+                    "services": contractor.get("services", ""),
+                    "compensation": contractor.get("compensation", 0),
+                },
+                confidence=float(contractor.get("confidence", 0.5)),
+                source_text=f"990 Part VII contractors: {contractor.get('name', '')}",
+            )
+        )
 
     # --- Schedule presence flags ---
-    proposals.append(AIProposal(
-        entity_type="financial",
-        data={
-            "data_type": "990_schedule_flags",
-            "tax_year": data.get("tax_year", ""),
-            "ein": data.get("ein", ""),
-            "schedule_l_present": data.get("schedule_l_present", False),
-            "schedule_b_present": data.get("schedule_b_present", False),
-        },
-        confidence=float(data.get("confidence_overall", 0.7)),
-        source_text="990 schedule presence check",
-    ))
+    proposals.append(
+        AIProposal(
+            entity_type="financial",
+            data={
+                "data_type": "990_schedule_flags",
+                "tax_year": data.get("tax_year", ""),
+                "ein": data.get("ein", ""),
+                "schedule_l_present": data.get("schedule_l_present", False),
+                "schedule_b_present": data.get("schedule_b_present", False),
+            },
+            confidence=float(data.get("confidence_overall", 0.7)),
+            source_text="990 schedule presence check",
+        )
+    )
 
     return AIExtractionResult(proposals=proposals)
 
@@ -787,74 +818,84 @@ def _parse_obituary_response(raw_text: str) -> AIExtractionResult:
     # --- Deceased person ---
     deceased = data.get("deceased", {})
     if deceased:
-        proposals.append(AIProposal(
-            entity_type="person",
-            data={
-                "name": deceased.get("name", ""),
-                "role": "deceased",
-                "birth_date": deceased.get("birth_date"),
-                "death_date": deceased.get("death_date"),
-                "age_at_death": deceased.get("age_at_death"),
-                "residence": deceased.get("residence", ""),
-            },
-            confidence=float(deceased.get("confidence", 0.8)),
-            source_text="Obituary subject",
-        ))
+        proposals.append(
+            AIProposal(
+                entity_type="person",
+                data={
+                    "name": deceased.get("name", ""),
+                    "role": "deceased",
+                    "birth_date": deceased.get("birth_date"),
+                    "death_date": deceased.get("death_date"),
+                    "age_at_death": deceased.get("age_at_death"),
+                    "residence": deceased.get("residence", ""),
+                },
+                confidence=float(deceased.get("confidence", 0.8)),
+                source_text="Obituary subject",
+            )
+        )
 
     # --- Family relationships (the gold mine) ---
     for rel in data.get("family_relationships", []):
         # Create the person
-        proposals.append(AIProposal(
-            entity_type="person",
-            data={
-                "name": rel.get("person", ""),
-                "role": "family_member",
-                "status": rel.get("status", "unknown"),
-                "spouse_name": rel.get("spouse_name", ""),
-                "maiden_name": rel.get("maiden_name", ""),
-            },
-            confidence=float(rel.get("confidence", 0.7)),
-            source_text=rel.get("context", ""),
-        ))
-
-        # Create the relationship to the deceased
-        if deceased.get("name"):
-            proposals.append(AIProposal(
-                entity_type="relationship",
+        proposals.append(
+            AIProposal(
+                entity_type="person",
                 data={
-                    "entity_1": deceased.get("name", ""),
-                    "entity_2": rel.get("person", ""),
-                    "relationship_type": rel.get("relationship_to_deceased", "other"),
+                    "name": rel.get("person", ""),
+                    "role": "family_member",
+                    "status": rel.get("status", "unknown"),
+                    "spouse_name": rel.get("spouse_name", ""),
+                    "maiden_name": rel.get("maiden_name", ""),
                 },
                 confidence=float(rel.get("confidence", 0.7)),
                 source_text=rel.get("context", ""),
-            ))
+            )
+        )
+
+        # Create the relationship to the deceased
+        if deceased.get("name"):
+            proposals.append(
+                AIProposal(
+                    entity_type="relationship",
+                    data={
+                        "entity_1": deceased.get("name", ""),
+                        "entity_2": rel.get("person", ""),
+                        "relationship_type": rel.get("relationship_to_deceased", "other"),
+                    },
+                    confidence=float(rel.get("confidence", 0.7)),
+                    source_text=rel.get("context", ""),
+                )
+            )
 
         # If the person's spouse is mentioned, create that relationship too
         if rel.get("spouse_name"):
-            proposals.append(AIProposal(
-                entity_type="relationship",
-                data={
-                    "entity_1": rel.get("person", ""),
-                    "entity_2": rel.get("spouse_name", ""),
-                    "relationship_type": "spouse",
-                },
-                confidence=float(rel.get("confidence", 0.7)) * 0.9,
-                source_text=rel.get("context", ""),
-            ))
+            proposals.append(
+                AIProposal(
+                    entity_type="relationship",
+                    data={
+                        "entity_1": rel.get("person", ""),
+                        "entity_2": rel.get("spouse_name", ""),
+                        "relationship_type": "spouse",
+                    },
+                    confidence=float(rel.get("confidence", 0.7)) * 0.9,
+                    source_text=rel.get("context", ""),
+                )
+            )
 
     # --- Organizations mentioned ---
     for org in data.get("organizations_mentioned", []):
-        proposals.append(AIProposal(
-            entity_type="org",
-            data={
-                "name": org.get("name", ""),
-                "org_type": "other",
-                "context_type": org.get("context", ""),
-            },
-            confidence=float(org.get("confidence", 0.6)),
-            source_text=org.get("context", ""),
-        ))
+        proposals.append(
+            AIProposal(
+                entity_type="org",
+                data={
+                    "name": org.get("name", ""),
+                    "org_type": "other",
+                    "context_type": org.get("context", ""),
+                },
+                confidence=float(org.get("confidence", 0.6)),
+                source_text=org.get("context", ""),
+            )
+        )
 
     return AIExtractionResult(proposals=proposals)
 
@@ -862,6 +903,7 @@ def _parse_obituary_response(raw_text: str) -> AIExtractionResult:
 # ---------------------------------------------------------------------------
 # Merge AI results with regex results
 # ---------------------------------------------------------------------------
+
 
 def merge_extractions(
     regex_result: dict[str, list[dict[str, Any]]],
@@ -895,74 +937,78 @@ def merge_extractions(
     merged = {k: list(v) for k, v in regex_result.items()}  # deep copy lists
 
     # Build a set of normalized names we already have from regex
-    existing_persons = {
-        p.get("raw", "").lower().strip()
-        for p in merged.get("persons", [])
-    }
-    existing_orgs = {
-        o.get("raw", "").lower().strip()
-        for o in merged.get("orgs", [])
-    }
+    existing_persons = {p.get("raw", "").lower().strip() for p in merged.get("persons", [])}
+    existing_orgs = {o.get("raw", "").lower().strip() for o in merged.get("orgs", [])}
 
     for proposal in ai_result.proposals:
         if proposal.entity_type == "person":
             name = proposal.data.get("name", "").lower().strip()
             if name and name not in existing_persons:
-                merged.setdefault("persons", []).append({
-                    "raw": proposal.data.get("name", ""),
-                    "context": proposal.source_text,
-                    "source": "ai",
-                    "ai_confidence": proposal.confidence,
-                    "ai_reasoning": proposal.reasoning,
-                    "ai_role": proposal.data.get("role", ""),
-                    "ai_title": proposal.data.get("title", ""),
-                })
+                merged.setdefault("persons", []).append(
+                    {
+                        "raw": proposal.data.get("name", ""),
+                        "context": proposal.source_text,
+                        "source": "ai",
+                        "ai_confidence": proposal.confidence,
+                        "ai_reasoning": proposal.reasoning,
+                        "ai_role": proposal.data.get("role", ""),
+                        "ai_title": proposal.data.get("title", ""),
+                    }
+                )
                 existing_persons.add(name)
 
         elif proposal.entity_type == "org":
             name = proposal.data.get("name", "").lower().strip()
             if name and name not in existing_orgs:
-                merged.setdefault("orgs", []).append({
-                    "raw": proposal.data.get("name", ""),
-                    "context": proposal.source_text,
-                    "source": "ai",
-                    "ai_confidence": proposal.confidence,
-                    "ai_reasoning": proposal.reasoning,
-                    "ai_org_type": proposal.data.get("org_type", ""),
-                    "ai_ein": proposal.data.get("ein", ""),
-                })
+                merged.setdefault("orgs", []).append(
+                    {
+                        "raw": proposal.data.get("name", ""),
+                        "context": proposal.source_text,
+                        "source": "ai",
+                        "ai_confidence": proposal.confidence,
+                        "ai_reasoning": proposal.reasoning,
+                        "ai_org_type": proposal.data.get("org_type", ""),
+                        "ai_ein": proposal.data.get("ein", ""),
+                    }
+                )
                 existing_orgs.add(name)
 
         elif proposal.entity_type == "relationship":
             # Relationships are always new — no regex equivalent
-            merged.setdefault("relationships", []).append({
-                "entity_1": proposal.data.get("entity_1", ""),
-                "entity_2": proposal.data.get("entity_2", ""),
-                "relationship_type": proposal.data.get("relationship_type", ""),
-                "source": "ai",
-                "ai_confidence": proposal.confidence,
-                "ai_reasoning": proposal.reasoning,
-                "context": proposal.source_text,
-            })
+            merged.setdefault("relationships", []).append(
+                {
+                    "entity_1": proposal.data.get("entity_1", ""),
+                    "entity_2": proposal.data.get("entity_2", ""),
+                    "relationship_type": proposal.data.get("relationship_type", ""),
+                    "source": "ai",
+                    "ai_confidence": proposal.confidence,
+                    "ai_reasoning": proposal.reasoning,
+                    "context": proposal.source_text,
+                }
+            )
 
         elif proposal.entity_type == "address":
-            merged.setdefault("addresses", []).append({
-                "raw": proposal.data.get("raw", ""),
-                "street": proposal.data.get("street", ""),
-                "city": proposal.data.get("city", ""),
-                "state": proposal.data.get("state", ""),
-                "zip": proposal.data.get("zip", ""),
-                "associated_entity": proposal.data.get("associated_entity", ""),
-                "source": "ai",
-                "ai_confidence": proposal.confidence,
-            })
+            merged.setdefault("addresses", []).append(
+                {
+                    "raw": proposal.data.get("raw", ""),
+                    "street": proposal.data.get("street", ""),
+                    "city": proposal.data.get("city", ""),
+                    "state": proposal.data.get("state", ""),
+                    "zip": proposal.data.get("zip", ""),
+                    "associated_entity": proposal.data.get("associated_entity", ""),
+                    "source": "ai",
+                    "ai_confidence": proposal.confidence,
+                }
+            )
 
         elif proposal.entity_type == "financial":
-            merged.setdefault("financials", []).append({
-                **proposal.data,
-                "source": "ai",
-                "ai_confidence": proposal.confidence,
-            })
+            merged.setdefault("financials", []).append(
+                {
+                    **proposal.data,
+                    "source": "ai",
+                    "ai_confidence": proposal.confidence,
+                }
+            )
 
     # Tag the merged result with AI metadata
     merged.setdefault("meta", {})
@@ -977,6 +1023,7 @@ def merge_extractions(
 # ---------------------------------------------------------------------------
 # Pipeline integration — drop-in enhancement for the upload pipeline
 # ---------------------------------------------------------------------------
+
 
 def enhanced_extract(
     text: str,
@@ -1020,6 +1067,7 @@ def enhanced_extract(
 # ---------------------------------------------------------------------------
 # Batch processing — for re-processing existing documents
 # ---------------------------------------------------------------------------
+
 
 def reprocess_document(document_id: str) -> AIExtractionResult | None:
     """
