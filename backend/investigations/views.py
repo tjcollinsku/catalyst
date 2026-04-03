@@ -4052,9 +4052,12 @@ def api_case_dashboard(request, pk):
     )
 
     # Top triggered rules
-    rule_counts = signals.values("rule_id", "summary").annotate(n=Count("id")).order_by("-n")[:10]
+    rule_counts = (
+        signals.values("rule_id", "detected_summary").annotate(n=Count("id")).order_by("-n")[:10]
+    )
     top_rules = [
-        {"rule_id": r["rule_id"], "summary": r["summary"], "count": r["n"]} for r in rule_counts
+        {"rule_id": r["rule_id"], "summary": r["detected_summary"], "count": r["n"]}
+        for r in rule_counts
     ]
 
     # ── Detections ─────────────────────────────────────────────
