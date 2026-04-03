@@ -3950,11 +3950,11 @@ def api_research_parcels(request, pk):
     try:
         from . import county_auditor_connector
 
-        # Parse county enum if provided
+        # Parse county enum if provided (normalize to uppercase for enum key)
         county = None
         if county_str:
             try:
-                county = county_auditor_connector.OhioCounty[county_str]
+                county = county_auditor_connector.OhioCounty[county_str.upper()]
             except KeyError:
                 return JsonResponse(
                     {"error": f"Invalid county: {county_str}. Must be a valid Ohio county name."},
@@ -4518,9 +4518,9 @@ def api_research_recorder(request, pk):
     try:
         from . import county_recorder_connector
 
-        # Parse county enum
+        # Parse county enum (normalize to uppercase for enum key)
         try:
-            county = county_recorder_connector.OhioCounty[county_str]
+            county = county_recorder_connector.OhioCounty[county_str.upper()]
         except KeyError:
             return JsonResponse(
                 {"error": f"Invalid county: {county_str}. Must be a valid Ohio county name."},

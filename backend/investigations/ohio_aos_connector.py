@@ -54,10 +54,9 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.5",
 }
 
-# ASP.NET form field names (extracted from the search page HTML)
-# These are the ContentPlaceHolder field names for the AOS search form.
-_FIELD_ENTITY_NAME = "ctl00$ContentPlaceHolder1$txtEntityName"
-_FIELD_SEARCH_BUTTON = "ctl00$ContentPlaceHolder1$btnSearch"
+# ASP.NET form field names (extracted from the actual search page HTML).
+# The AOS search form uses simple names (no ContentPlaceHolder prefix).
+_FIELD_ENTITY_NAME = "txtQueryString"
 
 
 class AOSError(Exception):
@@ -143,7 +142,6 @@ def search_audit_reports(query: str) -> list[AuditReport]:
         "__VIEWSTATE": viewstate,
         "__EVENTVALIDATION": event_validation or "",
         _FIELD_ENTITY_NAME: query,
-        _FIELD_SEARCH_BUTTON: "Search",
     }
     if viewstate_gen:
         form_data["__VIEWSTATEGENERATOR"] = viewstate_gen
