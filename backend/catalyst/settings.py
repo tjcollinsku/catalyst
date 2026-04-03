@@ -156,10 +156,12 @@ STORAGES = {
 
 # Additional directories for collectstatic to find files.
 # The frontend build output goes here so Django can serve the React SPA.
+# The ("frontend", path) tuple tells collectstatic to put the files
+# under staticfiles/frontend/ so they match the /static/frontend/ URL.
 STATICFILES_DIRS = []
 _frontend_dist = BASE_DIR / "static" / "frontend"
 if _frontend_dist.exists():
-    STATICFILES_DIRS.append(_frontend_dist)
+    STATICFILES_DIRS.append(("frontend", str(_frontend_dist)))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
