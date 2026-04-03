@@ -612,7 +612,7 @@ def _process_uploaded_file(
             logger.info(
                 "pdf_metadata_extracted",
                 extra={
-                    "filename": safe_name,
+                    "doc_filename": safe_name,
                     "author": pdf_metadata.get("author", ""),
                     "creator": pdf_metadata.get("creator", ""),
                     "producer": pdf_metadata.get("producer", ""),
@@ -621,7 +621,7 @@ def _process_uploaded_file(
                 },
             )
         except Exception:
-            logger.warning("pdf_metadata_extraction_skipped", extra={"filename": safe_name})
+            logger.warning("pdf_metadata_extraction_skipped", extra={"doc_filename": safe_name})
 
     doc_type = doc_type_hint
     auto_classified = False
@@ -3592,7 +3592,11 @@ def api_case_document_bulk_upload(request, pk):
             # Expected validation failure — safe to return the message
             logger.warning(
                 "bulk_upload_file_rejected",
-                extra={"case_id": str(case.pk), "filename": uploaded_file.name, "reason": str(exc)},
+                extra={
+                    "case_id": str(case.pk),
+                    "doc_filename": uploaded_file.name,
+                    "reason": str(exc),
+                },
             )
             errors.append({"filename": uploaded_file.name, "error": str(exc)})
         except Exception:
@@ -3602,7 +3606,7 @@ def api_case_document_bulk_upload(request, pk):
                 "bulk_upload_file_failed",
                 extra={
                     "case_id": str(case.pk),
-                    "filename": uploaded_file.name,
+                    "doc_filename": uploaded_file.name,
                 },
             )
             errors.append(
