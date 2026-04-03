@@ -507,7 +507,7 @@ export function ResearchTab() {
             </div>
 
             {/* Notes and warnings */}
-            {results && (results.notes.length > 0 || results.staleness_warning) && (
+            {results && ((results.notes?.length ?? 0) > 0 || results.staleness_warning) && (
                 <div className={styles.notesSection}>
                     {results.staleness_warning && (
                         <div className={`${styles.warningBox} ${results.staleness_warning.level === "CRITICAL" ? styles.critical : ""}`}>
@@ -515,7 +515,7 @@ export function ResearchTab() {
                             <p className={styles.warningMessage}>{results.staleness_warning.message}</p>
                         </div>
                     )}
-                    {results.notes.length > 0 && (
+                    {(results.notes?.length ?? 0) > 0 && (
                         <>
                             <h4 className={styles.notesTitle}>Notes</h4>
                             <ul className={styles.notesList}>

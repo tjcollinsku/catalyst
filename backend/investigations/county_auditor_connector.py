@@ -88,9 +88,15 @@ logger = logging.getLogger(__name__)
 
 # ODNR statewide parcel layer — ArcGIS REST query endpoint
 # Layer 4 of the odnr_landbase_v2 MapServer is the Statewide Parcels layer.
+# Primary URL; if this returns 404/503 we try the fallback.
 ODNR_PARCEL_QUERY_URL = (
     "https://gis.ohiodnr.gov/arcgis_site2/rest/services/"
     "OIT_Services/odnr_landbase_v2/MapServer/4/query"
+)
+
+# Fallback: Ohio OIT hosts a newer copy of the statewide parcels layer.
+ODNR_PARCEL_QUERY_URL_FALLBACK = (
+    "https://geo1.oit.ohio.gov/arcgis/rest/services/Statewide_Parcels_2022/MapServer/0/query"
 )
 
 # Fields to request from the ODNR layer
@@ -1629,25 +1635,39 @@ def _run_odnr_query(
 
     http = session or requests.Session()
 
-    try:
-        response = http.get(
-            ODNR_PARCEL_QUERY_URL,
-            params=params,
-            timeout=REQUEST_TIMEOUT,
-        )
-    except requests.exceptions.Timeout:
-        raise AuditorError(
-            f"ODNR parcel API timed out after {REQUEST_TIMEOUT}s. "
-            "The service may be temporarily slow. Try again or reduce query scope."
-        )
-    except requests.exceptions.ConnectionError as exc:
-        raise AuditorError(f"Could not connect to ODNR parcel API: {exc}")
+    # Try primary URL first, fall back to OIT endpoint on failure
+    urls_to_try = [ODNR_PARCEL_QUERY_URL, ODNR_PARCEL_QUERY_URL_FALLBACK]
+    response = None
+    last_error = None
 
-    if response.status_code != 200:
-        raise AuditorError(
-            f"ODNR parcel API returned HTTP {response.status_code}.",
-            status_code=response.status_code,
-        )
+    for url in urls_to_try:
+        try:
+            response = http.get(url, params=params, timeout=REQUEST_TIMEOUT)
+            if response.status_code == 200:
+                break  # Success — use this response
+            logger.warning(
+                "ODNR endpoint returned %d, trying fallback: %s",
+                response.status_code,
+                url,
+            )
+            last_error = AuditorError(
+                f"ODNR parcel API returned HTTP {response.status_code}.",
+                status_code=response.status_code,
+            )
+            response = None  # Reset so we try next URL
+        except requests.exceptions.Timeout:
+            logger.warning("ODNR endpoint timed out: %s", url)
+            last_error = AuditorError(
+                f"ODNR parcel API timed out after {REQUEST_TIMEOUT}s. "
+                "The service may be temporarily slow. "
+                "Try again or reduce query scope."
+            )
+        except requests.exceptions.ConnectionError as exc:
+            logger.warning("ODNR endpoint connection error: %s", url)
+            last_error = AuditorError(f"Could not connect to ODNR parcel API: {exc}")
+
+    if response is None:
+        raise last_error or AuditorError("All ODNR parcel API endpoints failed.")
 
     try:
         data = response.json()

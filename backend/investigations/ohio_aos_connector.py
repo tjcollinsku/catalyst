@@ -1,7 +1,7 @@
 """
 Ohio Auditor of State (AOS) connector for Catalyst.
 
-Strategy: Stateless HTML scraper (mocked for testing).
+Strategy: Two-step ASP.NET form scraper.
 
 The Ohio Auditor of State publishes audit reports for all public entities
 (counties, cities, villages, townships, school districts). Crucially, these
@@ -16,7 +16,17 @@ Investigative context:
 
 Data Source:
     https://ohioauditor.gov/auditsearch/search.aspx
-    (HTML search results table)
+    (ASP.NET WebForms — requires ViewState round-trip)
+
+How this works (ASP.NET postback pattern):
+    1. GET search.aspx → extract __VIEWSTATE and __EVENTVALIDATION
+    2. POST search.aspx with form fields + hidden state → get results HTML
+    3. Parse the results table from the response
+
+    This two-step dance is required because ASP.NET WebForms embeds a
+    cryptographic token (__VIEWSTATE) in every page load. You cannot POST
+    directly without first GETting the page — the server rejects requests
+    without a valid ViewState.
 """
 
 from __future__ import annotations
@@ -31,13 +41,23 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-# URL for search (assuming a GET parameter-based search for simplicity)
-AOS_SEARCH_URL = "https://ohioauditor.gov/auditsearch/searchresults.aspx"
+# The search form lives at search.aspx (NOT searchresults.aspx)
+AOS_SEARCH_URL = "https://ohioauditor.gov/auditsearch/search.aspx"
 
 REQUEST_TIMEOUT = (5, 30)
 HEADERS = {
-    "User-Agent": "Catalyst/2.0 (Intelligence Triage Platform; contact: investigator)",
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"),
+    "Accept-Language": "en-US,en;q=0.5",
 }
+
+# ASP.NET form field names (extracted from the search page HTML)
+# These are the ContentPlaceHolder field names for the AOS search form.
+_FIELD_ENTITY_NAME = "ctl00$ContentPlaceHolder1$txtEntityName"
+_FIELD_SEARCH_BUTTON = "ctl00$ContentPlaceHolder1$btnSearch"
 
 
 class AOSError(Exception):
@@ -64,35 +84,123 @@ def search_audit_reports(query: str) -> list[AuditReport]:
     """
     Search the Ohio Auditor of State database for audit reports.
 
+    This performs a two-step ASP.NET postback:
+    1. GET search.aspx to obtain __VIEWSTATE and __EVENTVALIDATION tokens
+    2. POST search.aspx with form data to get results
+
     Args:
         query: Entity name to search for (e.g., "Example Charity").
 
     Returns:
         List of AuditReport objects.
+
+    Raises:
+        AOSError: On network failure, HTTP errors, or missing form tokens.
     """
     if not query or not query.strip():
         raise AOSError("Search query cannot be empty.")
 
-    params = {"q": query.strip()}
+    query = query.strip()
     logger.info("ohio_aos_connector: searching for %r", query)
 
+    session = requests.Session()
+    session.headers.update(HEADERS)
+
+    # Step 1: GET the search page to extract ASP.NET hidden fields
     try:
-        response = requests.get(
+        page_response = session.get(
             AOS_SEARCH_URL,
-            params=params,
-            headers=HEADERS,
             timeout=REQUEST_TIMEOUT,
         )
     except requests.exceptions.RequestException as e:
         raise AOSError(f"Could not connect to Ohio AOS: {e}") from e
 
-    if not response.ok:
+    if not page_response.ok:
         raise AOSError(
-            f"Ohio AOS returned HTTP {response.status_code}",
-            status_code=response.status_code,
+            f"Ohio AOS search page returned HTTP {page_response.status_code}",
+            status_code=page_response.status_code,
         )
 
-    return _parse_aos_html(response.text)
+    # Extract ASP.NET hidden fields from the page
+    viewstate = _extract_hidden_field(page_response.text, "__VIEWSTATE")
+    viewstate_gen = _extract_hidden_field(page_response.text, "__VIEWSTATEGENERATOR")
+    event_validation = _extract_hidden_field(page_response.text, "__EVENTVALIDATION")
+
+    if not viewstate:
+        # If we can't find ViewState, the page structure may have changed.
+        # Log the first 500 chars of the response for debugging.
+        logger.warning(
+            "ohio_aos_no_viewstate",
+            extra={"response_preview": page_response.text[:500]},
+        )
+        raise AOSError(
+            "Could not extract ASP.NET ViewState from Ohio AOS search page. "
+            "The page structure may have changed."
+        )
+
+    # Step 2: POST the search form with the entity name
+    form_data = {
+        "__VIEWSTATE": viewstate,
+        "__EVENTVALIDATION": event_validation or "",
+        _FIELD_ENTITY_NAME: query,
+        _FIELD_SEARCH_BUTTON: "Search",
+    }
+    if viewstate_gen:
+        form_data["__VIEWSTATEGENERATOR"] = viewstate_gen
+
+    try:
+        search_response = session.post(
+            AOS_SEARCH_URL,
+            data=form_data,
+            timeout=REQUEST_TIMEOUT,
+        )
+    except requests.exceptions.RequestException as e:
+        raise AOSError(f"Could not submit search to Ohio AOS: {e}") from e
+
+    if not search_response.ok:
+        raise AOSError(
+            f"Ohio AOS search returned HTTP {search_response.status_code}",
+            status_code=search_response.status_code,
+        )
+
+    return _parse_aos_html(search_response.text)
+
+
+def _extract_hidden_field(html: str, field_name: str) -> str | None:
+    """
+    Extract value of a hidden input field from ASP.NET HTML.
+
+    ASP.NET WebForms pages contain hidden fields like:
+        <input type="hidden" name="__VIEWSTATE" id="__VIEWSTATE"
+               value="..." />
+
+    Args:
+        html: The full HTML page content.
+        field_name: The name/id of the hidden field (e.g., "__VIEWSTATE").
+
+    Returns:
+        The field value, or None if not found.
+    """
+    # Match: name="__VIEWSTATE" ... value="..."
+    # The value can be very long (thousands of chars) for ViewState.
+    pattern = re.compile(
+        rf'name="{re.escape(field_name)}"[^>]*value="([^"]*)"',
+        re.IGNORECASE,
+    )
+    match = pattern.search(html)
+    if match:
+        return match.group(1)
+
+    # Try alternate order: value="..." ... name="..."
+    pattern2 = re.compile(
+        rf'value="([^"]*)"[^>]*name="{re.escape(field_name)}"',
+        re.IGNORECASE,
+    )
+    match2 = pattern2.search(html)
+    if match2:
+        return match2.group(1)
+
+    return None
 
 
 def _parse_aos_html(html: str) -> list[AuditReport]:
@@ -101,12 +209,11 @@ def _parse_aos_html(html: str) -> list[AuditReport]:
 
     Expected table columns:
     Entity Name | County | Report Type | Entity Type | Report Period | Release Date
+
+    The results table may be embedded in the same search.aspx page
+    (ASP.NET re-renders the page with results after postback).
     """
     reports = []
-
-    # We use a robust regex to find table rows.
-    # A real implementation might use BeautifulSoup, but regex avoids a new dependency
-    # and is sufficient for a targeted scraper where we control the mock.
 
     row_pattern = re.compile(r"<tr[^>]*>(.*?)</tr>", re.IGNORECASE | re.DOTALL)
     cell_pattern = re.compile(r"<td[^>]*>(.*?)</td>", re.IGNORECASE | re.DOTALL)
@@ -127,7 +234,7 @@ def _parse_aos_html(html: str) -> list[AuditReport]:
         entity_name_raw = clean_cell(cells[0])
 
         # Skip header rows
-        if entity_name_raw.lower() == "entity name":
+        if entity_name_raw.lower() in ("entity name", ""):
             continue
 
         # "* Denotes Findings for Recovery"
@@ -151,16 +258,14 @@ def _parse_aos_html(html: str) -> list[AuditReport]:
                 pass
 
         # Look for PDF link in the entity name cell (typical for AOS)
-        # SEC-038: Validate domain to prevent injected URLs from scraped HTML.
+        # SEC-038: Validate domain to prevent injected URLs.
         pdf_url = None
         link_match = link_pattern.search(cells[0])
         if link_match:
             raw_url = link_match.group(1)
             if raw_url.startswith("/"):
-                # Relative path — safe to prefix with known domain
                 pdf_url = "https://ohioauditor.gov" + raw_url
             else:
-                # Absolute URL — validate domain
                 try:
                     parsed = urlparse(raw_url)
                     if parsed.hostname and parsed.hostname.lower().endswith("ohioauditor.gov"):
@@ -168,7 +273,10 @@ def _parse_aos_html(html: str) -> list[AuditReport]:
                     else:
                         logger.warning(
                             "aos_pdf_untrusted_domain",
-                            extra={"url": raw_url, "domain": parsed.hostname},
+                            extra={
+                                "url": raw_url,
+                                "domain": parsed.hostname,
+                            },
                         )
                 except Exception:
                     logger.warning("aos_pdf_invalid_url", extra={"url": raw_url})
