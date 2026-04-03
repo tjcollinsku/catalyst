@@ -4533,10 +4533,12 @@ def api_research_recorder(request, pk):
         # Get county info
         county_info_obj = county_recorder_connector.get_county_info(county)
 
-        county_info = {
-            "name": county_info_obj.name,
+        # Build a single result row in the same format the frontend expects
+        # (results array + count) so the ResearchTab can render it uniformly.
+        record = {
+            "county": county_info_obj.name,
+            "search_url": url_result.url,
             "system": county_info_obj.system.value,
-            "portal_url": county_info_obj.portal_url,
             "requires_login": url_result.requires_login,
             "instructions": url_result.instructions,
             "phone": county_info_obj.phone,
@@ -4544,9 +4546,9 @@ def api_research_recorder(request, pk):
         }
 
         notes = [
-            "Open the search_url in your browser to manually search the recorder portal.",
-            "Download any relevant deeds or mortgages and upload them to Catalyst.",
-            "Catalyst will automatically extract entities and detect fraud signals.",
+            "Open the link in your browser to search the recorder portal.",
+            "Download any relevant deeds or mortgages and upload them to "
+            "Catalyst for automated processing.",
         ]
 
         logger.info(
@@ -4561,8 +4563,8 @@ def api_research_recorder(request, pk):
         return JsonResponse(
             {
                 "source": "county_recorder",
-                "search_url": url_result.url,
-                "county_info": county_info,
+                "results": [record],
+                "count": 1,
                 "notes": notes,
             },
             status=200,
@@ -4571,30 +4573,34 @@ def api_research_recorder(request, pk):
     except county_recorder_connector.RecorderError as e:
         logger.warning(
             "research_recorder_failed",
-            extra={"case_id": str(case.pk), "county": county_str, "error": str(e)},
+            extra={
+                "case_id": str(case.pk),
+                "county": county_str,
+                "error": str(e),
+            },
         )
         return JsonResponse(
             {
                 "error": f"Recorder URL generation failed: {str(e)}",
                 "source": "county_recorder",
-                "search_url": None,
-                "county_info": None,
+                "results": [],
+                "count": 0,
                 "notes": [],
             },
             status=400,
         )
 
-    except Exception:
+    except Exception as e:
         logger.exception(
             "research_recorder_unexpected",
             extra={"case_id": str(case.pk), "county": county_str},
         )
         return JsonResponse(
             {
-                "error": "Internal error generating recorder URL",
+                "error": f"Internal error generating recorder URL: {str(e)}",
                 "source": "county_recorder",
-                "search_url": None,
-                "county_info": None,
+                "results": [],
+                "count": 0,
                 "notes": [],
             },
             status=500,
