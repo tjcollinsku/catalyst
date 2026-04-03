@@ -34,6 +34,41 @@ urlpatterns = [
         name="api_case_document_process_pending",
     ),
     path(
+        "api/cases/<uuid:pk>/fetch-990s/",
+        views.api_case_fetch_990s,
+        name="api_case_fetch_990s",
+    ),
+    path(
+        "api/cases/<uuid:pk>/research/parcels/",
+        views.api_research_parcels,
+        name="api_research_parcels",
+    ),
+    path(
+        "api/cases/<uuid:pk>/research/ohio-sos/",
+        views.api_research_ohio_sos,
+        name="api_research_ohio_sos",
+    ),
+    path(
+        "api/cases/<uuid:pk>/research/ohio-aos/",
+        views.api_research_ohio_aos,
+        name="api_research_ohio_aos",
+    ),
+    path(
+        "api/cases/<uuid:pk>/research/irs/",
+        views.api_research_irs,
+        name="api_research_irs",
+    ),
+    path(
+        "api/cases/<uuid:pk>/research/recorder/",
+        views.api_research_recorder,
+        name="api_research_recorder",
+    ),
+    path(
+        "api/cases/<uuid:pk>/research/add-to-case/",
+        views.api_research_add_to_case,
+        name="api_research_add_to_case",
+    ),
+    path(
         "api/cases/<uuid:pk>/documents/<uuid:document_id>/",
         views.api_case_document_detail,
         name="api_case_document_detail",

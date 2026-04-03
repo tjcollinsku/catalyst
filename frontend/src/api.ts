@@ -704,3 +704,109 @@ export async function aiAsk(
         body: JSON.stringify({ question, conversation_history: conversationHistory }),
     }, options);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Research endpoints (external data source connectors)
+   ═══════════════════════════════════════════════════════════════ */
+
+export interface ResearchResult {
+    source: string;
+    results: Record<string, unknown>[];
+    count: number;
+    notes: string[];
+    error?: string;
+    staleness_warning?: { level: string; message: string };
+}
+
+export async function searchParcels(
+    caseId: string,
+    query: string,
+    searchType: "owner" | "parcel",
+    county?: string,
+    options?: ApiRequestOptions
+): Promise<ResearchResult> {
+    return request<ResearchResult>(`/api/cases/${caseId}/research/parcels/`, {
+        method: "POST",
+        body: JSON.stringify({ query, search_type: searchType, county }),
+    }, {
+        ...options,
+        timeoutMs: options?.timeoutMs ?? 60000,
+    });
+}
+
+export async function searchOhioSOS(
+    caseId: string,
+    query: string,
+    fuzzy = false,
+    options?: ApiRequestOptions
+): Promise<ResearchResult> {
+    return request<ResearchResult>(`/api/cases/${caseId}/research/ohio-sos/`, {
+        method: "POST",
+        body: JSON.stringify({ query, fuzzy }),
+    }, {
+        ...options,
+        timeoutMs: options?.timeoutMs ?? 60000,
+    });
+}
+
+export async function searchOhioAOS(
+    caseId: string,
+    query: string,
+    options?: ApiRequestOptions
+): Promise<ResearchResult> {
+    return request<ResearchResult>(`/api/cases/${caseId}/research/ohio-aos/`, {
+        method: "POST",
+        body: JSON.stringify({ query }),
+    }, {
+        ...options,
+        timeoutMs: options?.timeoutMs ?? 30000,
+    });
+}
+
+export async function searchIRS(
+    caseId: string,
+    query: string,
+    options?: ApiRequestOptions
+): Promise<ResearchResult> {
+    return request<ResearchResult>(`/api/cases/${caseId}/research/irs/`, {
+        method: "POST",
+        body: JSON.stringify({ query }),
+    }, {
+        ...options,
+        timeoutMs: options?.timeoutMs ?? 120000,
+    });
+}
+
+export async function searchRecorder(
+    caseId: string,
+    county: string,
+    name: string,
+    options?: ApiRequestOptions
+): Promise<ResearchResult> {
+    return request<ResearchResult>(`/api/cases/${caseId}/research/recorder/`, {
+        method: "POST",
+        body: JSON.stringify({ county, name }),
+    }, {
+        ...options,
+        timeoutMs: options?.timeoutMs ?? 15000,
+    });
+}
+
+export interface AddToCaseResult {
+    created: string;
+    entity: Record<string, unknown>;
+    duplicate: boolean;
+    message?: string;
+}
+
+export async function addResearchToCase(
+    caseId: string,
+    source: string,
+    data: Record<string, unknown>,
+    options?: ApiRequestOptions
+): Promise<AddToCaseResult> {
+    return request<AddToCaseResult>(`/api/cases/${caseId}/research/add-to-case/`, {
+        method: "POST",
+        body: JSON.stringify({ source, data }),
+    }, options);
+}

@@ -499,3 +499,13 @@ export interface AIAskResponse {
     }>;
     follow_up_questions: string[];
 }
+
+/* ── Research tab results (external data sources) ───────────── */
+export interface ResearchResult {
+    source: string;
+    results: Record<string, unknown>[];
+    count: number;
+    notes: string[];
+    error?: string;
+    staleness_warning?: { level: string; message: string };
+}

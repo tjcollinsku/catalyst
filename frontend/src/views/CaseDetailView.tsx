@@ -46,6 +46,7 @@ import { StateBlock } from "../components/ui/StateBlock";
 const TABS = [
     { label: "Overview", path: "overview" },
     { label: "Documents", path: "documents" },
+    { label: "Research", path: "research" },
     { label: "Financials", path: "financials" },
     { label: "Pipeline", path: "pipeline" },
     { label: "Referrals", path: "referrals" },

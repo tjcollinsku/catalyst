@@ -24,6 +24,7 @@ from .models import (
     DocumentType,
     EntitySignal,
     FinancialInstrument,
+    FinancialSnapshot,
     Finding,
     FindingEntity,
     GovernmentReferral,
@@ -76,7 +77,7 @@ MAX_BULK_FILES = 50
 
 def _save_financial_snapshot(document, case, financials, meta):
     """Persist extracted 990 financial data to FinancialSnapshot model."""
-    from .models import FinancialSnapshot, Organization
+    from .models import Organization
 
     # Map extraction keys to model field names
     _KEY_MAP = {
@@ -124,7 +125,9 @@ def _save_financial_snapshot(document, case, financials, meta):
         field_key = item.get("key") or item.get("field", "")
         model_field = _KEY_MAP.get(field_key)
         # Normalize value: extraction uses "value", legacy uses "current_year"
-        val = item.get("current_year") if item.get("current_year") is not None else item.get("value")
+        val = (
+            item.get("current_year") if item.get("current_year") is not None else item.get("value")
+        )
         if model_field and val is not None:
             defaults[model_field] = val
 
@@ -1629,7 +1632,6 @@ def api_case_document_detail(request, pk, document_id):
     ]
 
     # Financial snapshots (for 990s)
-    from .models import FinancialSnapshot
 
     snapshots = FinancialSnapshot.objects.filter(document=document).order_by("tax_year")
     data["financial_snapshots"] = [
@@ -1673,7 +1675,6 @@ def api_case_document_detail(request, pk, document_id):
 @require_http_methods(["GET"])
 def api_case_financials(request, pk):
     """Return all FinancialSnapshot records for a case, ordered by tax_year."""
-    from .models import FinancialSnapshot
 
     case = get_object_or_404(Case, pk=pk)
     snapshots = (
@@ -3295,7 +3296,6 @@ def api_case_graph(request, pk):
                 )
 
     # ── 3. Collect timeline events ────────────────────────────────────
-    from .models import FinancialSnapshot
 
     timeline_events = []
 
@@ -3669,6 +3669,932 @@ def api_case_document_process_pending(request, pk):
     )
 
 
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_case_fetch_990s(request, pk):
+    """Fetch IRS Form 990 PDFs from ProPublica for the organization in this case.
+
+    POST body (JSON):
+        ein: string — the organization's EIN (e.g., "12-3456789" or "123456789")
+
+    Returns:
+        {"fetched": N, "skipped": M, "errors": [...], "documents": [...]}
+    """
+    import io
+    from urllib.parse import urlparse
+
+    import requests
+
+    case = get_object_or_404(Case, pk=pk)
+
+    # --- Parse POST body ---
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse(
+            {"error": "Invalid JSON in request body"},
+            status=400,
+        )
+
+    ein = body.get("ein", "").strip()
+    if not ein:
+        return JsonResponse(
+            {"error": "Missing required field: ein"},
+            status=400,
+        )
+
+    # --- Fetch filings from ProPublica ---
+    try:
+        from . import propublica_connector
+
+        filings = propublica_connector.fetch_filings(ein)
+    except propublica_connector.ProPublicaError as e:
+        logger.warning(
+            "propublica_fetch_failed",
+            extra={"case_id": str(case.pk), "ein": ein, "error": str(e)},
+        )
+        return JsonResponse(
+            {
+                "error": f"Failed to fetch from ProPublica: {str(e)}",
+                "fetched": 0,
+                "skipped": 0,
+                "errors": [{"filing": "all", "error": str(e)}],
+                "documents": [],
+            },
+            status=400,
+        )
+
+    if not filings:
+        return JsonResponse(
+            {
+                "fetched": 0,
+                "skipped": 0,
+                "errors": [{"filing": "all", "error": "No filings found for this EIN"}],
+                "documents": [],
+            },
+            status=200,
+        )
+
+    # --- Security settings for PDF downloads ---
+    PDF_DOWNLOAD_TIMEOUT = 30  # seconds
+    PDF_MAX_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
+    PDF_CHUNK_SIZE = 64 * 1024  # 64 KB chunks
+
+    # --- Allowed domains for ProPublica CDN and IRS ---
+    ALLOWED_DOMAINS = {
+        "projects.propublica.org",
+        "pp990s3.s3.amazonaws.com",  # legacy S3 hosting
+        "apps.irs.gov",  # IRS direct links
+    }
+
+    def _validate_pdf_url(url: str | None) -> str | None:
+        """Validate that a PDF URL comes from a trusted domain."""
+        if not url:
+            return None
+        try:
+            parsed = urlparse(url)
+            if parsed.scheme not in ("http", "https"):
+                return None
+            if parsed.hostname not in ALLOWED_DOMAINS:
+                return None
+            return url
+        except Exception:
+            return None
+
+    def _download_pdf(url: str) -> bytes:
+        """Download a PDF with timeout and size limits. Raises ValueError on failure."""
+        try:
+            response = requests.get(
+                url,
+                timeout=PDF_DOWNLOAD_TIMEOUT,
+                stream=True,
+            )
+        except requests.exceptions.Timeout:
+            raise ValueError(f"Download timed out after {PDF_DOWNLOAD_TIMEOUT}s")
+        except requests.exceptions.ConnectionError as e:
+            raise ValueError(f"Connection error: {e}")
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Request failed: {e}")
+
+        if response.status_code != 200:
+            raise ValueError(f"HTTP {response.status_code}")
+
+        # Chunked download with size limit
+        chunks = []
+        total_bytes = 0
+        for chunk in response.iter_content(chunk_size=PDF_CHUNK_SIZE):
+            total_bytes += len(chunk)
+            if total_bytes > PDF_MAX_SIZE_BYTES:
+                raise ValueError(f"File exceeds {PDF_MAX_SIZE_BYTES // (1024 * 1024)} MB limit")
+            chunks.append(chunk)
+        return b"".join(chunks)
+
+    # --- Process each filing ---
+    fetched_count = 0
+    skipped_count = 0
+    errors = []
+    documents_created = []
+
+    for filing in filings:
+        if not filing.pdf_url:
+            skipped_count += 1
+            continue
+
+        # Validate URL domain
+        if not _validate_pdf_url(filing.pdf_url):
+            errors.append(
+                {
+                    "filing": f"{filing.tax_year}",
+                    "error": "URL failed domain validation (untrusted domain)",
+                }
+            )
+            skipped_count += 1
+            continue
+
+        # Check for duplicate by source_url
+        existing = case.documents.filter(source_url=filing.pdf_url).first()
+        if existing:
+            skipped_count += 1
+            continue
+
+        # Download PDF
+        try:
+            pdf_bytes = _download_pdf(filing.pdf_url)
+        except ValueError as e:
+            errors.append(
+                {
+                    "filing": f"{filing.tax_year}",
+                    "error": f"Download failed: {str(e)}",
+                }
+            )
+            continue
+
+        # Create a file-like object for the upload pipeline
+        filename = f"form_990_{filing.tax_year}.pdf"
+        try:
+            uploaded_file = io.BytesIO(pdf_bytes)
+            uploaded_file.name = filename
+            uploaded_file.size = len(pdf_bytes)
+            uploaded_file.content_type = "application/pdf"
+
+            # Save via the standard upload pipeline
+            document = _process_uploaded_file(
+                uploaded_file=uploaded_file,
+                case=case,
+                doc_type_hint="IRS_990",
+                source_url=filing.pdf_url,
+                run_pipeline=True,
+            )
+            documents_created.append(serialize_document(document))
+            fetched_count += 1
+
+            logger.info(
+                "propublica_990_fetched",
+                extra={
+                    "case_id": str(case.pk),
+                    "ein": ein,
+                    "tax_year": filing.tax_year,
+                    "document_id": str(document.pk),
+                },
+            )
+        except Exception as e:
+            logger.exception(
+                "propublica_990_processing_failed",
+                extra={
+                    "case_id": str(case.pk),
+                    "ein": ein,
+                    "tax_year": filing.tax_year,
+                    "error": str(e),
+                },
+            )
+            errors.append(
+                {
+                    "filing": f"{filing.tax_year}",
+                    "error": f"Processing failed: {str(e)}",
+                }
+            )
+
+    return JsonResponse(
+        {
+            "fetched": fetched_count,
+            "skipped": skipped_count,
+            "errors": errors,
+            "documents": documents_created,
+        },
+        status=200,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Research Connectors API
+# ---------------------------------------------------------------------------
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_research_parcels(request, pk):
+    """Search Ohio parcel records by owner name across all 88 counties.
+
+    This endpoint queries the ODNR statewide parcel API for property ownership
+    patterns. Useful for detecting property flipping rings and cross-county
+    asset transfers.
+
+    POST body (JSON):
+        {
+            "query": "EXAMPLE",                          # required: owner name
+            "search_type": "owner" | "parcel",         # optional: defaults to "owner"
+            "county": "DARKE"                          # optional: county name (uppercase)
+        }
+
+    Returns:
+        {
+            "source": "county_auditor",
+            "results": [
+                {
+                    "pin": "...",
+                    "owner1": "...",
+                    "owner2": "...",
+                    "county": "...",
+                    "acres_calc": "...",
+                    "acres_desc": "...",
+                    "aud_link": "..."
+                }
+            ],
+            "count": N,
+            "notes": ["..."]
+        }
+
+    Note: This is a long-running request (may timeout after 30s for large
+    cross-county searches). ODNR API is public and requires no authentication.
+    """
+    case = get_object_or_404(Case, pk=pk)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse(
+            {"error": "Invalid JSON in request body"},
+            status=400,
+        )
+
+    query = body.get("query", "").strip()
+    search_type = body.get("search_type", "owner").strip().lower()
+    county_str = body.get("county", "").strip()
+
+    if not query:
+        return JsonResponse(
+            {"error": "Missing required field: query"},
+            status=400,
+        )
+
+    try:
+        from . import county_auditor_connector
+
+        # Parse county enum if provided
+        county = None
+        if county_str:
+            try:
+                county = county_auditor_connector.OhioCounty[county_str]
+            except KeyError:
+                return JsonResponse(
+                    {"error": f"Invalid county: {county_str}. Must be a valid Ohio county name."},
+                    status=400,
+                )
+
+        # Run search based on type
+        if search_type == "parcel":
+            result = county_auditor_connector.search_parcels_by_pin(query, county=county)
+        else:
+            result = county_auditor_connector.search_parcels_by_owner(query, county=county)
+
+        # Serialize dataclass records to dicts
+        records = []
+        for record in result.records:
+            records.append(
+                {
+                    "pin": record.pin,
+                    "owner1": record.owner1,
+                    "owner2": record.owner2,
+                    "county": record.county,
+                    "acres_calc": record.calc_acres,
+                    "acres_desc": record.assr_acres,
+                    "aud_link": record.aud_link,
+                }
+            )
+
+        notes = [result.note] if result.note else []
+
+        logger.info(
+            "research_parcels_search",
+            extra={
+                "case_id": str(case.pk),
+                "query": query,
+                "county": county_str,
+                "results_count": len(records),
+            },
+        )
+
+        return JsonResponse(
+            {
+                "source": "county_auditor",
+                "results": records,
+                "count": len(records),
+                "notes": notes,
+            },
+            status=200,
+        )
+
+    except county_auditor_connector.AuditorError as e:
+        logger.warning(
+            "research_parcels_failed",
+            extra={"case_id": str(case.pk), "query": query, "error": str(e)},
+        )
+        return JsonResponse(
+            {
+                "error": f"Parcel search failed: {str(e)}",
+                "source": "county_auditor",
+                "results": [],
+                "count": 0,
+                "notes": [],
+            },
+            status=400,
+        )
+
+    except Exception:
+        logger.exception(
+            "research_parcels_unexpected",
+            extra={"case_id": str(case.pk), "query": query},
+        )
+        return JsonResponse(
+            {
+                "error": "Internal error searching parcels",
+                "source": "county_auditor",
+                "results": [],
+                "count": 0,
+                "notes": [],
+            },
+            status=500,
+        )
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_research_ohio_sos(request, pk):
+    """Search Ohio Secretary of State business entity database.
+
+    This endpoint queries the Ohio SOS bulk entity file for organization
+    registrations, amendments, and incorporators. Useful for verifying entity
+    existence (detects PHANTOM_OFFICER — SR-002) and finding associated entities.
+
+    POST body (JSON):
+        {
+            "query": "Example Charity Ministries",             # required: entity name
+            "fuzzy": false                             # optional: enable fuzzy matching
+        }
+
+    Returns:
+        {
+            "source": "ohio_sos",
+            "results": [
+                {
+                    "charter_number": "...",
+                    "business_name": "...",
+                    "status": "...",
+                    "filing_date": "2024-01-15",
+                    "expiration_date": "2025-01-15",
+                    "county": "...",
+                    "state": "..."
+                }
+            ],
+            "count": N,
+            "staleness_warning": {
+                "level": "LOW" | "MEDIUM" | "HIGH",
+                "message": "..."
+            }
+        }
+
+    Note: The Ohio SOS bulk file is downloaded on every call and may take
+    10-20 seconds to complete. Data is accurate to 5-7 days behind real-time.
+    """
+    case = get_object_or_404(Case, pk=pk)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse(
+            {"error": "Invalid JSON in request body"},
+            status=400,
+        )
+
+    query = body.get("query", "").strip()
+    fuzzy = body.get("fuzzy", False)
+
+    if not query:
+        return JsonResponse(
+            {"error": "Missing required field: query"},
+            status=400,
+        )
+
+    try:
+        from . import ohio_sos_connector
+
+        result = ohio_sos_connector.search_ohio(query, fuzzy=fuzzy)
+
+        # Serialize EntityRecord dataclasses to dicts
+        records = []
+        for entity in result.matches:
+            records.append(
+                {
+                    "charter_number": entity.charter_number,
+                    "business_name": entity.business_name,
+                    "status": entity.transaction_type,
+                    "filing_date": entity.effective_date.isoformat()
+                    if entity.effective_date
+                    else None,
+                    "expiration_date": None,  # Not in EntityRecord model
+                    "county": entity.county,
+                    "state": entity.filing_state,
+                }
+            )
+
+        # Serialize staleness warning
+        staleness = {
+            "level": result.staleness_warning.level,
+            "message": str(result.staleness_warning),
+        }
+
+        logger.info(
+            "research_ohio_sos_search",
+            extra={
+                "case_id": str(case.pk),
+                "query": query,
+                "results_count": len(records),
+            },
+        )
+
+        return JsonResponse(
+            {
+                "source": "ohio_sos",
+                "results": records,
+                "count": len(records),
+                "staleness_warning": staleness,
+            },
+            status=200,
+        )
+
+    except ohio_sos_connector.OhioSOSError as e:
+        logger.warning(
+            "research_ohio_sos_failed",
+            extra={"case_id": str(case.pk), "query": query, "error": str(e)},
+        )
+        return JsonResponse(
+            {
+                "error": f"Ohio SOS search failed: {str(e)}",
+                "source": "ohio_sos",
+                "results": [],
+                "count": 0,
+                "staleness_warning": None,
+            },
+            status=400,
+        )
+
+    except Exception:
+        logger.exception(
+            "research_ohio_sos_unexpected",
+            extra={"case_id": str(case.pk), "query": query},
+        )
+        return JsonResponse(
+            {
+                "error": "Internal error searching Ohio SOS",
+                "source": "ohio_sos",
+                "results": [],
+                "count": 0,
+                "staleness_warning": None,
+            },
+            status=500,
+        )
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_research_ohio_aos(request, pk):
+    """Search Ohio Auditor of State audit reports.
+
+    This endpoint scrapes the Ohio AOS audit database for audit findings,
+    especially "Findings for Recovery" which indicate that public money was
+    spent illegally or misappropriated. Useful for detecting government
+    corruption entanglement and regulatory violations.
+
+    POST body (JSON):
+        {
+            "query": "Example Township"                          # required: entity name
+        }
+
+    Returns:
+        {
+            "source": "ohio_aos",
+            "results": [
+                {
+                    "entity_name": "...",
+                    "county": "...",
+                    "report_type": "...",
+                    "entity_type": "...",
+                    "report_period": "...",
+                    "release_date": "2024-01-15" or null,
+                    "has_findings_for_recovery": true,
+                    "pdf_url": "https://..."
+                }
+            ],
+            "count": N,
+            "notes": []
+        }
+
+    Note: This endpoint scrapes a public HTML search interface and may be
+    subject to rate limiting. Typical request time is 5-15 seconds.
+    """
+    case = get_object_or_404(Case, pk=pk)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse(
+            {"error": "Invalid JSON in request body"},
+            status=400,
+        )
+
+    query = body.get("query", "").strip()
+
+    if not query:
+        return JsonResponse(
+            {"error": "Missing required field: query"},
+            status=400,
+        )
+
+    try:
+        from . import ohio_aos_connector
+
+        reports = ohio_aos_connector.search_audit_reports(query)
+
+        # Serialize AuditReport dataclasses to dicts
+        records = []
+        for report in reports:
+            records.append(
+                {
+                    "entity_name": report.entity_name,
+                    "county": report.county,
+                    "report_type": report.report_type,
+                    "entity_type": report.entity_type,
+                    "report_period": report.report_period,
+                    "release_date": report.release_date.isoformat()
+                    if report.release_date
+                    else None,
+                    "has_findings_for_recovery": report.has_findings_for_recovery,
+                    "pdf_url": report.pdf_url,
+                }
+            )
+
+        logger.info(
+            "research_ohio_aos_search",
+            extra={
+                "case_id": str(case.pk),
+                "query": query,
+                "results_count": len(records),
+            },
+        )
+
+        return JsonResponse(
+            {
+                "source": "ohio_aos",
+                "results": records,
+                "count": len(records),
+                "notes": [],
+            },
+            status=200,
+        )
+
+    except ohio_aos_connector.AOSError as e:
+        logger.warning(
+            "research_ohio_aos_failed",
+            extra={"case_id": str(case.pk), "query": query, "error": str(e)},
+        )
+        return JsonResponse(
+            {
+                "error": f"Ohio AOS search failed: {str(e)}",
+                "source": "ohio_aos",
+                "results": [],
+                "count": 0,
+                "notes": [],
+            },
+            status=400,
+        )
+
+    except Exception:
+        logger.exception(
+            "research_ohio_aos_unexpected",
+            extra={"case_id": str(case.pk), "query": query},
+        )
+        return JsonResponse(
+            {
+                "error": "Internal error searching Ohio AOS",
+                "source": "ohio_aos",
+                "results": [],
+                "count": 0,
+                "notes": [],
+            },
+            status=500,
+        )
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_research_irs(request, pk):
+    """Search IRS Exempt Organizations Business Master File by organization name.
+
+    This endpoint queries the IRS EO BMF for nonprofit information including
+    ruling dates, exemption status, and financial indicators. Useful for
+    detecting phantom entities (organizations named in documents before IRS
+    ruling dates) and revoked/suspended organizations.
+
+    POST body (JSON):
+        {
+            "query": "Example Charity Ministries"              # required: org name
+        }
+
+    Returns:
+        {
+            "source": "irs_eo_bmf",
+            "results": [
+                {
+                    "ein": "12-3456789",
+                    "name": "...",
+                    "city": "...",
+                    "state": "...",
+                    "status_code": "...",
+                    "status_description": "...",
+                    "ruling_date": "2020-03-15" or null,
+                    "deductibility_code": "...",
+                    "asset_amount": 123456,
+                    "income_amount": 789012,
+                    "is_revoked": false
+                }
+            ],
+            "count": N,
+            "staleness_warning": {
+                "level": "LOW" | "MEDIUM" | "HIGH",
+                "message": "..."
+            }
+        }
+
+    Note: The IRS bulk EO BMF file is downloaded on the first call and cached
+    locally. Subsequent calls are fast (<1 second). Initial download may take
+    10-30 seconds. Data is updated monthly by IRS.
+    """
+    case = get_object_or_404(Case, pk=pk)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse(
+            {"error": "Invalid JSON in request body"},
+            status=400,
+        )
+
+    query = body.get("query", "").strip()
+
+    if not query:
+        return JsonResponse(
+            {"error": "Missing required field: query"},
+            status=400,
+        )
+
+    try:
+        from . import irs_connector
+
+        result = irs_connector.search_ohio_nonprofits(query)
+
+        # Serialize EoBmfRecord dataclasses to dicts
+        records = []
+        for record in result.matches:
+            records.append(
+                {
+                    "ein": f"{record.ein // 10000:02d}-{record.ein % 10000:04d}",
+                    "name": record.name,
+                    "city": record.city,
+                    "state": record.state,
+                    "status_code": record.status_code,
+                    "status_description": record.status_description,
+                    "ruling_date": (
+                        f"{record.ruling_year}-{record.ruling_month:02d}-01"
+                        if record.ruling_year and record.ruling_month
+                        else None
+                    ),
+                    "deductibility_code": record.deductibility_code,
+                    "asset_amount": record.asset_amount,
+                    "income_amount": record.income_amount,
+                    "is_revoked": record.is_revoked,
+                }
+            )
+
+        # Serialize staleness warning
+        staleness = {
+            "level": result.staleness_warning.level.value,
+            "message": str(result.staleness_warning),
+        }
+
+        logger.info(
+            "research_irs_search",
+            extra={
+                "case_id": str(case.pk),
+                "query": query,
+                "results_count": len(records),
+            },
+        )
+
+        return JsonResponse(
+            {
+                "source": "irs_eo_bmf",
+                "results": records,
+                "count": len(records),
+                "staleness_warning": staleness,
+            },
+            status=200,
+        )
+
+    except irs_connector.IRSError as e:
+        logger.warning(
+            "research_irs_failed",
+            extra={"case_id": str(case.pk), "query": query, "error": str(e)},
+        )
+        return JsonResponse(
+            {
+                "error": f"IRS search failed: {str(e)}",
+                "source": "irs_eo_bmf",
+                "results": [],
+                "count": 0,
+                "staleness_warning": None,
+            },
+            status=400,
+        )
+
+    except Exception:
+        logger.exception(
+            "research_irs_unexpected",
+            extra={"case_id": str(case.pk), "query": query},
+        )
+        return JsonResponse(
+            {
+                "error": "Internal error searching IRS",
+                "source": "irs_eo_bmf",
+                "results": [],
+                "count": 0,
+                "staleness_warning": None,
+            },
+            status=500,
+        )
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_research_recorder(request, pk):
+    """Generate county recorder search URLs and metadata.
+
+    This endpoint does not directly search recorders (they cannot be scraped
+    across 88 counties). Instead, it returns direct search URLs and instructions
+    for the investigator to manually search each county's recorder portal.
+
+    This is by design: recorder portals vary by county vendor and often require
+    human interaction (CAPTCHA, guest login, etc.). The investigator takes these
+    URLs, searches manually, downloads deeds and mortgages, and uploads them to
+    Catalyst for automated processing.
+
+    POST body (JSON):
+        {
+            "county": "DARKE",                         # required: Ohio county
+            "name": "EXAMPLE"                            # optional: name to search for
+        }
+
+    Returns:
+        {
+            "source": "county_recorder",
+            "search_url": "https://...",
+            "county_info": {
+                "name": "Darke",
+                "system": "GovOS Cloud Search",
+                "portal_url": "https://...",
+                "requires_login": false,
+                "instructions": "..."
+            },
+            "notes": ["..."]
+        }
+
+    Note: This endpoint returns URLs only — no HTTP calls are made to recorder
+    portals. All actual search happens in the investigator's browser.
+    """
+    case = get_object_or_404(Case, pk=pk)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse(
+            {"error": "Invalid JSON in request body"},
+            status=400,
+        )
+
+    county_str = body.get("county", "").strip()
+    name = body.get("name", "").strip()
+
+    if not county_str:
+        return JsonResponse(
+            {"error": "Missing required field: county"},
+            status=400,
+        )
+
+    try:
+        from . import county_recorder_connector
+
+        # Parse county enum
+        try:
+            county = county_recorder_connector.OhioCounty[county_str]
+        except KeyError:
+            return JsonResponse(
+                {"error": f"Invalid county: {county_str}. Must be a valid Ohio county name."},
+                status=400,
+            )
+
+        # Get search URL
+        url_result = county_recorder_connector.get_search_url(county, grantor_grantee=name)
+
+        # Get county info
+        county_info_obj = county_recorder_connector.get_county_info(county)
+
+        county_info = {
+            "name": county_info_obj.name,
+            "system": county_info_obj.system.value,
+            "portal_url": county_info_obj.portal_url,
+            "requires_login": url_result.requires_login,
+            "instructions": url_result.instructions,
+            "phone": county_info_obj.phone,
+            "address": county_info_obj.address,
+        }
+
+        notes = [
+            "Open the search_url in your browser to manually search the recorder portal.",
+            "Download any relevant deeds or mortgages and upload them to Catalyst.",
+            "Catalyst will automatically extract entities and detect fraud signals.",
+        ]
+
+        logger.info(
+            "research_recorder_url",
+            extra={
+                "case_id": str(case.pk),
+                "county": county_str,
+                "name": name,
+            },
+        )
+
+        return JsonResponse(
+            {
+                "source": "county_recorder",
+                "search_url": url_result.url,
+                "county_info": county_info,
+                "notes": notes,
+            },
+            status=200,
+        )
+
+    except county_recorder_connector.RecorderError as e:
+        logger.warning(
+            "research_recorder_failed",
+            extra={"case_id": str(case.pk), "county": county_str, "error": str(e)},
+        )
+        return JsonResponse(
+            {
+                "error": f"Recorder URL generation failed: {str(e)}",
+                "source": "county_recorder",
+                "search_url": None,
+                "county_info": None,
+                "notes": [],
+            },
+            status=400,
+        )
+
+    except Exception:
+        logger.exception(
+            "research_recorder_unexpected",
+            extra={"case_id": str(case.pk), "county": county_str},
+        )
+        return JsonResponse(
+            {
+                "error": "Internal error generating recorder URL",
+                "source": "county_recorder",
+                "search_url": None,
+                "county_info": None,
+                "notes": [],
+            },
+            status=500,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Government Referral API
 # ---------------------------------------------------------------------------
@@ -3777,6 +4703,7 @@ DETECTION_SORT_FIELDS = {
 }
 
 
+@csrf_exempt
 @require_http_methods(["GET", "POST"])
 def api_case_detection_collection(request, pk):
     """List detections for a case (GET) or create one manually (POST)."""
@@ -4088,7 +5015,6 @@ def api_case_dashboard(request, pk):
     )
 
     # ── Financials ─────────────────────────────────────────────
-    from .models import FinancialSnapshot
 
     snapshots = FinancialSnapshot.objects.filter(case=case).order_by("tax_year")
     years_covered = snapshots.values("tax_year").distinct().count()
@@ -4309,6 +5235,7 @@ def api_case_referral_memo(request, pk):
 # ---------------------------------------------------------------------------
 
 
+@csrf_exempt
 @require_http_methods(["POST"])
 def api_ai_summarize(request, pk):
     """Summarize a signal, entity, or other evidence target for a case.
@@ -4337,6 +5264,7 @@ def api_ai_summarize(request, pk):
     return JsonResponse(result)
 
 
+@csrf_exempt
 @require_http_methods(["POST"])
 def api_ai_connections(request, pk):
     """Suggest hidden connections between entities in a case.
@@ -4361,6 +5289,7 @@ def api_ai_connections(request, pk):
     return JsonResponse(result)
 
 
+@csrf_exempt
 @require_http_methods(["POST"])
 def api_ai_narrative(request, pk):
     """Draft an investigative narrative from detection evidence.
@@ -4394,6 +5323,7 @@ def api_ai_narrative(request, pk):
     return JsonResponse(result)
 
 
+@csrf_exempt
 @require_http_methods(["POST"])
 def api_ai_ask(request, pk):
     """Free-form AI question about a case, with multi-turn conversation support.
@@ -4421,3 +5351,399 @@ def api_ai_ask(request, pk):
         status = 429 if "Rate limit" in result["error"] else 500
         return JsonResponse(result, status=status)
     return JsonResponse(result)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Research → Case Wiring: Add to Case
+# ──────────────────────────────────────────────────────────────────────
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_research_add_to_case(request, pk):
+    """
+    Add a research result row to the case as an entity.
+
+    This endpoint turns search result data from any research source
+    (parcels, ohio-sos, ohio-aos, irs, recorder) into case entities
+    (Property, Organization, Person, or InvestigatorNote).
+
+    POST body (JSON):
+        {
+            "source": "parcels" | "ohio-sos" | "ohio-aos" | "irs" | "recorder",
+            "data": { ... }  // the row data from the search result
+        }
+
+    Returns:
+        {
+            "created": "organization" | "property" | "person" | "note",
+            "entity": { ... },  // serialized entity
+            "duplicate": false
+        }
+
+    Each source type creates different entities:
+    - parcels → Property (+ Person or Organization from owner name)
+    - ohio-sos → Organization
+    - ohio-aos → InvestigatorNote (audit results aren't entities)
+    - irs → Organization + FinancialSnapshot
+    - recorder → Error (results are URLs, not data to import)
+    """
+    case = get_object_or_404(Case, pk=pk)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse(
+            {"error": "Invalid JSON in request body"},
+            status=400,
+        )
+
+    source = body.get("source", "").strip().lower()
+    data = body.get("data", {})
+
+    if not source:
+        return JsonResponse({"error": "Missing required field: source"}, status=400)
+    if not data:
+        return JsonResponse({"error": "Missing required field: data"}, status=400)
+
+    from .entity_normalization import normalize_person_name
+
+    try:
+        # ──────────────────────────────────────────────────────────────
+        # PARCELS → Property + optional Person or Organization
+        # ──────────────────────────────────────────────────────────────
+        if source == "parcels":
+            parcel_number = data.get("pin") or data.get("parcel_number", "")
+            owner_name = data.get("owner1") or data.get("owner_name", "")
+            county = data.get("county", "")
+            acreage = data.get("acres_calc") or data.get("acres")
+            auditor_url = data.get("aud_link", "")
+
+            # Check for duplicate property by parcel number
+            existing_property = Property.objects.filter(
+                case=case, parcel_number=parcel_number
+            ).first()
+            if existing_property:
+                return JsonResponse(
+                    {
+                        "created": "property",
+                        "entity": serialize_property(existing_property),
+                        "duplicate": True,
+                    }
+                )
+
+            # Create property
+            try:
+                acreage_float = float(acreage) if acreage else None
+            except (ValueError, TypeError):
+                acreage_float = None
+
+            prop = Property.objects.create(
+                case=case,
+                parcel_number=parcel_number,
+                county=county,
+                state="OH",
+                current_owner_name=owner_name,
+                acreage=acreage_float,
+                notes=(
+                    f"Imported from County Auditor ODNR parcel search. Auditor URL: {auditor_url}"
+                ),
+            )
+
+            # Log creation
+            AuditLog.log(
+                action=AuditAction.RECORD_CREATED,
+                table_name="properties",
+                record_id=prop.pk,
+                case_id=case.pk,
+                notes=f"Property imported from parcel search (source: {source})",
+            )
+
+            # Try to create owner entity if it doesn't exist
+            owner_entity_id = None
+            owner_entity_type = None
+            if owner_name:
+                # Detect if owner is an organization (LLC, INC, CORP, etc.)
+                org_keywords = [
+                    "LLC",
+                    "INC",
+                    "CORP",
+                    "CO.",
+                    "CO,",
+                    "LTD",
+                    "TRUST",
+                    "ESTATE",
+                    "CHARITY",
+                    "NONPROFIT",
+                    "ASSOCIATION",
+                    "FOUNDATION",
+                    "SOCIETY",
+                ]
+                is_org = any(keyword in owner_name.upper() for keyword in org_keywords)
+
+                if is_org:
+                    # Check if organization already exists (case-insensitive)
+                    existing_org = Organization.objects.filter(
+                        case=case, name__iexact=owner_name
+                    ).first()
+                    if not existing_org:
+                        existing_org = Organization.objects.create(
+                            case=case,
+                            name=owner_name,
+                            org_type="OTHER",
+                            registration_state="OH",
+                            notes=f"Imported as owner from parcel {parcel_number}",
+                        )
+                        AuditLog.log(
+                            action=AuditAction.RECORD_CREATED,
+                            table_name="organizations",
+                            record_id=existing_org.pk,
+                            case_id=case.pk,
+                            notes=(
+                                f"Organization imported as property owner (parcel {parcel_number})"
+                            ),
+                        )
+                    owner_entity_id = existing_org.pk
+                    owner_entity_type = "organization"
+                else:
+                    # Create or find person
+                    normalized_name = normalize_person_name(owner_name)
+                    # Look for existing person with similar name
+                    existing_person = None
+                    all_persons = Person.objects.filter(case=case)
+                    for person in all_persons:
+                        if normalize_person_name(person.full_name) == normalized_name:
+                            existing_person = person
+                            break
+
+                    if not existing_person:
+                        existing_person = Person.objects.create(
+                            case=case,
+                            full_name=owner_name,
+                            notes=f"Imported as owner from parcel {parcel_number}",
+                        )
+                        AuditLog.log(
+                            action=AuditAction.RECORD_CREATED,
+                            table_name="persons",
+                            record_id=existing_person.pk,
+                            case_id=case.pk,
+                            notes=f"Person imported as property owner (parcel {parcel_number})",
+                        )
+                    owner_entity_id = existing_person.pk
+                    owner_entity_type = "person"
+
+            return JsonResponse(
+                {
+                    "created": "property",
+                    "entity": serialize_property(prop),
+                    "duplicate": False,
+                    "owner_entity": {
+                        "id": str(owner_entity_id),
+                        "type": owner_entity_type,
+                    }
+                    if owner_entity_id
+                    else None,
+                }
+            )
+
+        # ──────────────────────────────────────────────────────────────
+        # OHIO-SOS → Organization
+        # ──────────────────────────────────────────────────────────────
+        elif source == "ohio-sos":
+            name = data.get("business_name", "")
+            entity_number = data.get("entity_number", "")
+            status = data.get("status", "UNKNOWN")
+            filing_date_str = data.get("filing_date")
+            county = data.get("county", "")
+
+            if not name:
+                return JsonResponse(
+                    {"error": "Missing required field in data: business_name"},
+                    status=400,
+                )
+
+            # Check for duplicate organization (case-insensitive)
+            existing_org = Organization.objects.filter(case=case, name__iexact=name).first()
+            if existing_org:
+                return JsonResponse(
+                    {
+                        "created": "organization",
+                        "entity": serialize_organization(existing_org),
+                        "duplicate": True,
+                    }
+                )
+
+            # Parse formation date
+            formation_date = None
+            if filing_date_str:
+                formation_date = parse_date(filing_date_str)
+
+            org = Organization.objects.create(
+                case=case,
+                name=name,
+                org_type="OTHER",
+                registration_state="OH",
+                status=status if status in ["ACTIVE", "DISSOLVED", "REVOKED"] else "UNKNOWN",
+                formation_date=formation_date,
+                notes=f"Imported from Ohio SOS. Charter #: {entity_number}. County: {county}",
+            )
+
+            # Log creation
+            AuditLog.log(
+                action=AuditAction.RECORD_CREATED,
+                table_name="organizations",
+                record_id=org.pk,
+                case_id=case.pk,
+                notes=f"Organization imported from Ohio SOS (charter: {entity_number})",
+            )
+
+            return JsonResponse(
+                {
+                    "created": "organization",
+                    "entity": serialize_organization(org),
+                    "duplicate": False,
+                }
+            )
+
+        # ──────────────────────────────────────────────────────────────
+        # OHIO-AOS → InvestigatorNote (audit results aren't entities)
+        # ──────────────────────────────────────────────────────────────
+        elif source == "ohio-aos":
+            entity_name = data.get("entity_name", "Unknown")
+            county = data.get("county", "")
+            report_type = data.get("report_type", "")
+            period = data.get("period", "")
+            has_findings = data.get("has_findings_for_recovery", False)
+            pdf_url = data.get("pdf_url", "N/A")
+
+            note = InvestigatorNote.objects.create(
+                case=case,
+                target_type="CASE",
+                target_id=case.pk,
+                content=(
+                    f"Ohio AOS Audit: {entity_name} ({county} County)\n"
+                    f"Report Type: {report_type}\n"
+                    f"Period: {period}\n"
+                    f"Findings for Recovery: {'YES' if has_findings else 'No'}\n"
+                    f"PDF: {pdf_url}"
+                ),
+            )
+
+            # Log creation
+            AuditLog.log(
+                action=AuditAction.RECORD_CREATED,
+                table_name="investigator_notes",
+                record_id=note.pk,
+                case_id=case.pk,
+                notes=f"AOS audit note imported ({entity_name})",
+            )
+
+            return JsonResponse(
+                {
+                    "created": "note",
+                    "entity": serialize_note(note),
+                    "duplicate": False,
+                }
+            )
+
+        # ──────────────────────────────────────────────────────────────
+        # IRS → Organization + FinancialSnapshot
+        # ──────────────────────────────────────────────────────────────
+        elif source == "irs":
+            name = data.get("organization_name", "")
+            ein = data.get("ein", "")
+            state = data.get("state", "OH")
+            ruling_date = data.get("ruling_date", "")
+            deductibility_code = data.get("deductibility_code", "")
+            revocation_date = data.get("revocation_date")
+
+            if not name:
+                return JsonResponse(
+                    {"error": "Missing required field in data: organization_name"},
+                    status=400,
+                )
+
+            # Check for duplicate organization by name (case-insensitive) or EIN
+            existing_org = None
+            if ein:
+                existing_org = Organization.objects.filter(case=case, ein=str(ein)).first()
+            if not existing_org:
+                existing_org = Organization.objects.filter(case=case, name__iexact=name).first()
+
+            if existing_org:
+                return JsonResponse(
+                    {
+                        "created": "organization",
+                        "entity": serialize_organization(existing_org),
+                        "duplicate": True,
+                    }
+                )
+
+            # Create organization
+            org = Organization.objects.create(
+                case=case,
+                name=name,
+                ein=str(ein) if ein else "",
+                org_type="CHARITY",  # IRS data is for 501(c)(3) nonprofits
+                registration_state=state,
+                status="REVOKED" if revocation_date else "ACTIVE",
+                notes=(
+                    f"Imported from IRS EO BMF. Ruling date: {ruling_date}. "
+                    f"Deductibility: {deductibility_code}"
+                ),
+            )
+
+            # Log creation
+            AuditLog.log(
+                action=AuditAction.RECORD_CREATED,
+                table_name="organizations",
+                record_id=org.pk,
+                case_id=case.pk,
+                notes=f"Organization imported from IRS EO BMF (EIN: {ein})",
+            )
+
+            # Note: We don't create a FinancialSnapshot for BMF data because the model
+            # requires a source Document, and BMF data comes from an API, not an uploaded file.
+            # Financial data from BMF is embedded in the Organization notes instead.
+
+            return JsonResponse(
+                {
+                    "created": "organization",
+                    "entity": serialize_organization(org),
+                    "duplicate": False,
+                }
+            )
+
+        # ──────────────────────────────────────────────────────────────
+        # RECORDER → Error (no data to import)
+        # ──────────────────────────────────────────────────────────────
+        elif source == "recorder":
+            return JsonResponse(
+                {
+                    "error": (
+                        "Recorder results are portal links"
+                        " — use Documents tab to upload retrieved deeds."
+                    ),
+                    "source": "recorder",
+                },
+                status=400,
+            )
+
+        else:
+            return JsonResponse(
+                {"error": f"Unknown source: {source}"},
+                status=400,
+            )
+
+    except Exception as e:
+        logger.error(
+            "research_add_to_case_error",
+            extra={
+                "case_id": str(case.pk),
+                "source": source,
+                "error": str(e),
+            },
+            exc_info=True,
+        )
+        return JsonResponse(
+            {"error": f"Failed to add to case: {str(e)}"},
+            status=500,
+        )

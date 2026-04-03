@@ -23,6 +23,7 @@ import { ReferralsTab } from "./components/cases/ReferralsTab";
 import { FinancialsTab } from "./components/cases/FinancialsTab";
 import { OverviewTab } from "./components/cases/OverviewTab";
 import { PipelineTab } from "./components/cases/PipelineTab";
+import { ResearchTab } from "./components/cases/ResearchTab";
 
 export default function App() {
     // Initialize theme on mount (applies data-theme attribute to <html>)
@@ -47,6 +48,7 @@ export default function App() {
                                 <Route index element={<Navigate to="overview" replace />} />
                                 <Route path="overview" element={<OverviewTab />} />
                                 <Route path="documents" element={<DocumentsTab />} />
+                                <Route path="research" element={<ResearchTab />} />
                                 <Route path="pipeline" element={<PipelineTab />} />
                                 <Route path="financials" element={<FinancialsTab />} />
                                 <Route path="referrals" element={<ReferralsTab />} />
@@ -72,4 +74,3 @@ export default function App() {
         </ErrorBoundary>
     );
 }
-            

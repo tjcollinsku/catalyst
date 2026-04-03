@@ -1,0 +1,478 @@
+.researchTab {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.researchHeader {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.researchTitle {
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: var(--text-main);
+    margin: 0;
+}
+
+.researchDescription {
+    font-size: 0.85rem;
+    color: var(--text-soft);
+    margin: 0;
+}
+
+/* ── Search controls ────────────────────────────────── */
+
+.searchControls {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--surface-main);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.searchRow {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.searchInputGroup {
+    flex: 1;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.searchLabel {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.searchInput {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    background: var(--surface-strong);
+    color: var(--text-main);
+    transition: border-color 0.15s;
+}
+
+.searchInput:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.searchButton {
+    padding: 0.5rem 1rem;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.searchButton:hover:not(:disabled) {
+    background: var(--accent-strong);
+}
+
+.searchButton:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* ── Source tabs ────────────────────────────────────– */
+
+.sourceTabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+
+.sourceTab {
+    padding: 0.5rem 1rem;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-soft);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.sourceTab:hover {
+    color: var(--text-main);
+}
+
+.sourceTab.active {
+    color: var(--accent-strong);
+    border-bottom-color: var(--accent);
+}
+
+/* ── Results area ──────────────────────────────────– */
+
+.resultsArea {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-height: 200px;
+}
+
+.resultsEmpty {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-soft);
+}
+
+.resultsEmpty p {
+    margin: 0.5rem 0;
+}
+
+.resultsLoading {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-soft);
+    font-size: 0.9rem;
+}
+
+.resultsMeta {
+    font-size: 0.8rem;
+    color: var(--text-soft);
+    padding: 0 1rem;
+}
+
+.resultsMeta strong {
+    color: var(--text-main);
+}
+
+/* ── Results table ────────────────────────────────– */
+
+.resultsTableWrap {
+    overflow-x: auto;
+}
+
+.resultsTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.resultsTable thead {
+    background: var(--surface-strong);
+    border-bottom: 1px solid var(--border);
+}
+
+.resultsTable th {
+    padding: 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-main);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border-right: 1px solid var(--border);
+}
+
+.resultsTable th:last-child {
+    border-right: none;
+}
+
+.resultsTable tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background-color 0.1s;
+}
+
+.resultsTable tbody tr:hover {
+    background: var(--surface-strong);
+}
+
+.resultsTable td {
+    padding: 0.75rem;
+    color: var(--text-main);
+    border-right: 1px solid var(--border);
+}
+
+.resultsTable td:last-child {
+    border-right: none;
+}
+
+.resultsTable a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.resultsTable a:hover {
+    text-decoration: underline;
+}
+
+/* ── Column widths (specific to each source type) ── */
+
+.parcelPin {
+    width: 120px;
+}
+
+.parcelOwner {
+    width: 200px;
+}
+
+.parcelCounty {
+    width: 120px;
+}
+
+.parcelAcres {
+    width: 100px;
+    text-align: right;
+}
+
+.sosCharter {
+    width: 120px;
+    font-family: monospace;
+    font-size: 0.8rem;
+}
+
+.sosName {
+    width: 220px;
+}
+
+.sosStatus {
+    width: 100px;
+}
+
+.sosDate {
+    width: 100px;
+}
+
+.aosEntity {
+    width: 200px;
+}
+
+.aosCounty {
+    width: 100px;
+}
+
+.aosType {
+    width: 100px;
+}
+
+.aosFindings {
+    width: 100px;
+    text-align: center;
+}
+
+.aosFindings .findingsFlag {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: var(--critical);
+    color: white;
+}
+
+.irsEin {
+    width: 120px;
+    font-family: monospace;
+    font-size: 0.8rem;
+}
+
+.irsName {
+    width: 200px;
+}
+
+.irsStatus {
+    width: 100px;
+}
+
+.irsRevoked {
+    width: 80px;
+    text-align: center;
+}
+
+.irsRevoked .revokedFlag {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: var(--critical);
+    color: white;
+}
+
+.recorderCounty {
+    width: 150px;
+}
+
+.recorderAction {
+    width: 120px;
+    text-align: center;
+}
+
+.recorderAction button {
+    padding: 4px 8px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.recorderAction button:hover {
+    background: var(--accent-strong);
+}
+
+/* ── Add to Case buttons ────────────────────────────────– */
+
+.addButton {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border: 1px solid var(--accent);
+    background: transparent;
+    color: var(--accent-strong);
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+    font-family: inherit;
+}
+
+.addButton:hover:not(:disabled) {
+    background: var(--accent);
+    color: #fff;
+}
+
+.addButton:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.addedButton {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border: 1px solid #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+    color: #22c55e;
+    border-radius: 4px;
+    cursor: default;
+    white-space: nowrap;
+    display: inline-block;
+}
+
+/* ── Notes and warnings ────────────────────────────– */
+
+.notesSection {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1rem;
+    background: var(--surface-main);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+.notesTitle {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-main);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin: 0;
+}
+
+.notesList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.notesList li {
+    font-size: 0.8rem;
+    color: var(--text-soft);
+    margin: 0.25rem 0;
+    padding-left: 1.25rem;
+    position: relative;
+}
+
+.notesList li:before {
+    content: "→";
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+}
+
+.warningBox {
+    padding: 0.75rem;
+    margin-top: 0.5rem;
+    border-left: 3px solid var(--warn);
+    background: rgba(251, 191, 36, 0.05);
+    border-radius: 2px;
+}
+
+.warningBox.critical {
+    border-left-color: var(--critical);
+    background: rgba(239, 68, 68, 0.05);
+}
+
+.warningTitle {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--warn);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin: 0 0 0.25rem 0;
+}
+
+.warningBox.critical .warningTitle {
+    color: var(--critical);
+}
+
+.warningMessage {
+    font-size: 0.8rem;
+    color: var(--text-soft);
+    margin: 0;
+}
+
+/* ── Error state ───────────────────────────────────– */
+
+.errorBox {
+    padding: 1rem;
+    background: rgba(239, 68, 68, 0.05);
+    border: 1px solid var(--critical);
+    border-radius: 4px;
+    color: var(--critical);
+}
+
+.errorTitle {
+    font-weight: 600;
+    margin: 0 0 0.5rem 0;
+}
+
+.errorMessage {
+    font-size: 0.85rem;
+    margin: 0;
+}
