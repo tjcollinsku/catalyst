@@ -4556,7 +4556,7 @@ def api_research_recorder(request, pk):
             extra={
                 "case_id": str(case.pk),
                 "county": county_str,
-                "name": name,
+                "search_name": name,
             },
         )
 
