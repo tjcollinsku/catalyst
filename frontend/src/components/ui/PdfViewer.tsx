@@ -51,8 +51,6 @@ export function PdfViewer({ document: doc, caseId, onClose }: PdfViewerProps) {
         return () => window.removeEventListener("keydown", handleKey);
     }, [onClose]);
 
-    // TODO: Use for embedded PDF preview when implemented
-    // const fileUrl = doc.file_path ? `/media/${doc.file_path}` : `/media/${doc.id}/`;
     const is990 = doc.doc_type === "IRS_990" || doc.doc_type === "IRS_990T";
 
     function handleClose() {
@@ -101,9 +99,16 @@ export function PdfViewer({ document: doc, caseId, onClose }: PdfViewerProps) {
 
                     {activeTab === "pdf" && (
                         <div className={styles.embed}>
-                            <p className={styles.placeholder}>
-                                PDF preview not yet implemented. Document: <strong>{doc.filename}</strong>
-                            </p>
+                            {detail?.extracted_text ? (
+                                <pre className={styles.extractedText}>{detail.extracted_text}</pre>
+                            ) : loading ? (
+                                <p className={styles.placeholder}>Loading document text...</p>
+                            ) : (
+                                <p className={styles.placeholder}>
+                                    No extracted text available for <strong>{doc.filename}</strong>.
+                                    {doc.ocr_status === "PENDING" && " Run OCR processing to extract text from this document."}
+                                </p>
+                            )}
                         </div>
                     )}
 

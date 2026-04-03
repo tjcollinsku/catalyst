@@ -76,6 +76,14 @@ const SEV_CLASS: Record<string, string> = {
     INFORMATIONAL: styles.sevInfo,
 };
 
+const CARD_SEV_CLASS: Record<string, string> = {
+    CRITICAL: styles.cardSevCritical,
+    HIGH: styles.cardSevHigh,
+    MEDIUM: styles.cardSevMedium,
+    LOW: styles.cardSevLow,
+    INFORMATIONAL: styles.cardSevInfo,
+};
+
 /* ── Main component ──────────────────────────────────────── */
 
 export function PipelineTab() {
@@ -239,7 +247,7 @@ export function PipelineTab() {
         return (
             <div
                 key={item.id}
-                className={`${styles.card} ${isSelected ? styles.cardSelected : ""}`}
+                className={`${styles.card} ${CARD_SEV_CLASS[item.severity] ?? ""} ${isSelected ? styles.cardSelected : ""}`}
                 onClick={() => setSelectedItemId(isSelected ? null : item.id)}
                 style={{
                     ...(isSaving ? { opacity: 0.6, pointerEvents: "none" as const } : {}),

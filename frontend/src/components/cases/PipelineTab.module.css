@@ -52,10 +52,12 @@
 
 .card {
     background: var(--surface-1);
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
     border-radius: var(--radius-md);
     padding: 0.75rem 1rem;
     cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
     transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
     animation: rise-in 350ms ease both;
     animation-delay: calc(var(--card-i, 0) * 50ms);
@@ -63,9 +65,17 @@
 
 .card:hover {
     border-color: var(--accent);
+    border-left-color: var(--accent);
     transform: translateY(-2px);
-    box-shadow: var(--shadow-card);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
+
+/* Severity-colored left border on cards */
+.cardSevCritical { border-left-color: #ef4444; }
+.cardSevHigh { border-left-color: #f97316; }
+.cardSevMedium { border-left-color: #fbbf24; }
+.cardSevLow { border-left-color: #60a5fa; }
+.cardSevInfo { border-left-color: var(--text-soft); }
 
 .cardSelected {
     border-color: var(--accent);

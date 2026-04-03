@@ -36,6 +36,10 @@
     font-size: 0.8rem;
     color: var(--text-soft);
     margin-bottom: 1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
 }
 
 /* ── Tab bar ── */

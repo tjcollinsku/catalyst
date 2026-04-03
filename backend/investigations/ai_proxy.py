@@ -27,10 +27,41 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 from typing import Any
 
 logger = logging.getLogger("catalyst.ai_proxy")
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+# UUID v4 regex: 8-4-4-4-12 hex digits
+_UUID_RE = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+
+
+def _strip_id_prefix(prefixed_id: str) -> str:
+    """Extract raw UUID from a frontend-prefixed ID like 'signal-dfdb45aa-...'
+
+    The frontend prepends type prefixes (signal-, detection-, finding-,
+    entity-, etc.) to UUIDs for React list keys.  The backend needs
+    the raw UUID for database queries.
+    """
+    if not prefixed_id:
+        return prefixed_id
+    # If it's already a bare UUID, return as-is
+    if _UUID_RE.match(prefixed_id):
+        return prefixed_id
+    # Otherwise strip everything before the first UUID
+    m = _UUID_RE.search(prefixed_id)
+    if m:
+        return m.group(0)
+    return prefixed_id
+
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -383,17 +414,20 @@ def ai_summarize(case, target_type: str, target_id: str) -> dict:
     if not _check_rate_limit(str(case.pk)):
         return {"error": "Rate limit exceeded. Try again in a minute."}
 
+    # Strip frontend type prefixes (e.g. "signal-uuid" → "uuid")
+    clean_id = _strip_id_prefix(target_id)
+
     if target_type == "signal":
         from .models import Signal
 
         signal = (
-            Signal.objects.filter(pk=target_id, case=case).select_related("trigger_doc").first()
+            Signal.objects.filter(pk=clean_id, case=case).select_related("trigger_doc").first()
         )
         if not signal:
             return {"error": "Signal not found."}
         context = _build_signal_context(signal)
     else:
-        context = _build_entity_context(target_type, target_id, case)
+        context = _build_entity_context(target_type, clean_id, case)
 
     if not context.strip():
         return {"error": "No data found for this target."}
@@ -444,6 +478,9 @@ Respond ONLY with valid JSON:
 
 def ai_connections(case, entity_id: str | None = None) -> dict:
     """Suggest entity connections. Uses Sonnet for deeper analysis."""
+    # Strip frontend type prefix from entity_id
+    if entity_id:
+        entity_id = _strip_id_prefix(entity_id)
     ck = _cache_key("connections", str(case.pk), entity_id or "all")
     cached = _cache_get(ck)
     if cached:
@@ -510,6 +547,8 @@ Respond ONLY with valid JSON:
 
 def ai_narrative(case, detection_ids: list[str], tone: str = "formal") -> dict:
     """Draft a finding narrative from detection evidence. Uses Sonnet."""
+    # Strip frontend type prefixes from detection IDs
+    detection_ids = [_strip_id_prefix(did) for did in detection_ids]
     sorted_ids = sorted(detection_ids)
     ck = _cache_key("narrative", str(case.pk), ",".join(sorted_ids), tone)
     cached = _cache_get(ck)

@@ -259,6 +259,7 @@ export interface DocumentOrgLink {
 export interface DocumentDetail extends DocumentItem {
     extraction_status: string;
     extraction_notes: string;
+    extracted_text: string;
     persons: DocumentPersonLink[];
     organizations: DocumentOrgLink[];
     financial_snapshots: FinancialSnapshotItem[];

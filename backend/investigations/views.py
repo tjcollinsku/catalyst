@@ -116,19 +116,26 @@ def _save_financial_snapshot(document, case, financials, meta):
         "raw_extraction": {"financials": financials, "meta": meta},
     }
 
-    # Map current_year values
+    # Map extracted values to model fields.
+    # The extraction function returns items with keys: "field", "raw", "value"
+    # We also support the legacy format with keys: "key", "current_year", "prior_year"
     for item in financials:
-        model_field = _KEY_MAP.get(item["key"])
-        if model_field and item.get("current_year") is not None:
-            defaults[model_field] = item["current_year"]
+        # Normalize key name: extraction uses "field", legacy uses "key"
+        field_key = item.get("key") or item.get("field", "")
+        model_field = _KEY_MAP.get(field_key)
+        # Normalize value: extraction uses "value", legacy uses "current_year"
+        val = item.get("current_year") if item.get("current_year") is not None else item.get("value")
+        if model_field and val is not None:
+            defaults[model_field] = val
 
     # Also store prior_year values as BOY where applicable
     for item in financials:
-        if item["key"] == "total_assets" and item.get("prior_year") is not None:
+        field_key = item.get("key") or item.get("field", "")
+        if field_key == "total_assets" and item.get("prior_year") is not None:
             defaults["total_assets_boy"] = item["prior_year"]
-        elif item["key"] == "total_liabilities" and item.get("prior_year") is not None:
+        elif field_key == "total_liabilities" and item.get("prior_year") is not None:
             defaults["total_liabilities_boy"] = item["prior_year"]
-        elif item["key"] == "net_assets" and item.get("prior_year") is not None:
+        elif field_key == "net_assets" and item.get("prior_year") is not None:
             defaults["net_assets_boy"] = item["prior_year"]
 
     # Try to find the org this 990 belongs to
@@ -1587,6 +1594,8 @@ def api_case_document_detail(request, pk, document_id):
 
     # GET — return document with linked entities and financial data
     data = serialize_document(document)
+    # Include extracted text for the document viewer (only on detail endpoint)
+    data["extracted_text"] = document.extracted_text or ""
 
     # Linked persons
     from .models import OrgDocument, PersonDocument

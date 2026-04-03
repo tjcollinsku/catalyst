@@ -241,11 +241,23 @@ _PERSON_STOPWORDS: set[str] = {
     "inc",
     "corp",
     "ltd",
-    # Common OCR junk
+    # Common OCR junk / sentence fragments
     "example_city",
     "example_township",
     "maria",
     "stein",  # Example Charity case city names
+    "my",
+    "hand",
+    "an",
+    "authorized",
+    "representative",
+    "undersigned",
+    "behalf",
+    "witness",
+    "whereof",
+    "hereto",
+    "herein",
+    "thereof",
     "executive",
     "ceo",
     "director",
@@ -456,6 +468,41 @@ _ORG_STOPWORDS: set[str] = {
     "am",
     "ul",
     "li",
+    # Business-type descriptors that are NOT org names
+    "domestic",
+    "foreign",
+    "limited",
+    "liability",
+    "profit",
+    "for-profit",
+    "not-for-profit",
+    "professional",
+    "general",
+    "registered",
+    "authorized",
+    "canceled",
+    "dissolved",
+    "active",
+    "inactive",
+    "dom",
+}
+
+# Full phrases that are generic business type labels, NOT real org names
+_ORG_REJECT_PHRASES: set[str] = {
+    "domestic limited liability company",
+    "domestic for-profit limited liability company",
+    "domestic nonprofit limited liability company",
+    "domestic for profit limited liability company",
+    "domestic non-profit limited liability company",
+    "limited liability company",
+    "limited liability partners",
+    "limited liability partnership",
+    "professional corp",
+    "professional corporation",
+    "tax canceled corp",
+    "tax canceled corporation",
+    "dom llc",
+    "dom. llc",
 }
 
 
@@ -465,10 +512,21 @@ def _is_plausible_org_name(name: str) -> bool:
     organization rather than 990 form boilerplate.
 
     Rules:
-      1. After stripping legal designators and stopwords, at least one
+      1. Reject known generic business-type phrases outright.
+      2. After stripping legal designators and stopwords, at least one
          substantive word (3+ chars) must remain — that's the actual org name.
-      2. The full name must be at least 2 tokens.
+      3. The full name must be at least 2 tokens.
+      4. Reject names that contain IRS 990 section headers.
     """
+    # Reject full phrases that are generic business type labels
+    normalized = " ".join(name.lower().split())
+    if normalized in _ORG_REJECT_PHRASES:
+        return False
+
+    # Reject if the name contains section/part header patterns
+    if re.search(r"section\s+[a-z]\.", normalized, re.IGNORECASE):
+        return False
+
     tokens = name.replace(",", " ").replace(".", " ").split()
     if len(tokens) < 2:
         return False
