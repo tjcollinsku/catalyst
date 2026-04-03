@@ -1,5 +1,5 @@
 # CLAUDE.md — Catalyst System Map
-**Last updated:** 2026-04-03 (Session 28)
+**Last updated:** 2026-04-03 (Session 29)
 **Owner:** Tyler Collins (tjcollinsku@gmail.com)
 **Purpose:** This is the single source of truth for the entire Catalyst system. Read this FIRST before doing any work.
 
@@ -98,22 +98,24 @@ This is the #1 problem. We have 6 data source connectors. Here is their actual s
 
 ### CONNECTOR WIRING STATUS
 
-| Connector | Backend File | Has Endpoint? | Frontend Calls It? | User Can Use It? |
-|-----------|-------------|---------------|--------------------|--------------------|
-| ProPublica | propublica_connector.py | YES (`/api/cases/<uuid>/fetch-990s/`) | **NO** — no button exists | **NO** |
-| County Recorder | county_recorder_connector.py | YES (`/research/recorder/`) + auto DEED | Research tab (URL builder) | **YES** (Session 28) |
-| County Auditor | county_auditor_connector.py | YES (`/research/parcels/`) | Research tab | **YES** (Session 28) |
-| IRS (Pub 78/BMF) | irs_connector.py | YES (`/research/irs/`) | Research tab | **YES** (Session 28) |
-| Ohio SOS | ohio_sos_connector.py | YES (`/research/ohio-sos/`) | Research tab | **YES** (Session 28) |
-| Ohio AOS | ohio_aos_connector.py | YES (`/research/ohio-aos/`) | Research tab | **YES** (Session 28) |
+| Connector | Backend File | Has Endpoint? | Frontend Calls It? | Works on Railway? | Root Cause if Broken |
+|-----------|-------------|---------------|--------------------|--------------------|----------------------|
+| ProPublica | propublica_connector.py | YES (`/api/cases/<uuid>/fetch-990s/`) | **NO** — no button exists | Untested | No UI button |
+| County Recorder | county_recorder_connector.py | YES (`/research/recorder/`) + auto DEED | Research tab (URL builder) | **YES** ✅ | — |
+| County Auditor | county_auditor_connector.py | YES (`/research/parcels/`) | Research tab | **NO** ❌ | ODNR ArcGIS API returning 404; fallback URL times out |
+| IRS (Pub 78/BMF) | irs_connector.py | YES (`/research/irs/`) | Research tab | **NO** ❌ | Bulk CSV download — same pattern as SOS, likely fails |
+| Ohio SOS | ohio_sos_connector.py | YES (`/research/ohio-sos/`) | Research tab | **NO** ❌ | HTTP 403 — SOS file server blocking Railway IP |
+| Ohio AOS | ohio_aos_connector.py | YES (`/research/ohio-aos/`) | Research tab | **YES** ✅ | — |
 
-**Session 28 update:** 5 of 6 connectors now have endpoints AND frontend UI in the Research tab. ProPublica fetch-990s still needs a UI button. Results currently display-only — "Add to Case" wiring is the next step.
+**Session 29 update:** Tested all connectors on production. 2 of 6 confirmed working (AOS, Recorder). 3 broken due to external API issues (ODNR down, SOS blocking, IRS untested but same pattern). ProPublica still has no UI. AOS was rewritten to use ASP.NET ViewState postback. Recorder had logger crash (`name` is reserved in Python LogRecord).
 
 ### WHAT NEEDS TO BE BUILT
 
-1. **Backend endpoints** for each connector (views.py functions + urls.py routes)
-2. **Frontend Research tab** on Case Detail page with search forms that call those endpoints
-3. **Result-to-case wiring** — when a connector returns data, auto-create entities/financials/documents in the case
+1. **IRSx integration** — Replace bulk CSV approach with IRSx library (pulls 990 XML from AWS S3). Fixes reliability AND gets full Part IV/VI/VII data.
+2. **Ohio SOS alternative** — Switch from bulk file download to web scraping (avoids 403 block from Railway).
+3. **ODNR parcel API** — Monitor if ArcGIS endpoint recovers, or find new URL. Both primary and fallback URLs currently unreachable from Railway.
+4. **Result-to-case wiring** — "Add to Case" buttons exist but need testing on working connectors (AOS, Recorder).
+5. **ProPublica UI button** — Add fetch-990s button to frontend (low priority if IRSx replaces it).
 
 ---
 
@@ -396,11 +398,22 @@ Results visible in Pipeline tab (Signals → Detections → Findings)
 - API test pagination bug (expected list, got paginated dict) — FIXED
 - 8 production bugs fixed in commit 79dcc78
 
+### Fixed (Session 29)
+- Frontend crash: "Cannot read properties of undefined (reading 'length')" — added `notes: []` to IRS/SOS responses + optional chaining on frontend
+- Ohio AOS HTTP 404 — rewrote connector from GET `searchresults.aspx` to POST `search.aspx` with ASP.NET ViewState postback
+- County Recorder 500 — `"name"` is reserved in Python LogRecord, renamed to `"search_name"` in logger.info extra dict
+- County Recorder response format — restructured from `search_url`/`county_info` to standard `results`/`count` array
+- County enum case mismatch — frontend sends "Darke", backend expected "DARKE"; added `.upper()` normalization
+- Null byte corruption — cleaned `\x00` bytes from 4 files (views.py, App.tsx, form990_parser.py, urls.py)
+
 ### Known Issues
 - Git pre-commit hook points to Windows Python path (doesn't work in sandbox)
 - form990_parser.py not integrated into extraction pipeline
 - ProPublica fetch endpoint has no UI button
-- 4 connectors completely disconnected from app
+- ODNR ArcGIS parcel API returning 404 from Railway (both primary and fallback URLs)
+- Ohio SOS bulk file server returning HTTP 403 from Railway (all 4 CSV files blocked)
+- IRS bulk EO BMF download likely fails on Railway (same pattern as SOS — untested)
+- Null bytes occasionally appear at end of files written by Cowork Edit tool; pre-commit hooks fix them but require re-stage
 
 ---
 
@@ -436,19 +449,19 @@ Results visible in Pipeline tab (Signals → Detections → Findings)
 
 ---
 
-## CURRENT PRIORITIES (Session 28)
+## CURRENT PRIORITIES (Session 30)
 
-### Priority 1: Wire Connectors to UI
-Build Research tab on Case Detail page. Create backend endpoints for each connector. Let investigators search from within the app.
+### Priority 1: IRSx Integration (YELLOW — Tyler confirmed)
+Replace bulk CSV IRS connector with IRSx library. IRSx pulls 990 XML directly from AWS S3 (s3://irs-form-990/), which is reliable from Railway. Gets full Part IV/VI/VII governance data that signal rules need. This also makes ProPublica connector obsolete for financial data.
 
-### Priority 2: IRS XML Connector
-Replace ProPublica (summary only) with IRS bulk XML from AWS S3 using IRSx library. Gets full Part IV/VI/VII data that signal rules need.
+### Priority 2: Ohio SOS Alternative Approach
+Current approach downloads 4 bulk CSV files (~50MB each) from publicfiles.ohiosos.gov — Railway gets HTTP 403. Options: (A) web scrape the SOS search page directly, (B) cache bulk files in S3/R2 on a schedule. Option A is simpler.
 
-### Priority 3: Integrate form990_parser.py
+### Priority 3: ODNR Parcel API Recovery
+Both ArcGIS endpoints (gis.ohiodnr.gov primary + geo1.oit.ohio.gov fallback) unreachable from Railway. Monitor for recovery. Alternative: Ohio Parcels Hub (ohioparcels-geohio.hub.arcgis.com) may have a different API endpoint.
+
+### Priority 4: Integrate form990_parser.py
 After classification identifies a 990, run form990_parser to extract governance data (Part IV checklist, Part VI board composition, Part VII compensation table).
-
-### Priority 4: Ohio SOS Document Fetch
-Use bizimage.ohiosos.gov API to auto-download SOS filing PDFs instead of manual download.
 
 ---
 
@@ -465,7 +478,7 @@ Located in `docs/team/`:
 
 ## SESSION HISTORY
 
-27 sessions completed. Key milestones:
+29 sessions completed. Key milestones:
 - Sessions 1-5: Initial Django + React scaffold, models, basic CRUD
 - Sessions 6-10: Entity extraction, signal rules, document processing pipeline
 - Sessions 11-15: Connectors (Ohio SOS, county auditor/recorder, ProPublica)
@@ -474,6 +487,7 @@ Located in `docs/team/`:
 - Session 26: Production bug fixes, CSRF fixes, API health check suite
 - Session 27: 8 production bugs fixed, frontend redesign complete
 - Session 28: System audit, CLAUDE.md creation, 5 research endpoints built, Research tab frontend built, all connectors wired to UI
+- Session 29: Production debugging — fixed frontend crash (missing `notes` field), rewrote Ohio AOS connector (ASP.NET postback), fixed county enum case mismatch, fixed recorder logger crash, added ODNR fallback URL. Result: Ohio AOS + County Recorder confirmed working on Railway. ODNR/SOS/IRS blocked by external API issues. Commits: 4578786, f5b6325, 7ae653b, plus logger fix.
 
 ---
 
