@@ -149,6 +149,9 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
@@ -188,11 +191,19 @@ LOGGING = {
         "upload_json": {
             "()": "investigations.logging_utils.JsonKeyValueFormatter",
         },
+        "verbose": {
+            "format": "{levelname} {asctime} {name} {message}",
+            "style": "{",
+        },
     },
     "handlers": {
         "upload_pipeline_console": {
             "class": "logging.StreamHandler",
             "formatter": "upload_json",
+        },
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
         },
     },
     "loggers": {
@@ -201,24 +212,24 @@ LOGGING = {
             "level": UPLOAD_PIPELINE_LOG_LEVEL,
             "propagate": False,
         },
+        "django": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "investigations": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
 }
 
 # ---------------------------------------------------------------------------
 # API Token Authentication (SEC-001)
-# ---------------------------------------------------------------------------
-# Load token from environment. If CATALYST_API_TOKEN is set, auth is active.
-# If not set, behavior depends on context:
-#   - In production (DEBUG=False): auth is REQUIRED — server refuses to
-#     start without a token, preventing unauthenticated deployment.
-#   - In development (DEBUG=True): auth is optional — requests pass
-#     through without a token for frictionless local work.
-#
-# To set up:
-#   1. Generate a token:
-#      python -c "import secrets; print(secrets.token_urlsafe(32))"
-#   2. Add to .env:  CATALYST_API_TOKEN=<your-token>
-#   3. Pass in requests:  Authorization: Bearer <token>
-# ---------------------------------------------------------------------------
-_raw_token = os.getenv("CATALYST_API_TOKEN", "").strip()
-CATALYST_API_TOKENS: set[str] = {_raw_token} if _raw_token else set()
+# ---------------
