@@ -3,6 +3,8 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
     plugins: [react()],
+    // In production, assets are served by WhiteNoise under /static/frontend/
+    base: process.env.NODE_ENV === "production" ? "/static/frontend/" : "/",
     server: {
         port: 5173,
         proxy: {
