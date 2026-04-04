@@ -153,6 +153,17 @@ urlpatterns = [
         views.api_case_graph,
         name="api_case_graph",
     ),
+    # Admin endpoints (SOS CSV management)
+    path(
+        "api/admin/upload-sos-csv/",
+        views.api_admin_upload_sos_csv,
+        name="api_admin_upload_sos_csv",
+    ),
+    path(
+        "api/admin/sos-csv-status/",
+        views.api_admin_sos_csv_status,
+        name="api_admin_sos_csv_status",
+    ),
     # AI endpoints (Phase 5)
     path(
         "api/cases/<uuid:pk>/ai/summarize/",

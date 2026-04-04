@@ -1,80 +1,63 @@
 """
 Ohio Secretary of State Business Search connector for Catalyst.
 
-Strategy: bulk file download + local search + staleness warning.
+Strategy: LOCAL CSV files + search + staleness warning.
 
-Why not a live scraper?
-    The Ohio SOS business search portal (businesssearch.ohiosos.gov) is
-    protected by Cloudflare bot detection. A requests-based scraper is blocked
-    before it sees any HTML. A browser-automation scraper would be fragile and
-    ethically murky for an investigative tool.
-
-Why bulk files?
+How it works (Session 30 rewrite):
     The Ohio SOS publishes free monthly CSV exports of all new business filings
-    and amendments at publicfiles.ohiosos.gov. These are:
-        - Stable direct download URLs (no bot detection)
-        - Updated on the second Saturday of each month
-        - Sufficient for Catalyst's core use case: does this entity exist?
-          When was it formed? Who is the statutory agent?
+    at publicfiles.ohiosos.gov. Railway's IP is blocked (HTTP 403), so we use
+    a local-file approach:
+
+    1. Tyler downloads the CSV files from his home PC (residential IPs work)
+    2. Uploads them to Railway via POST /api/admin/upload-sos-csv/
+    3. Files are stored on Railway's persistent disk at SOS_DATA_DIR
+    4. Searches read from local disk — fast, reliable, no external calls
+
+    The old fetch_report() remote download is kept as a fallback but is
+    expected to fail on Railway. search_ohio() tries local files first.
 
 The staleness design (human-in-the-loop):
-    Every search result is accompanied by a StalenessWarning that tells the
-    investigator:
-        - When the bulk file was downloaded
-        - How many days ago that was
-        - Whether to manually verify recent filings at businesssearch.ohiosos.gov
-
-    This is intentional. The founding investigation found a deceased person's
-    signature on a filing made 153 days after his death — that kind of anomaly
-    requires human eyes on the actual filing documents. The staleness warning
-    is the system's explicit reminder that automated data has a cutoff and
-    human review is required for anything recent.
-
-Future state:
-    Multi-state support is planned for Phase 5. Each state connector should
-    expose the same public interface (search_entities, fetch_report) so Catalyst
-    can query them interchangeably. Ohio is the only state implemented now
-    because the founding investigation is Ohio-based.
+    Every search result includes a StalenessWarning showing when the CSV
+    was uploaded. This reminds the investigator that the data has a cutoff
+    and manual verification may be needed for recent filings.
 
 File URL reference (second Saturday of each month):
-    New Nonprofit Corps:   https://publicfiles.ohiosos.gov/free/OnlineBusinessReports/WI0070R.TXT
-    New For-Profit Corps:  https://publicfiles.ohiosos.gov/free/OnlineBusinessReports/WI0050R.TXT
-    New LLCs (Domestic):   https://publicfiles.ohiosos.gov/free/OnlineBusinessReports/WI0100R.TXT
-    New LLCs (Foreign):    https://publicfiles.ohiosos.gov/free/OnlineBusinessReports/WI0090R.TXT
-    New LPs (Domestic):    https://publicfiles.ohiosos.gov/free/OnlineBusinessReports/WI0120R.TXT
-    Amendments:            https://publicfiles.ohiosos.gov/free/OnlineBusinessReports/WI0250R.TXT
-    Dissolutions:          https://publicfiles.ohiosos.gov/free/OnlineBusinessReports/WI0220R.TXT
-    Reinstatements:        https://publicfiles.ohiosos.gov/free/OnlineBusinessReports/WI0240R.TXT
+    New Nonprofit Corps:   WI0070R.TXT
+    New For-Profit Corps:  WI0050R.TXT
+    New LLCs (Domestic):   WI0100R.TXT
+    New LLCs (Foreign):    WI0090R.TXT
+    New LPs (Domestic):    WI0120R.TXT
+    Amendments:            WI0250R.TXT
+    Dissolutions:          WI0220R.TXT
+    Reinstatements:        WI0240R.TXT
 
 Usage:
     from investigations.ohio_sos_connector import (
-        fetch_report,
-        search_entities,
-        load_reports,
-        OhioSOSError,
-        ReportType,
+        search_ohio, search_entities, OhioSOSError, ReportType,
+        save_uploaded_csv, get_local_file_status,
     )
 
-    # Download and search nonprofit corps filed this month
-    records = fetch_report(ReportType.NONPROFIT_CORPS)
-    results = search_entities("Example Charity Ministries", records)
-    for r in results.matches:
-        print(r.charter_number, r.business_name, r.effective_date)
-    print(results.staleness_warning)
+    # Search local CSV files (preferred)
+    result = search_ohio("Example Charity Ministries")
 
-    # Or load multiple report types at once and search across all
-    all_records = load_reports([ReportType.NONPROFIT_CORPS, ReportType.LLC_DOMESTIC])
-    results = search_entities("Example Charity", all_records)
+    # Check what files are available locally
+    status = get_local_file_status()
+
+    # Save an uploaded CSV file
+    save_uploaded_csv("WI0070R.TXT", file_bytes)
 """
 
 from __future__ import annotations
 
 import csv
 import io
+import json
 import logging
+import os
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from enum import Enum
+from pathlib import Path
 
 import requests
 
@@ -89,9 +72,17 @@ BASE_URL = "https://publicfiles.ohiosos.gov/free/OnlineBusinessReports"
 REQUEST_TIMEOUT = (5, 60)  # connect, read — files can be large
 
 HEADERS = {
-    "User-Agent": "Catalyst/2.0 (Intelligence Triage Platform; investigative use)",
+    "User-Agent": ("Catalyst/2.0 (Intelligence Triage Platform; investigative use)"),
     "Accept": "text/plain,text/csv,*/*",
 }
+
+# Local CSV storage directory.
+# On Railway this persists across deploys if using a volume mount.
+# Falls back to a directory inside the project for local dev.
+SOS_DATA_DIR = Path(os.environ.get("SOS_DATA_DIR", "/data/sos_csv"))
+
+# Metadata file tracks when each CSV was uploaded
+SOS_METADATA_FILE = SOS_DATA_DIR / "_metadata.json"
 
 # Staleness thresholds (days since file was downloaded)
 STALENESS_LOW_DAYS = 7  # informational — file is reasonably fresh
@@ -469,7 +460,177 @@ def _build_staleness_warning(downloaded_at: datetime) -> StalenessWarning:
 
 
 # ---------------------------------------------------------------------------
-# Public API — Fetch a single report
+# Local CSV file management (Session 30 — Option A)
+# ---------------------------------------------------------------------------
+
+
+def _read_metadata() -> dict:
+    """Read the metadata JSON that tracks upload timestamps."""
+    if SOS_METADATA_FILE.exists():
+        try:
+            return json.loads(SOS_METADATA_FILE.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
+def _write_metadata(meta: dict) -> None:
+    """Write the metadata JSON."""
+    SOS_METADATA_FILE.write_text(json.dumps(meta, indent=2))
+
+
+def save_uploaded_csv(
+    filename: str,
+    content: bytes,
+) -> dict:
+    """
+    Save an uploaded Ohio SOS CSV file to local storage.
+
+    Called by the upload endpoint. Stores the file on disk and
+    records the upload timestamp in metadata.
+
+    Args:
+        filename: Original filename (e.g. "WI0070R.TXT")
+        content:  Raw file bytes
+
+    Returns:
+        Dict with status info: filename, size, uploaded_at
+    """
+    # Validate filename matches a known report type
+    valid_filenames = {rt.value for rt in ReportType}
+    fname_upper = filename.upper()
+    if fname_upper not in valid_filenames:
+        raise OhioSOSError(
+            f"Unknown SOS file: {filename}. Expected one of: {sorted(valid_filenames)}"
+        )
+
+    # Ensure directory exists
+    SOS_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Save the file
+    file_path = SOS_DATA_DIR / fname_upper
+    file_path.write_bytes(content)
+
+    # Update metadata with upload timestamp
+    meta = _read_metadata()
+    now = datetime.now(tz=timezone.utc)
+    meta[fname_upper] = {
+        "uploaded_at": now.isoformat(),
+        "size_bytes": len(content),
+    }
+    _write_metadata(meta)
+
+    logger.info(
+        "ohio_sos_upload: saved %s (%d bytes)",
+        fname_upper,
+        len(content),
+    )
+
+    return {
+        "filename": fname_upper,
+        "size_bytes": len(content),
+        "uploaded_at": now.isoformat(),
+    }
+
+
+def get_local_file_status() -> list[dict]:
+    """
+    Return status of all local SOS CSV files.
+
+    Shows which files exist, when they were uploaded, and how
+    stale they are. Used by the upload management UI and health
+    checks.
+    """
+    meta = _read_metadata()
+    now = datetime.now(tz=timezone.utc)
+    status = []
+
+    for rt in ReportType:
+        fname = rt.value
+        file_path = SOS_DATA_DIR / fname
+        entry = {
+            "filename": fname,
+            "report_type": rt.name,
+            "exists": file_path.exists(),
+            "uploaded_at": None,
+            "days_old": None,
+            "size_bytes": None,
+        }
+        if fname in meta:
+            uploaded_str = meta[fname].get("uploaded_at")
+            if uploaded_str:
+                uploaded_at = datetime.fromisoformat(uploaded_str)
+                if uploaded_at.tzinfo is None:
+                    uploaded_at = uploaded_at.replace(tzinfo=timezone.utc)
+                entry["uploaded_at"] = uploaded_str
+                entry["days_old"] = (now - uploaded_at).days
+                entry["size_bytes"] = meta[fname].get("size_bytes")
+        status.append(entry)
+
+    return status
+
+
+def _load_local_reports(
+    report_types: list[ReportType],
+) -> list[EntityRecord]:
+    """
+    Load records from locally stored CSV files.
+
+    Returns combined records from all requested report types that
+    exist on disk. Skips any files that haven't been uploaded yet.
+    """
+    meta = _read_metadata()
+    all_records: list[EntityRecord] = []
+
+    for rt in report_types:
+        fname = rt.value
+        file_path = SOS_DATA_DIR / fname
+
+        if not file_path.exists():
+            logger.info(
+                "ohio_sos_local: %s not found on disk, skipping",
+                fname,
+            )
+            continue
+
+        # Get upload timestamp from metadata
+        uploaded_str = meta.get(fname, {}).get("uploaded_at")
+        if uploaded_str:
+            downloaded_at = datetime.fromisoformat(uploaded_str)
+            if downloaded_at.tzinfo is None:
+                downloaded_at = downloaded_at.replace(tzinfo=timezone.utc)
+        else:
+            # File exists but no metadata — use file mtime
+            mtime = file_path.stat().st_mtime
+            downloaded_at = datetime.fromtimestamp(mtime, tz=timezone.utc)
+
+        # Read and parse
+        try:
+            raw = file_path.read_bytes()
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                text = raw.decode("latin-1")
+
+            records = _parse_records(text, rt, downloaded_at)
+            all_records.extend(records)
+            logger.info(
+                "ohio_sos_local: loaded %d records from %s",
+                len(records),
+                fname,
+            )
+        except Exception as e:
+            logger.error(
+                "ohio_sos_local: error reading %s: %s",
+                fname,
+                e,
+            )
+
+    return all_records
+
+
+# ---------------------------------------------------------------------------
+# Public API — Fetch a single report (remote — fallback only)
 # ---------------------------------------------------------------------------
 
 
@@ -688,30 +849,48 @@ def search_ohio(
     fuzzy: bool = False,
 ) -> SearchResult:
     """
-    One-call convenience function: download the default report types and
-    search across all of them.
+    Search Ohio SOS entity data. Tries local CSV files first,
+    falls back to remote download if no local files exist.
 
-    This is the simplest way to use the connector for a typical Catalyst
-    investigation workflow. It downloads fresh data on every call.
+    Local-first approach (Session 30):
+        1. Check SOS_DATA_DIR for uploaded CSV files
+        2. If files exist, search them (fast, reliable)
+        3. If no local files, try remote download (may fail
+           on Railway due to HTTP 403)
 
     Args:
-        query:        Entity name or partial name to search for.
-        report_types: Which report types to include. Defaults to
-                      CATALYST_DEFAULT_REPORTS (nonprofits, LLCs, amendments,
-                      for-profit corps).
-        fuzzy:        Whether to use normalized fuzzy matching.
+        query:        Entity name or partial name to search.
+        report_types: Which report types to include. Defaults
+                      to CATALYST_DEFAULT_REPORTS.
+        fuzzy:        Whether to use fuzzy matching.
 
     Returns:
         SearchResult with matches and staleness warning.
-
-    Example:
-        result = search_ohio("Example Charity Ministries")
-        for match in result.matches:
-            print(match.charter_number, match.business_name, match.effective_date)
-        print(result.staleness_warning)
     """
     if report_types is None:
         report_types = CATALYST_DEFAULT_REPORTS
 
+    # Try local files first (Option A approach)
+    records = _load_local_reports(report_types)
+
+    if records:
+        logger.info(
+            "ohio_sos: searching %d local records",
+            len(records),
+        )
+        return search_entities(query, records, fuzzy=fuzzy)
+
+    # No local files — try remote download as fallback
+    logger.info("ohio_sos: no local CSV files found, attempting remote download")
     records = load_reports(report_types)
+
+    if not records:
+        raise OhioSOSError(
+            "No Ohio SOS data available. CSV files have "
+            "not been uploaded yet, and the remote download "
+            "failed (Railway IP may be blocked). "
+            "Upload CSV files via the admin endpoint: "
+            "POST /api/admin/upload-sos-csv/"
+        )
+
     return search_entities(query, records, fuzzy=fuzzy)

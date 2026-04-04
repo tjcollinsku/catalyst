@@ -6069,3 +6069,73 @@ def api_research_add_to_case(request, pk):
             {"error": f"Failed to add to case: {str(e)}"},
             status=500,
         )
+
+
+# ───────────────────────────────────────────────────
+# Admin: Ohio SOS CSV Upload + Status
+# ───────────────────────────────────────────────────
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_admin_upload_sos_csv(request):
+    """Upload an Ohio SOS CSV file to local storage.
+
+    Accepts multipart file upload. The file is saved to the
+    SOS_DATA_DIR directory on disk for local search.
+
+    POST (multipart/form-data):
+        file: The CSV file (e.g. WI0070R.TXT)
+
+    Returns:
+        {"status": "ok", "file": {...details...}}
+    """
+    from . import ohio_sos_connector
+
+    uploaded = request.FILES.get("file")
+    if not uploaded:
+        return JsonResponse(
+            {"error": "No file uploaded. Send as 'file'."},
+            status=400,
+        )
+
+    filename = uploaded.name
+    content = uploaded.read()
+
+    try:
+        result = ohio_sos_connector.save_uploaded_csv(filename, content)
+        return JsonResponse(
+            {"status": "ok", "file": result},
+            status=200,
+        )
+    except ohio_sos_connector.OhioSOSError as e:
+        return JsonResponse(
+            {"error": str(e)},
+            status=400,
+        )
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def api_admin_sos_csv_status(request):
+    """Check status of locally stored Ohio SOS CSV files.
+
+    Returns list of all known report types with their upload
+    status, timestamps, and staleness info.
+
+    GET /api/admin/sos-csv-status/
+    """
+    from . import ohio_sos_connector
+
+    status = ohio_sos_connector.get_local_file_status()
+    uploaded = [f for f in status if f["exists"]]
+
+    return JsonResponse(
+        {
+            "files": status,
+            "total_uploaded": len(uploaded),
+            "total_available": len(status),
+            "data_dir": str(ohio_sos_connector.SOS_DATA_DIR),
+        },
+        status=200,
+    )
