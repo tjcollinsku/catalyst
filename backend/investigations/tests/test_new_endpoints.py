@@ -452,3 +452,205 @@ class InvestigatorNoteApiTests(TestCase):
     def test_note_collection_returns_404_for_missing_case(self):
         response = self.client.get(reverse("api_case_note_collection", args=[uuid.uuid4()]))
         self.assertEqual(response.status_code, 404)
+
+
+class ResearchAddToCaseTests(TestCase):
+    """Tests for the POST /api/cases/<uuid>/research/add-to-case/ endpoint."""
+
+    def setUp(self):
+        self.client = Client()
+        self.case = Case.objects.create(name="Research Integration Case")
+
+    def test_add_property_from_parcel_search(self):
+        """Test creating a Property entity from parcel search result."""
+        payload = {
+            "source": "parcels",
+            "data": {
+                "pin": "123-456-789",
+                "owner1": "John Doe",
+                "county": "Darke",
+                "acres_calc": 15.5,
+                "aud_link": "https://auditor.example.com/parcel",
+            },
+        }
+        response = self.client.post(
+            reverse("api_research_add_to_case", args=[self.case.pk]),
+            json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["created"], "property")
+        self.assertFalse(data["duplicate"])
+        self.assertIn("entity", data)
+        self.assertEqual(data["entity"]["parcel_number"], "123-456-789")
+
+        # Verify property was created
+        prop = Property.objects.get(case=self.case, parcel_number="123-456-789")
+        self.assertEqual(prop.current_owner_name, "John Doe")
+        self.assertEqual(prop.county, "Darke")
+        self.assertEqual(float(prop.acreage), 15.5)
+
+    def test_duplicate_property_detection(self):
+        """Test that duplicate properties return existing entity."""
+        Property.objects.create(
+            case=self.case,
+            parcel_number="123-456-789",
+            county="Darke",
+            current_owner_name="John Doe",
+        )
+
+        payload = {
+            "source": "parcels",
+            "data": {
+                "pin": "123-456-789",
+                "owner1": "John Doe",
+                "county": "Darke",
+                "acres_calc": 15.5,
+                "aud_link": "https://auditor.example.com/parcel",
+            },
+        }
+        response = self.client.post(
+            reverse("api_research_add_to_case", args=[self.case.pk]),
+            json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["created"], "property")
+        self.assertTrue(data["duplicate"])
+
+    def test_add_organization_from_ohio_sos(self):
+        """Test creating an Organization entity from Ohio SOS result."""
+        payload = {
+            "source": "ohio-sos",
+            "data": {
+                "business_name": "Goodwill Nonprofit LLC",
+                "entity_number": "OH123456",
+                "status": "ACTIVE",
+                "filing_date": "2020-01-15",
+                "county": "Franklin",
+            },
+        }
+        response = self.client.post(
+            reverse("api_research_add_to_case", args=[self.case.pk]),
+            json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["created"], "organization")
+        self.assertFalse(data["duplicate"])
+        self.assertEqual(data["entity"]["name"], "Goodwill Nonprofit LLC")
+
+        # Verify organization was created
+        org = Organization.objects.get(case=self.case, name="Goodwill Nonprofit LLC")
+        self.assertEqual(org.status, "ACTIVE")
+
+    def test_add_investigator_note_from_ohio_aos(self):
+        """Test creating an InvestigatorNote from Ohio AOS audit result."""
+        payload = {
+            "source": "ohio-aos",
+            "data": {
+                "entity_name": "Smith Foundation",
+                "county": "Franklin",
+                "report_type": "Financial Audit",
+                "period": "2022-2023",
+                "has_findings_for_recovery": True,
+                "pdf_url": "https://aos.example.com/reports/smith.pdf",
+            },
+        }
+        response = self.client.post(
+            reverse("api_research_add_to_case", args=[self.case.pk]),
+            json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["created"], "note")
+        self.assertFalse(data["duplicate"])
+
+        # Verify note was created
+        note = InvestigatorNote.objects.get(case=self.case)
+        self.assertIn("Smith Foundation", note.content)
+        self.assertIn("Findings for Recovery: YES", note.content)
+
+    def test_add_organization_from_irs(self):
+        """Test creating an Organization entity from IRS search result."""
+        payload = {
+            "source": "irs",
+            "data": {
+                "organization_name": "Community Care Foundation",
+                "ein": "45-1234567",
+                "state": "OH",
+                "ruling_date": "2010-06-15",
+                "deductibility_code": "501(c)(3)",
+                "total_revenue": 500000,
+                "total_assets": 2000000,
+            },
+        }
+        response = self.client.post(
+            reverse("api_research_add_to_case", args=[self.case.pk]),
+            json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["created"], "organization")
+        self.assertFalse(data["duplicate"])
+        self.assertEqual(data["entity"]["ein"], "45-1234567")
+
+        # Verify organization was created
+        org = Organization.objects.get(case=self.case, ein="45-1234567")
+        self.assertEqual(org.org_type, "CHARITY")
+
+    def test_recorder_source_returns_error(self):
+        """Test that recorder source returns appropriate error."""
+        payload = {
+            "source": "recorder",
+            "data": {},
+        }
+        response = self.client.post(
+            reverse("api_research_add_to_case", args=[self.case.pk]),
+            json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn("Recorder results are portal links", data["error"])
+
+    def test_missing_source_returns_error(self):
+        """Test that missing source field returns 400."""
+        payload = {
+            "data": {"some": "data"},
+        }
+        response = self.client.post(
+            reverse("api_research_add_to_case", args=[self.case.pk]),
+            json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn("source", data["error"])
+
+    def test_invalid_json_returns_error(self):
+        """Test that invalid JSON returns 400."""
+        response = self.client.post(
+            reverse("api_research_add_to_case", args=[self.case.pk]),
+            "invalid json",
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_missing_case_returns_404(self):
+        """Test that missing case returns 404."""
+        payload = {
+            "source": "parcels",
+            "data": {"pin": "123-456"},
+        }
+        response = self.client.post(
+            reverse("api_research_add_to_case", args=[uuid.uuid4()]),
+            json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 404)

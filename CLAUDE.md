@@ -437,10 +437,18 @@ Results visible in Pipeline tab (Signals → Detections → Findings)
 - Railway (auto-deploy from GitHub main branch)
 - GitHub Actions CI (ruff lint + tsc + vite build)
 
+### Code Style (MUST FOLLOW)
+- **Ruff linter** with config in `pyproject.toml`
+- **Line length: 100 characters max** (E501) for all Python files except connectors and tests
+- Rules enabled: E (pycodestyle errors), F (pyflakes), I (isort)
+- E501 is IGNORED in: `tests/`, `irs_connector.py`, `county_auditor_connector.py`, `county_recorder_connector.py`, `propublica_connector.py`, `verify_recorder_portals.py`
+- **views.py is NOT exempt** — all lines must be ≤100 chars. Break long strings with parenthesized f-strings.
+- Quote style: double quotes, indent: spaces, line endings: LF
+- Pre-commit hooks run ruff + ruff-format on every commit
+
 ### External Data Sources
-- ProPublica Nonprofit Explorer API
-- IRS Bulk XML on AWS S3 (s3://irs-form-990/) — NOT YET IMPLEMENTED
-- IRSx Python library — NOT YET INSTALLED
+- **IRS TEOS XML** — Direct 990 e-file XML from apps.irs.gov (Session 30) ✅
+- ProPublica Nonprofit Explorer API (superseded by IRS TEOS XML for financial data)
 - Ohio SOS (bulk CSV + bizimage API for document PDFs)
 - ODNR Statewide Parcel API (ArcGIS REST)
 - Ohio Auditor of State (web scraper)

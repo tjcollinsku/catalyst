@@ -156,7 +156,7 @@ class IndexRecord:
     @property
     def xml_filename(self) -> str:
         """Filename inside the ZIP."""
-        return f"{self.xml_batch_id}/{self.object_id}_public.xml"
+        return f"{self.object_id}_public.xml"
 
 
 # ---------------------------------------------------------------------------
@@ -742,10 +742,10 @@ def _fetch_zip_directory(zip_url: str) -> ZipDirectory:
 
 def fetch_990_xml(filing: IndexRecord) -> str:
     """
-    Fetch a single 990 XML file from an IRS ZIP archive using HTTP range requests.
+    Fetch a single 990 XML file from an IRS ZIP archive.
 
-    This downloads only the specific XML file (~5KB of compressed data) instead
-    of the entire 100MB ZIP archive.
+    Falls back to full ZIP download if compression method is not standard
+    DEFLATE (e.g., if IRS uses DEFLATE64 which Python's zlib cannot handle).
 
     Args:
         filing: An IndexRecord from search_990_by_ein().
@@ -758,7 +758,7 @@ def fetch_990_xml(filing: IndexRecord) -> str:
 
     logger.info("Fetching XML for %s from %s", filing.object_id, zip_url)
 
-    # Get ZIP directory
+    # Get ZIP directory to check compression method
     directory = _fetch_zip_directory(zip_url)
 
     if target_filename not in directory.entries:
@@ -768,12 +768,31 @@ def fetch_990_xml(filing: IndexRecord) -> str:
 
     entry = directory.entries[target_filename]
     logger.info(
-        "Found %s: compressed=%d, uncompressed=%d, offset=%d",
+        "Found %s: compressed=%d, uncompressed=%d, offset=%d, compression=%d",
         target_filename,
         entry.compressed_size,
         entry.uncompressed_size,
         entry.local_header_offset,
+        entry.compression_method,
     )
+
+    # If compression method is standard DEFLATE (8) or STORED (0),
+    # use range request to download only what we need
+    if entry.compression_method in (0, 8):
+        return _fetch_990_xml_ranged(filing, entry)
+
+    # For unsupported compression methods (e.g., DEFLATE64/9),
+    # fall back to downloading the entire ZIP
+    logger.info(
+        "Compression method %d not supported by zlib, downloading full ZIP",
+        entry.compression_method,
+    )
+    return _fetch_990_xml_full_zip(zip_url, target_filename)
+
+
+def _fetch_990_xml_ranged(filing: IndexRecord, entry: ZipFileEntry) -> str:
+    """Fetch XML using HTTP range requests (efficient for DEFLATE/STORED)."""
+    zip_url = filing.zip_url
 
     # Read local file header + compressed data
     # Local header is 30 bytes + filename length + extra field length
@@ -823,6 +842,65 @@ def fetch_990_xml(filing: IndexRecord) -> str:
     xml_text = xml_bytes.decode("utf-8", errors="replace")
     logger.info("Extracted %d chars of XML for %s", len(xml_text), filing.object_id)
     return xml_text
+
+
+def _fetch_990_xml_full_zip(zip_url: str, target_filename: str) -> str:
+    """
+    Fetch XML by downloading the entire ZIP file.
+
+    This is a fallback for compression methods not supported by Python's zlib
+    (e.g., DEFLATE64). Downloads the full 400+ MB ZIP and extracts using
+    Python's zipfile module (which will also fail) or system unzip.
+    """
+    import subprocess
+    import tempfile
+
+    logger.info("Downloading full ZIP file from %s", zip_url)
+
+    time.sleep(POLITE_DELAY)
+    try:
+        resp = requests.get(
+            zip_url,
+            headers={"User-Agent": USER_AGENT},
+            timeout=180,
+            stream=True,
+        )
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        raise IRSNetworkError(f"Failed to download ZIP: {e}") from e
+
+    # Write to temporary file and extract with system unzip
+    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp_zip:
+        for chunk in resp.iter_content(chunk_size=1024 * 1024):
+            if chunk:
+                tmp_zip.write(chunk)
+        tmp_zip_path = tmp_zip.name
+
+    try:
+        # Use system unzip to extract (supports DEFLATE64)
+        result = subprocess.run(
+            ["unzip", "-p", tmp_zip_path, target_filename],
+            capture_output=True,
+            timeout=30,
+        )
+
+        if result.returncode != 0:
+            stderr_text = result.stderr.decode("utf-8", errors="replace")
+            raise IRSParseError(f"unzip failed: {stderr_text}")
+
+        xml_bytes = result.stdout
+        xml_text = xml_bytes.decode("utf-8", errors="replace")
+        logger.info("Extracted %d chars of XML using unzip", len(xml_text))
+        return xml_text
+
+    finally:
+        # Clean up temp file
+        try:
+            import os
+
+            os.unlink(tmp_zip_path)
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
