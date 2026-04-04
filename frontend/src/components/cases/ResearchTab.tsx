@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useOutletContext } from "react-router-dom";
 import { CaseDetailContext } from "../../views/CaseDetailView";
-import { ResearchResult, searchParcels, searchOhioSOS, searchOhioAOS, searchIRS, searchRecorder, addResearchToCase } from "../../api";
+import { ResearchResult, Fetch990Result, searchParcels, searchOhioSOS, searchOhioAOS, searchIRS, searchRecorder, addResearchToCase, fetch990Data } from "../../api";
 import styles from "./ResearchTab.module.css";
 
 type SourceType = "parcels" | "ohio-sos" | "ohio-aos" | "irs" | "recorder";
@@ -62,6 +62,11 @@ export function ResearchTab() {
     const [error, setError] = useState<string | null>(null);
     const [addedRows, setAddedRows] = useState<Set<number>>(new Set());
     const [addingRow, setAddingRow] = useState<number | null>(null);
+
+    // IRS 990 fetch state
+    const [fetchingEin, setFetchingEin] = useState<string | null>(null);
+    const [fetchedResults, setFetchedResults] = useState<Map<string, Fetch990Result>>(new Map());
+    const [expandedEin, setExpandedEin] = useState<string | null>(null);
 
     const handleSearch = useCallback(async () => {
         if (!query.trim()) {
@@ -145,6 +150,29 @@ export function ResearchTab() {
         }
     }, [caseId, activeSource, pushToast]);
 
+    const handleFetch990 = useCallback(async (ein: string) => {
+        setFetchingEin(ein);
+        try {
+            const result = await fetch990Data(caseId, ein);
+            setFetchedResults(prev => {
+                const next = new Map(prev);
+                next.set(ein, result);
+                return next;
+            });
+            setExpandedEin(ein);
+            const totalFilings = result.filings.length;
+            pushToast(
+                "success",
+                `Fetched ${totalFilings} filing${totalFilings !== 1 ? "s" : ""} for EIN ${ein}`
+            );
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "Failed to fetch 990 data";
+            pushToast("error", msg);
+        } finally {
+            setFetchingEin(null);
+        }
+    }, [caseId, pushToast]);
+
     const renderResults = () => {
         if (!results) return null;
 
@@ -157,6 +185,11 @@ export function ResearchTab() {
                     <p style={{ fontSize: "0.8rem", marginTop: "0.5rem" }}>Try adjusting your search query.</p>
                 </div>
             );
+        }
+
+        // IRS uses a custom card-based layout with fetch + expand
+        if (activeSource === "irs") {
+            return renderIrsResults();
         }
 
         return (
@@ -180,7 +213,6 @@ export function ResearchTab() {
                                     {activeSource === "parcels" && renderParcelRow(row as Record<string, unknown>, idx)}
                                     {activeSource === "ohio-sos" && renderSosRow(row as Record<string, unknown>, idx)}
                                     {activeSource === "ohio-aos" && renderAosRow(row as Record<string, unknown>, idx)}
-                                    {activeSource === "irs" && renderIrsRow(row as Record<string, unknown>, idx)}
                                     {activeSource === "recorder" && renderRecorderRow(row as Record<string, unknown>)}
                                 </tr>
                             ))}
@@ -303,49 +335,211 @@ export function ResearchTab() {
         );
     };
 
-    const renderIrsRow = (row: Record<string, unknown>, rowIndex: number) => {
-        const ein = String(row.ein ?? "—");
-        const orgName = String(row.taxpayer_name ?? "—");
-        const returnType = String(row.return_type ?? "—");
-        const taxYear = row.tax_year ? String(row.tax_year) : "—";
-        const batchId = String(row.batch_id ?? "—");
-        // Color code return types
-        const typeColor = returnType === "990" ? "#3b82f6"
-            : returnType === "990EZ" ? "#8b5cf6"
-            : returnType === "990PF" ? "#f59e0b"
-            : "#6b7280";
+    /** Group IRS search results by EIN so we can show one "Fetch" button per org */
+    const groupIrsByEin = (rows: unknown[]): Map<string, Record<string, unknown>[]> => {
+        const groups = new Map<string, Record<string, unknown>[]>();
+        for (const row of rows) {
+            const r = row as Record<string, unknown>;
+            const ein = String(r.ein ?? "unknown");
+            if (!groups.has(ein)) groups.set(ein, []);
+            groups.get(ein)!.push(r);
+        }
+        return groups;
+    };
+
+    const formatCurrency = (v: number | null | undefined) => {
+        if (v == null) return "—";
+        return new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: "USD",
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+        }).format(v);
+    };
+
+    const renderIrsResults = () => {
+        if (!results || results.count === 0) return null;
+        const config = SOURCES["irs"];
+        const grouped = groupIrsByEin(results.results);
+
         return (
             <>
-                <td className={styles.irsEin}>{ein}</td>
-                <td className={styles.irsName}>{orgName}</td>
-                <td>
-                    <span style={{
-                        padding: "2px 6px",
-                        borderRadius: "3px",
-                        fontSize: "0.75rem",
-                        background: `${typeColor}20`,
-                        color: typeColor,
-                        fontWeight: 600,
-                    }}>
-                        {returnType}
-                    </span>
-                </td>
-                <td>{taxYear}</td>
-                <td style={{ fontSize: "0.75rem", color: "#6b7280" }}>{batchId}</td>
-                <td>
-                    {addedRows.has(rowIndex) ? (
-                        <span className={styles.addedButton}>✓ Added</span>
-                    ) : (
-                        <button
-                            className={styles.addButton}
-                            onClick={() => handleAddToCase(rowIndex, row)}
-                            disabled={addingRow === rowIndex || addedRows.has(rowIndex)}
-                        >
-                            {addingRow === rowIndex ? "Adding..." : "Add to Case"}
-                        </button>
-                    )}
-                </td>
+                <div className={styles.resultsMeta}>
+                    Found <strong>{results.count}</strong> filing{results.count !== 1 ? "s" : ""}{" "}
+                    across <strong>{grouped.size}</strong> organization{grouped.size !== 1 ? "s" : ""}{" "}
+                    from <strong>{config.label}</strong>
+                </div>
+
+                <div className={styles.irsOrgList}>
+                    {Array.from(grouped.entries()).map(([ein, rows]) => {
+                        const orgName = String(rows[0].taxpayer_name ?? "Unknown");
+                        const fetched = fetchedResults.get(ein);
+                        const isFetching = fetchingEin === ein;
+                        const isExpanded = expandedEin === ein;
+                        const years = rows.map(r => String(r.tax_year ?? "")).filter(Boolean);
+                        const types = [...new Set(rows.map(r => String(r.return_type ?? "")))];
+
+                        return (
+                            <div key={ein} className={styles.irsOrgCard}>
+                                {/* Org header row */}
+                                <div className={styles.irsOrgHeader}>
+                                    <div className={styles.irsOrgInfo}>
+                                        <span className={styles.irsOrgEin}>{ein}</span>
+                                        <span className={styles.irsOrgName}>{orgName}</span>
+                                        <div className={styles.irsOrgMeta}>
+                                            {types.map(t => {
+                                                const c = t === "990" ? "#3b82f6"
+                                                    : t === "990EZ" ? "#8b5cf6"
+                                                    : t === "990PF" ? "#f59e0b" : "#6b7280";
+                                                return (
+                                                    <span key={t} style={{
+                                                        padding: "1px 5px", borderRadius: "3px",
+                                                        fontSize: "0.7rem", fontWeight: 600,
+                                                        background: `${c}20`, color: c,
+                                                    }}>{t}</span>
+                                                );
+                                            })}
+                                            <span className={styles.irsOrgYears}>
+                                                {years.length} filing{years.length !== 1 ? "s" : ""}: {years.join(", ")}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className={styles.irsOrgActions}>
+                                        {fetched ? (
+                                            <button
+                                                className={styles.irsExpandBtn}
+                                                onClick={() => setExpandedEin(isExpanded ? null : ein)}
+                                            >
+                                                {isExpanded ? "Hide Details" : "Show Details"}
+                                            </button>
+                                        ) : (
+                                            <button
+                                                className={styles.irsFetchBtn}
+                                                onClick={() => handleFetch990(ein)}
+                                                disabled={isFetching}
+                                            >
+                                                {isFetching ? "Fetching XML..." : "Fetch 990 Data"}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Expanded detail panel */}
+                                {fetched && isExpanded && (
+                                    <div className={styles.irsDetailPanel}>
+                                        <div className={styles.irsDetailSummary}>
+                                            Fetched {fetched.filings.length} filing{fetched.filings.length !== 1 ? "s" : ""}
+                                            {fetched.skipped > 0 && `, ${fetched.skipped} skipped`}
+                                            {fetched.errors.length > 0 && `, ${fetched.errors.length} error${fetched.errors.length !== 1 ? "s" : ""}`}
+                                        </div>
+
+                                        {fetched.filings.map((filing, fi) => (
+                                            <div key={fi} className={styles.irsFilingCard}>
+                                                <div className={styles.irsFilingHeader}>
+                                                    <span className={styles.irsFilingYear}>
+                                                        Tax Year {filing.tax_year}
+                                                    </span>
+                                                    <span style={{
+                                                        padding: "1px 5px", borderRadius: "3px",
+                                                        fontSize: "0.7rem", fontWeight: 600,
+                                                        background: filing.return_type === "990" ? "#3b82f620"
+                                                            : filing.return_type === "990EZ" ? "#8b5cf620"
+                                                            : "#f59e0b20",
+                                                        color: filing.return_type === "990" ? "#3b82f6"
+                                                            : filing.return_type === "990EZ" ? "#8b5cf6"
+                                                            : "#f59e0b",
+                                                    }}>{filing.return_type}</span>
+                                                    {filing.snapshot_id && (
+                                                        <span className={styles.irsSavedBadge}>
+                                                            Saved to Case
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {/* Financials */}
+                                                <div className={styles.irsFinancialsGrid}>
+                                                    <div className={styles.irsFinItem}>
+                                                        <span className={styles.irsFinLabel}>Revenue</span>
+                                                        <span className={styles.irsFinValue}>
+                                                            {formatCurrency(filing.total_revenue)}
+                                                        </span>
+                                                    </div>
+                                                    <div className={styles.irsFinItem}>
+                                                        <span className={styles.irsFinLabel}>Expenses</span>
+                                                        <span className={styles.irsFinValue}>
+                                                            {formatCurrency(filing.total_expenses)}
+                                                        </span>
+                                                    </div>
+                                                    <div className={styles.irsFinItem}>
+                                                        <span className={styles.irsFinLabel}>Net Assets</span>
+                                                        <span className={styles.irsFinValue}>
+                                                            {formatCurrency(filing.total_assets)}
+                                                        </span>
+                                                    </div>
+                                                    <div className={styles.irsFinItem}>
+                                                        <span className={styles.irsFinLabel}>Officers</span>
+                                                        <span className={styles.irsFinValue}>
+                                                            {filing.officers_count}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Governance flags */}
+                                                {filing.governance && (
+                                                    <div className={styles.irsGovernance}>
+                                                        <span className={styles.irsGovTitle}>Governance Flags</span>
+                                                        <div className={styles.irsGovGrid}>
+                                                            {renderGovFlag("Conflict of Interest Policy", filing.governance.conflict_of_interest_policy)}
+                                                            {renderGovFlag("Whistleblower Policy", filing.governance.whistleblower_policy)}
+                                                            {renderGovFlag("Document Retention Policy", filing.governance.document_retention_policy)}
+                                                            {filing.governance.voting_members != null && (
+                                                                <div className={styles.irsGovFlag}>
+                                                                    <span className={styles.irsGovLabel}>Board Members</span>
+                                                                    <span className={styles.irsGovValue}>
+                                                                        {filing.governance.voting_members} voting, {filing.governance.independent_members ?? "?"} independent
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Parse quality */}
+                                                <div className={styles.irsParseQuality}>
+                                                    Parse quality: {Math.round(filing.parse_quality * 100)}%
+                                                </div>
+                                            </div>
+                                        ))}
+
+                                        {fetched.errors.length > 0 && (
+                                            <div className={styles.irsFetchErrors}>
+                                                <strong>Errors:</strong>
+                                                {fetched.errors.map((e, i) => (
+                                                    <div key={i} className={styles.irsFetchError}>
+                                                        {e.filing}: {e.error}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
             </>
+        );
+    };
+
+    const renderGovFlag = (label: string, value: boolean | null | undefined) => {
+        if (value == null) return null;
+        return (
+            <div className={styles.irsGovFlag}>
+                <span className={styles.irsGovLabel}>{label}</span>
+                <span className={`${styles.irsGovValue} ${value ? styles.govYes : styles.govNo}`}>
+                    {value ? "YES" : "NO"}
+                </span>
+            </div>
         );
     };
 
@@ -383,9 +577,6 @@ export function ResearchTab() {
             return dateString;
         }
     };
-
-    // formatCurrency available if needed for financial columns:
-    // const formatCurrency = (v: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
 
     const sourceConfig = SOURCES[activeSource];
 
