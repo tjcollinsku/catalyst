@@ -5209,49 +5209,311 @@ def api_case_coverage(request, pk):
 # ---------------------------------------------------------------------------
 
 
+def _generate_memo_fallback(
+    case, findings, signals, detections, persons, orgs, properties, financial_snapshots, referrals
+):
+    """Generate a structured memo template when AI fails.
+
+    Provides a baseline professional memo with all key findings
+    and signals formatted for government submission.
+    """
+    lines = []
+    now_str = timezone.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    # Header
+    lines.append(f"REFERRAL MEMO — {case.name}")
+    lines.append("=" * 70)
+    lines.append(f"Generated: {now_str}")
+    lines.append(f"Case Status: {case.status}")
+    lines.append(f"Reference: {case.referral_ref or 'N/A'}")
+    lines.append("")
+
+    # Executive Summary
+    lines.append("EXECUTIVE SUMMARY")
+    lines.append("-" * 70)
+    lines.append(case.notes or ("Case under investigation for potential fraud indicators."))
+    lines.append(
+        f"Total Findings: {findings.count()} | "
+        f"Confirmed Signals: {signals.count()} | "
+        f"Detections: {detections.count()}"
+    )
+    lines.append("")
+
+    # Entities of Interest
+    if persons.exists() or orgs.exists() or properties.exists():
+        lines.append("ENTITIES OF INTEREST")
+        lines.append("-" * 70)
+
+        if persons.exists():
+            lines.append("Persons:")
+            for p in persons[:15]:
+                roles = ", ".join(p.role_tags) if p.role_tags else "unknown role"
+                lines.append(f"  • {p.full_name} ({roles})")
+            lines.append("")
+
+        if orgs.exists():
+            lines.append("Organizations:")
+            for o in orgs[:15]:
+                status_str = o.status or "unknown"
+                lines.append(
+                    f"  • {o.name} "
+                    f"(EIN: {o.ein or 'N/A'}, "
+                    f"Type: {o.org_type}, "
+                    f"Status: {status_str})"
+                )
+            lines.append("")
+
+        if properties.exists():
+            lines.append("Properties:")
+            for p in properties[:15]:
+                addr = p.address or p.parcel_number
+                lines.append(
+                    f"  • {addr} "
+                    f"(County: {p.county}, "
+                    f"Assessed: ${p.assessed_value}, "
+                    f"Purchased: ${p.purchase_price})"
+                )
+            lines.append("")
+
+    # Fraud Indicators (Confirmed/Escalated Signals)
+    if signals.exists():
+        lines.append("FRAUD INDICATORS")
+        lines.append("-" * 70)
+        for s in signals[:20]:
+            summary = s.detected_summary or "(no summary)"
+            lines.append(
+                f"[{s.severity}] {s.rule_id}\n  Status: {s.status}\n  Summary: {summary[:200]}\n"
+            )
+        lines.append("")
+
+    # Financial Analysis
+    if financial_snapshots.exists():
+        lines.append("FINANCIAL ANALYSIS")
+        lines.append("-" * 70)
+        for fs in financial_snapshots[:5]:
+            org_name = fs.organization.name if fs.organization else "Unknown Organization"
+            lines.append(f"Organization: {org_name} (Tax Year {fs.tax_year})")
+            lines.append(f"  Revenue: ${fs.total_revenue or 0:,}")
+            lines.append(f"  Expenses: ${fs.total_expenses or 0:,}")
+            lines.append(f"  Net Assets (EOY): ${fs.net_assets_eoy or 0:,}")
+
+            # Check for anomalies
+            prior_rev = (
+                FinancialSnapshot.objects.filter(
+                    organization=fs.organization, tax_year=fs.tax_year - 1
+                )
+                .values_list("total_revenue", flat=True)
+                .first()
+            )
+            if prior_rev:
+                change_pct = (((fs.total_revenue or 0) - prior_rev) / (prior_rev or 1)) * 100
+                lines.append(f"  Revenue change YoY: {change_pct:.1f}%")
+            lines.append("")
+
+    # Findings
+    if findings.exists():
+        lines.append("INVESTIGATOR FINDINGS")
+        lines.append("-" * 70)
+        for f in findings:
+            lines.append(f"[{f.severity}] {f.title}")
+            lines.append(f"  Confidence: {f.confidence}")
+            lines.append(f"  Status: {f.status}")
+            if f.narrative:
+                lines.append(f"  Narrative: {f.narrative[:300]}")
+            lines.append("")
+
+    # Recommendations
+    lines.append("RECOMMENDED ACTION")
+    lines.append("-" * 70)
+    if signals.filter(severity="CRITICAL").exists():
+        lines.append(
+            "CRITICAL signals detected. Recommend immediate "
+            "escalation to appropriate federal or state agency."
+        )
+    elif signals.filter(severity="HIGH").exists():
+        lines.append(
+            "Multiple HIGH-severity signals detected. Recommend "
+            "escalation for formal investigation."
+        )
+    else:
+        lines.append(
+            "Recommend further investigation by appropriate agency or referral to law enforcement."
+        )
+
+    if referrals.exists():
+        lines.append("")
+        lines.append(f"Status: {referrals.count()} referral(s) pending.")
+
+    lines.append("")
+    lines.append("---")
+    lines.append("This memo was automatically generated from case evidence.")
+
+    return "\n".join(lines)
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_case_referral_memo(request, pk):
-    """Generate a referral memo document for a case.
+    """Generate an AI-powered referral memo document for a case.
 
-    Milestone 2 stub: creates a placeholder memo document so the upload/view
-    pipeline works end-to-end. Milestone 3 will replace the body text with
-    AI-generated content (Claude/OpenAI API).
+    Gathers case data (findings, signals, detections, entities, financials),
+    calls Claude API to generate a professional memo, and saves as Document.
+    On AI failure, falls back to a structured template.
     """
     case = get_object_or_404(Case, pk=pk)
 
-    # Gather case context for the stub memo
-    doc_count = case.documents.count()
-    signal_count = Signal.objects.filter(case=case).count()
-    detection_count = Detection.objects.filter(case=case).count()
-    finding_count = Finding.objects.filter(case=case).count()
-    referral_count = GovernmentReferral.objects.filter(case=case).count()
-
-    memo_text = (
-        f"REFERRAL MEMO — {case.name}\n"
-        f"{'=' * 60}\n\n"
-        f"Generated: {timezone.now().strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
-        f"Case Status: {case.status}\n"
-        f"Reference: {case.referral_ref or 'N/A'}\n\n"
-        f"CASE SUMMARY\n"
-        f"{'-' * 40}\n"
-        f"Documents: {doc_count}\n"
-        f"Signals: {signal_count}\n"
-        f"Detections: {detection_count}\n"
-        f"Findings: {finding_count}\n"
-        f"Referrals: {referral_count}\n\n"
-        f"NOTES\n"
-        f"{'-' * 40}\n"
-        f"{case.notes or 'No case notes recorded.'}\n\n"
-        f"[This is a placeholder memo. AI-generated narrative will be added in Milestone 3.]\n"
+    # Gather all case data for AI context and fallback template
+    findings = Finding.objects.filter(case=case).prefetch_related("entity_links")
+    signals = Signal.objects.filter(case=case, status__in=["CONFIRMED", "ESCALATED"]).order_by(
+        "-severity"
     )
+    detections = Detection.objects.filter(case=case).order_by("-severity")
+    financial_snapshots = (
+        FinancialSnapshot.objects.filter(case=case)
+        .select_related("organization")
+        .order_by("-tax_year")
+    )
+    referrals = GovernmentReferral.objects.filter(case=case)
 
-    # Create the memo as a generated document
+    # Entities (persons, orgs, properties)
+    persons = Person.objects.filter(case=case)
+    orgs = Organization.objects.filter(case=case)
+    properties = Property.objects.filter(case=case)
+
+    # Build prompt context for AI
+    context_parts = [f"CASE: {case.name}"]
+    if case.notes:
+        context_parts.append(f"Case notes: {case.notes[:500]}")
+    context_parts.append("")
+
+    # Findings section
+    if findings.exists():
+        context_parts.append("FINDINGS:")
+        for f in findings:
+            context_parts.append(
+                (f"  - [{f.severity}] {f.title}\n    Narrative: {f.narrative[:300]}")
+            )
+        context_parts.append("")
+
+    # Confirmed/Escalated signals
+    if signals.exists():
+        context_parts.append("CONFIRMED/ESCALATED SIGNALS:")
+        for s in signals[:15]:
+            summary = s.detected_summary or ""
+            context_parts.append(f"  - [{s.severity}] {s.rule_id}: {summary[:150]}")
+        context_parts.append("")
+
+    # Detections
+    if detections.exists():
+        context_parts.append("DETECTIONS:")
+        for d in detections[:10]:
+            context_parts.append(
+                (f"  - [{d.severity}] {d.signal_type} (confidence: {d.confidence_score:.0%})")
+            )
+        context_parts.append("")
+
+    # Entities
+    if persons.exists():
+        context_parts.append("PERSONS OF INTEREST:")
+        for p in persons[:10]:
+            roles = ", ".join(p.role_tags) if p.role_tags else "unknown"
+            context_parts.append(f"  - {p.full_name} ({roles})")
+        context_parts.append("")
+
+    if orgs.exists():
+        context_parts.append("ORGANIZATIONS:")
+        for o in orgs[:10]:
+            context_parts.append(f"  - {o.name} (EIN: {o.ein or 'N/A'}, type: {o.org_type})")
+        context_parts.append("")
+
+    if properties.exists():
+        context_parts.append("PROPERTIES:")
+        for p in properties[:10]:
+            addr = p.address or p.parcel_number
+            context_parts.append(
+                f"  - {addr} (assessed: ${p.assessed_value}, purchased: ${p.purchase_price})"
+            )
+        context_parts.append("")
+
+    # Financial snapshots
+    if financial_snapshots.exists():
+        context_parts.append("FINANCIAL ANALYSIS:")
+        for fs in financial_snapshots[:3]:
+            org_name = fs.organization.name if fs.organization else "Unknown"
+            context_parts.append(
+                (
+                    f"  - {org_name} (Tax Year {fs.tax_year}): "
+                    f"Revenue ${fs.total_revenue}, "
+                    f"Expenses ${fs.total_expenses}, "
+                    f"Net Assets ${fs.net_assets_eoy}"
+                )
+            )
+        context_parts.append("")
+
+    case_context = "\n".join(context_parts)
+
+    # Try AI generation first
+    memo_text = None
+    try:
+        from .ai_proxy import _call_ai
+
+        system_prompt = (
+            "You are an expert forensic investigator writing a "
+            "professional referral memo for government agencies. "
+            "Write in formal language, cite specific evidence, and "
+            "include clear recommendations. Output plain text with "
+            "section headers (EXECUTIVE SUMMARY, ENTITIES OF "
+            "INTEREST, FRAUD INDICATORS, FINANCIAL ANALYSIS, "
+            "TIMELINE, RECOMMENDED ACTION)."
+        )
+
+        user_message = (
+            f"Based on this case data, generate a professional referral memo:\n\n{case_context}"
+        )
+
+        # Call AI to generate memo
+        result = _call_ai(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            model="claude-sonnet-4-20250514",
+            temperature=0.2,
+            max_tokens=4096,
+        )
+
+        # Extract memo text from AI response (plain text, not JSON)
+        if "error" not in result and "_model" in result:
+            # If AI returns structured JSON, extract text fields
+            if isinstance(result, dict):
+                memo_text = result.get("memo", result.get("text", result.get("content")))
+            if memo_text is None:
+                # Try to get the raw response
+                memo_text = result.get("raw", "")
+
+    except Exception as e:
+        logger.warning("AI memo generation failed: %s. Using fallback template.", e)
+
+    # Fallback: structured template if AI fails
+    if not memo_text or len(memo_text) < 50:
+        memo_text = _generate_memo_fallback(
+            case,
+            findings,
+            signals,
+            detections,
+            persons,
+            orgs,
+            properties,
+            financial_snapshots,
+            referrals,
+        )
+
+    # Create memo document
+    memo_hash = hashlib.sha256(memo_text.encode()).hexdigest()
+    timestamp = timezone.now().strftime("%Y%m%d-%H%M%S")
     document = Document.objects.create(
         case=case,
-        filename=f"referral-memo-{timezone.now().strftime('%Y%m%d-%H%M%S')}.txt",
+        filename=f"referral-memo-{timestamp}.txt",
         file_path="",
-        sha256_hash=hashlib.sha256(memo_text.encode()).hexdigest(),
+        sha256_hash=memo_hash,
         file_size=len(memo_text.encode()),
         doc_type=DocumentType.REFERRAL_MEMO,
         is_generated=True,
@@ -5261,6 +5523,7 @@ def api_case_referral_memo(request, pk):
         updated_at=timezone.now(),
     )
 
+    # Audit log
     AuditLog.log(
         action=AuditAction.RECORD_CREATED,
         table_name="documents",
@@ -5270,9 +5533,10 @@ def api_case_referral_memo(request, pk):
             "filename": document.filename,
             "doc_type": "REFERRAL_MEMO",
             "is_generated": True,
+            "generated_via": "ai_memo_generator",
         },
         performed_by=getattr(request, "api_token", None),
-        notes="referral_memo_stub",
+        notes="ai_referral_memo",
     )
 
     return JsonResponse(serialize_document(document), status=201)
@@ -5416,7 +5680,7 @@ def api_research_add_to_case(request, pk):
 
     POST body (JSON):
         {
-            "source": "parcels" | "ohio-sos" | "ohio-aos" | "irs" | "recorder",
+            "source": "parcels" | "ohio-sos" | "ohio-aos" | "irs",
             "data": { ... }  // the row data from the search result
         }
 
@@ -5431,8 +5695,7 @@ def api_research_add_to_case(request, pk):
     - parcels → Property (+ Person or Organization from owner name)
     - ohio-sos → Organization
     - ohio-aos → InvestigatorNote (audit results aren't entities)
-    - irs → Organization + FinancialSnapshot
-    - recorder → Error (results are URLs, not data to import)
+    - irs → Organization (from search results)
     """
     case = get_object_or_404(Case, pk=pk)
 
@@ -5459,11 +5722,13 @@ def api_research_add_to_case(request, pk):
         # PARCELS → Property + optional Person or Organization
         # ──────────────────────────────────────────────────────────────
         if source == "parcels":
-            parcel_number = data.get("pin") or data.get("parcel_number", "")
-            owner_name = data.get("owner1") or data.get("owner_name", "")
+            # Frontend sends: parcel_number, owner_name, county, acres,
+            # auditor_url. Backend also accepts connector field names.
+            parcel_number = data.get("parcel_number") or data.get("pin") or ""
+            owner_name = data.get("owner_name") or data.get("owner1") or ""
             county = data.get("county", "")
-            acreage = data.get("acres_calc") or data.get("acres")
-            auditor_url = data.get("aud_link", "")
+            acreage = data.get("acres") or data.get("acres_calc") or ""
+            auditor_url = data.get("auditor_url") or data.get("aud_link") or ""
 
             # Check for duplicate property by parcel number
             existing_property = Property.objects.filter(
@@ -5597,7 +5862,9 @@ def api_research_add_to_case(request, pk):
         # ──────────────────────────────────────────────────────────────
         elif source == "ohio-sos":
             name = data.get("business_name", "")
-            entity_number = data.get("entity_number", "")
+            # Connector returns charter_number, frontend may send
+            # entity_number
+            entity_number = data.get("entity_number") or data.get("charter_number") or ""
             status = data.get("status", "UNKNOWN")
             filing_date_str = data.get("filing_date")
             county = data.get("county", "")
@@ -5658,21 +5925,28 @@ def api_research_add_to_case(request, pk):
             entity_name = data.get("entity_name", "Unknown")
             county = data.get("county", "")
             report_type = data.get("report_type", "")
-            period = data.get("period", "")
+            # Connector returns report_period, also accept period
+            period = data.get("report_period") or data.get("period") or ""
             has_findings = data.get("has_findings_for_recovery", False)
-            pdf_url = data.get("pdf_url", "N/A")
+            pdf_url = data.get("pdf_url", "")
+
+            note_content = f"Ohio AOS Audit: {entity_name}"
+            if county:
+                note_content += f" ({county} County)"
+            note_content += "\n"
+            if report_type:
+                note_content += f"Report Type: {report_type}\n"
+            if period:
+                note_content += f"Period: {period}\n"
+            note_content += f"Findings for Recovery: {'YES' if has_findings else 'No'}\n"
+            if pdf_url:
+                note_content += f"PDF: {pdf_url}"
 
             note = InvestigatorNote.objects.create(
                 case=case,
                 target_type="CASE",
                 target_id=case.pk,
-                content=(
-                    f"Ohio AOS Audit: {entity_name} ({county} County)\n"
-                    f"Report Type: {report_type}\n"
-                    f"Period: {period}\n"
-                    f"Findings for Recovery: {'YES' if has_findings else 'No'}\n"
-                    f"PDF: {pdf_url}"
-                ),
+                content=note_content,
             )
 
             # Log creation
@@ -5693,23 +5967,25 @@ def api_research_add_to_case(request, pk):
             )
 
         # ──────────────────────────────────────────────────────────────
-        # IRS → Organization + FinancialSnapshot
+        # IRS → Organization (from search index results)
         # ──────────────────────────────────────────────────────────────
         elif source == "irs":
-            name = data.get("organization_name", "")
+            # IRS search returns taxpayer_name, ein, return_type,
+            # tax_year, batch_id, object_id from the TEOS index.
+            # These are search index results, not fetched XML data.
+            name = data.get("taxpayer_name") or data.get("organization_name") or ""
             ein = data.get("ein", "")
             state = data.get("state", "OH")
-            ruling_date = data.get("ruling_date", "")
-            deductibility_code = data.get("deductibility_code", "")
-            revocation_date = data.get("revocation_date")
+            tax_year = data.get("tax_year")
+            return_type = data.get("return_type", "990")
 
             if not name:
                 return JsonResponse(
-                    {"error": "Missing required field in data: organization_name"},
+                    {"error": ("Missing required field in data: taxpayer_name")},
                     status=400,
                 )
 
-            # Check for duplicate organization by name (case-insensitive) or EIN
+            # Check for duplicate organization by EIN or name
             existing_org = None
             if ein:
                 existing_org = Organization.objects.filter(case=case, ein=str(ein)).first()
@@ -5725,17 +6001,16 @@ def api_research_add_to_case(request, pk):
                     }
                 )
 
-            # Create organization
+            # Create organization from IRS search result
             org = Organization.objects.create(
                 case=case,
                 name=name,
                 ein=str(ein) if ein else "",
-                org_type="CHARITY",  # IRS data is for 501(c)(3) nonprofits
+                org_type="CHARITY",
                 registration_state=state,
-                status="REVOKED" if revocation_date else "ACTIVE",
+                status="ACTIVE",
                 notes=(
-                    f"Imported from IRS EO BMF. Ruling date: {ruling_date}. "
-                    f"Deductibility: {deductibility_code}"
+                    f"Imported from IRS 990 e-file index. Latest filing: {return_type} {tax_year}."
                 ),
             )
 
@@ -5745,12 +6020,10 @@ def api_research_add_to_case(request, pk):
                 table_name="organizations",
                 record_id=org.pk,
                 case_id=case.pk,
-                notes=f"Organization imported from IRS EO BMF (EIN: {ein})",
+                notes=(
+                    f"Organization imported from IRS TEOS (EIN: {ein}, {return_type} {tax_year})"
+                ),
             )
-
-            # Note: We don't create a FinancialSnapshot for BMF data because the model
-            # requires a source Document, and BMF data comes from an API, not an uploaded file.
-            # Financial data from BMF is embedded in the Organization notes instead.
 
             return JsonResponse(
                 {
@@ -5761,14 +6034,15 @@ def api_research_add_to_case(request, pk):
             )
 
         # ──────────────────────────────────────────────────────────────
-        # RECORDER → Error (no data to import)
+        # RECORDER → Not importable (results are URLs only)
         # ──────────────────────────────────────────────────────────────
         elif source == "recorder":
             return JsonResponse(
                 {
                     "error": (
-                        "Recorder results are portal links"
-                        " — use Documents tab to upload retrieved deeds."
+                        "Recorder results are portal links only. "
+                        "Use the Documents tab to upload deeds "
+                        "retrieved from the recorder."
                     ),
                     "source": "recorder",
                 },
