@@ -2236,6 +2236,228 @@ def evaluate_case(case, trigger_doc=None) -> list[SignalTrigger]:
     _run_rule("SR-028", evaluate_sr028_donor_concentration, triggers, case, trigger_doc)
     _run_rule("SR-029", evaluate_sr029_low_program_ratio, triggers, case, trigger_doc)
 
+    # --- IRS XML structured data rules ---
+    _run_rule("XML-SIGNALS", evaluate_xml_financial_snapshots, triggers, case, trigger_doc)
+
+    return triggers
+
+
+# ---------------------------------------------------------------------------
+# IRS XML Financial Snapshot Signal Evaluator
+#
+# This evaluator runs against FinancialSnapshot records that were created
+# from parsed IRS 990 XML data (source="IRS_TEOS_XML"). Unlike the document-
+# scoped rules (SR-006, SR-011, SR-012, SR-013) that rely on regex against
+# OCR'd PDF text, these use the structured parsed data in raw_extraction.
+#
+# This is MORE RELIABLE than OCR-based detection because:
+#   - No OCR errors or spacing issues
+#   - Boolean fields are actual booleans, not "Yes"/"No" text matching
+#   - Dollar amounts are actual integers, not regex-extracted strings
+#   - Officer compensation is a structured list, not pattern-matched text
+# ---------------------------------------------------------------------------
+
+
+def evaluate_xml_financial_snapshots(case, trigger_doc=None) -> list[SignalTrigger]:
+    """
+    Evaluate all IRS_TEOS_XML FinancialSnapshots in a case for fraud signals.
+
+    This runs governance, compensation, and financial checks using the
+    structured data from parsed 990 XML — the same checks as SR-006,
+    SR-011, SR-012, SR-013, SR-028, SR-029 but using reliable structured
+    data instead of OCR text regex.
+    """
+    from .models import FinancialSnapshot
+
+    triggers: list[SignalTrigger] = []
+
+    snapshots = FinancialSnapshot.objects.filter(
+        case=case,
+        source="IRS_TEOS_XML",
+        raw_extraction__isnull=False,
+    )
+
+    for snap in snapshots:
+        raw = snap.raw_extraction
+        if not raw or not isinstance(raw, dict):
+            continue
+
+        gov = raw.get("governance", {})
+        fin = raw.get("financials", {})
+        officers = raw.get("officers", [])
+        tax_year = raw.get("tax_year", snap.tax_year)
+        org_name = raw.get("taxpayer_name", snap.ein)
+
+        # --- SR-006: Schedule L missing when related-party flags are Yes ---
+        rp_flags = [
+            gov.get("loan_outstanding"),
+            gov.get("grant_to_related_person"),
+            gov.get("business_rln_with_org_member"),
+            gov.get("business_rln_with_family"),
+            gov.get("business_rln_with_35_ctrl"),
+        ]
+        has_related_party = any(f is True for f in rp_flags)
+        schedule_l_required = gov.get("schedule_l_required")
+
+        if has_related_party and schedule_l_required is not True:
+            which_flags = []
+            if gov.get("loan_outstanding"):
+                which_flags.append("loans to/from officers")
+            if gov.get("grant_to_related_person"):
+                which_flags.append("grants to related persons")
+            if gov.get("business_rln_with_org_member"):
+                which_flags.append("business with board members")
+            if gov.get("business_rln_with_family"):
+                which_flags.append("business with officer families")
+            if gov.get("business_rln_with_35_ctrl"):
+                which_flags.append("business with 35% controllers")
+
+            triggers.append(
+                SignalTrigger(
+                    rule_id="SR-006",
+                    severity="HIGH",
+                    title=RULE_REGISTRY["SR-006"].title,
+                    detected_summary=(
+                        f"990 XML ({org_name}, {tax_year}): Part IV indicates "
+                        f"{', '.join(which_flags)} but Schedule L may be absent. "
+                        f"Related-party transactions require Schedule L disclosure."
+                    ),
+                    trigger_doc=trigger_doc,
+                )
+            )
+
+        # --- SR-011: No independent board members ---
+        independent = gov.get("independent_voting_members")
+        total_voting = gov.get("voting_members_governing_body")
+        if independent is not None and independent == 0:
+            triggers.append(
+                SignalTrigger(
+                    rule_id="SR-011",
+                    severity="HIGH",
+                    title=RULE_REGISTRY["SR-011"].title,
+                    detected_summary=(
+                        f"990 XML ({org_name}, {tax_year}): Zero independent "
+                        f"voting members out of {total_voting or '?'} total. "
+                        f"Organization is fully insider-controlled with no "
+                        f"independent oversight."
+                    ),
+                    trigger_doc=trigger_doc,
+                )
+            )
+
+        # --- SR-012: No conflict of interest policy ---
+        coi = gov.get("conflict_of_interest_policy")
+        if coi is False:
+            # Extra severity if also missing whistleblower + doc retention
+            missing_policies = []
+            if gov.get("whistleblower_policy") is False:
+                missing_policies.append("whistleblower")
+            if gov.get("document_retention_policy") is False:
+                missing_policies.append("document retention")
+
+            extra = ""
+            if missing_policies:
+                extra = f" Also missing: {', '.join(missing_policies)} policies."
+
+            triggers.append(
+                SignalTrigger(
+                    rule_id="SR-012",
+                    severity="HIGH",
+                    title=RULE_REGISTRY["SR-012"].title,
+                    detected_summary=(
+                        f"990 XML ({org_name}, {tax_year}): No written conflict "
+                        f"of interest policy (Part VI Line 12a = No).{extra} "
+                        f"Self-dealing transactions are structurally undetectable."
+                    ),
+                    trigger_doc=trigger_doc,
+                )
+            )
+
+        # --- SR-013: Zero officer pay at high revenue ---
+        total_rev = fin.get("total_revenue") or 0
+        if total_rev >= 500_000 and officers:
+            # Check if ALL officers report $0
+            all_zero = all((o.get("total_compensation", 0) or 0) == 0 for o in officers)
+            if all_zero:
+                officer_names = [o.get("name", "?") for o in officers[:3]]
+                triggers.append(
+                    SignalTrigger(
+                        rule_id="SR-013",
+                        severity="HIGH",
+                        title=RULE_REGISTRY["SR-013"].title,
+                        detected_summary=(
+                            f"990 XML ({org_name}, {tax_year}): Revenue is "
+                            f"${total_rev:,} but all {len(officers)} officers "
+                            f"report $0 compensation. Officers include: "
+                            f"{', '.join(officer_names)}. Review for unreported "
+                            f"compensation or related-party payments."
+                        ),
+                        trigger_doc=trigger_doc,
+                    )
+                )
+
+        # --- SR-028: Donor concentration (>50% from contributions, no Schedule B) ---
+        contributions = fin.get("total_contributions") or 0
+        if total_rev > 0 and contributions > 0:
+            pct = contributions / total_rev
+            if pct > 0.5 and gov.get("schedule_b_required") is False:
+                triggers.append(
+                    SignalTrigger(
+                        rule_id="SR-028",
+                        severity="MEDIUM",
+                        title=RULE_REGISTRY["SR-028"].title,
+                        detected_summary=(
+                            f"990 XML ({org_name}, {tax_year}): "
+                            f"{pct:.0%} of revenue (${contributions:,} of "
+                            f"${total_rev:,}) comes from contributions, but "
+                            f"Schedule B is not required — suggesting no single "
+                            f"donor exceeds the threshold. Unusual at this "
+                            f"contribution level."
+                        ),
+                        trigger_doc=trigger_doc,
+                    )
+                )
+
+        # --- SR-029: Low program expense ratio ---
+        total_exp = fin.get("total_expenses") or 0
+        salaries = fin.get("salaries_and_compensation") or 0
+        fundraising = fin.get("professional_fundraising") or 0
+        if total_exp > 0:
+            overhead = salaries + fundraising
+            program_pct = 1.0 - (overhead / total_exp) if total_exp > 0 else 0
+            if program_pct < 0.5 and total_exp > 100_000:
+                triggers.append(
+                    SignalTrigger(
+                        rule_id="SR-029",
+                        severity="MEDIUM",
+                        title=RULE_REGISTRY["SR-029"].title,
+                        detected_summary=(
+                            f"990 XML ({org_name}, {tax_year}): Only "
+                            f"{program_pct:.0%} of expenses went to programs. "
+                            f"Salaries: ${salaries:,}, Fundraising: "
+                            f"${fundraising:,}, Total: ${total_exp:,}."
+                        ),
+                        trigger_doc=trigger_doc,
+                    )
+                )
+
+        # --- Material diversion flag (governance red flag) ---
+        if gov.get("material_diversion_or_misuse") is True:
+            triggers.append(
+                SignalTrigger(
+                    rule_id="SR-025",
+                    severity="CRITICAL",
+                    title="Material Diversion or Misuse Disclosed",
+                    detected_summary=(
+                        f"990 XML ({org_name}, {tax_year}): Organization "
+                        f"disclosed material diversion or misuse of assets "
+                        f"in Part VI. This is a self-reported governance "
+                        f"failure requiring immediate investigation."
+                    ),
+                    trigger_doc=trigger_doc,
+                )
+            )
+
     return triggers
 
 

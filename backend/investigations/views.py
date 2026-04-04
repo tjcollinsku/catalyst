@@ -3672,19 +3672,37 @@ def api_case_document_process_pending(request, pk):
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_case_fetch_990s(request, pk):
-    """Fetch IRS Form 990 PDFs from ProPublica for the organization in this case.
+    """Fetch and parse IRS Form 990 XML data directly from IRS TEOS.
+
+    Searches the IRS e-file index by EIN, fetches the actual 990 XML for
+    each filing, parses it, and creates FinancialSnapshot records in the
+    case. This replaces the old ProPublica PDF download approach — we now
+    get structured XML data directly from the IRS.
 
     POST body (JSON):
-        ein: string — the organization's EIN (e.g., "12-3456789" or "123456789")
+        {
+            "ein": "12-3456789",           # required
+            "years": [2024, 2023]          # optional: limit to specific index years
+        }
 
     Returns:
-        {"fetched": N, "skipped": M, "errors": [...], "documents": [...]}
+        {
+            "fetched": N,
+            "skipped": M,
+            "errors": [...],
+            "filings": [
+                {
+                    "tax_year": 2023,
+                    "return_type": "990",
+                    "taxpayer_name": "...",
+                    "total_revenue": 123456,
+                    "total_expenses": 98765,
+                    "officers_count": 8,
+                    "snapshot_id": "uuid" or null
+                }
+            ]
+        }
     """
-    import io
-    from urllib.parse import urlparse
-
-    import requests
-
     case = get_object_or_404(Case, pk=pk)
 
     # --- Parse POST body ---
@@ -3703,186 +3721,188 @@ def api_case_fetch_990s(request, pk):
             status=400,
         )
 
-    # --- Fetch filings from ProPublica ---
+    requested_years = body.get("years", None)
+
     try:
-        from . import propublica_connector
+        from . import irs_connector
+        from .models import FinancialSnapshot, Organization
 
-        filings = propublica_connector.fetch_filings(ein)
-    except propublica_connector.ProPublicaError as e:
-        logger.warning(
-            "propublica_fetch_failed",
-            extra={"case_id": str(case.pk), "ein": ein, "error": str(e)},
-        )
+        # Search the IRS index for this EIN
+        search_years = requested_years or irs_connector.INDEX_YEARS[:3]
+        search_result = irs_connector.search_990_by_ein(ein, years=search_years)
+
+        if search_result.total_found == 0:
+            return JsonResponse(
+                {
+                    "fetched": 0,
+                    "skipped": 0,
+                    "errors": [
+                        {
+                            "filing": "all",
+                            "error": (
+                                f"No e-filed 990 returns found for EIN "
+                                f"{search_result.ein_formatted} in the "
+                                f"{', '.join(str(y) for y in search_years)}"
+                                f" indexes."
+                            ),
+                        }
+                    ],
+                    "filings": [],
+                },
+                status=200,
+            )
+
+        # Try to find the matching organization in this case
+        normalized_ein = irs_connector._normalize_ein(ein)
+        formatted_ein = f"{normalized_ein[:2]}-{normalized_ein[2:]}"
+        org = Organization.objects.filter(
+            case=case, ein__in=[normalized_ein, formatted_ein, ein]
+        ).first()
+
+        fetched_count = 0
+        skipped_count = 0
+        errors = []
+        filing_results = []
+
+        for filing in search_result.filings:
+            # Check if we already have a FinancialSnapshot for this tax year + EIN
+            existing = FinancialSnapshot.objects.filter(
+                case=case,
+                ein__in=[normalized_ein, formatted_ein],
+                tax_year=filing.tax_year,
+                source="IRS_TEOS_XML",
+            ).first()
+
+            if existing:
+                skipped_count += 1
+                filing_results.append(
+                    {
+                        "tax_year": filing.tax_year,
+                        "return_type": filing.return_type,
+                        "taxpayer_name": filing.taxpayer_name,
+                        "status": "skipped_duplicate",
+                        "snapshot_id": str(existing.pk),
+                    }
+                )
+                continue
+
+            # Fetch and parse the XML
+            try:
+                xml_text = irs_connector.fetch_990_xml(filing)
+                parsed = irs_connector.parse_990_xml(
+                    xml_text, filing.object_id, filing.xml_batch_id
+                )
+            except (irs_connector.IRSNetworkError, irs_connector.IRSParseError) as e:
+                errors.append(
+                    {
+                        "filing": f"{filing.return_type} {filing.tax_year}",
+                        "error": str(e),
+                    }
+                )
+                continue
+
+            # Create FinancialSnapshot
+            # We create a placeholder Document for the XML source
+            # (no actual file upload — the data came from structured XML)
+            snapshot = FinancialSnapshot.objects.create(
+                case=case,
+                document_id=case.documents.first().pk if case.documents.exists() else None,
+                organization=org,
+                ein=formatted_ein,
+                tax_year=parsed.tax_year or filing.tax_year,
+                form_type=parsed.return_type or filing.return_type,
+                # Revenue
+                total_contributions=parsed.financials.total_contributions,
+                program_service_revenue=parsed.financials.program_service_revenue,
+                investment_income=parsed.financials.investment_income,
+                other_revenue=parsed.financials.other_revenue,
+                total_revenue=parsed.financials.total_revenue,
+                # Expenses
+                grants_paid=parsed.financials.grants_paid,
+                salaries_and_compensation=parsed.financials.salaries_and_compensation,
+                professional_fundraising=parsed.financials.professional_fundraising,
+                other_expenses=parsed.financials.other_expenses,
+                total_expenses=parsed.financials.total_expenses,
+                revenue_less_expenses=parsed.financials.revenue_less_expenses,
+                # Balance sheet
+                total_assets_boy=parsed.financials.total_assets_boy,
+                total_assets_eoy=parsed.financials.total_assets_eoy,
+                total_liabilities_boy=parsed.financials.total_liabilities_boy,
+                total_liabilities_eoy=parsed.financials.total_liabilities_eoy,
+                net_assets_boy=parsed.financials.net_assets_boy,
+                net_assets_eoy=parsed.financials.net_assets_eoy,
+                # Compensation
+                officer_compensation_total=parsed.total_reportable_comp_from_org,
+                num_employees=parsed.num_employees,
+                num_voting_members=(parsed.governance.voting_members_governing_body),
+                num_independent_members=(parsed.governance.independent_voting_members),
+                # Metadata
+                source="IRS_TEOS_XML",
+                confidence=parsed.parse_quality,
+                raw_extraction=irs_connector.parsed_990_to_dict(parsed),
+            )
+
+            fetched_count += 1
+            filing_results.append(
+                {
+                    "tax_year": parsed.tax_year or filing.tax_year,
+                    "return_type": parsed.return_type or filing.return_type,
+                    "taxpayer_name": parsed.taxpayer_name or filing.taxpayer_name,
+                    "total_revenue": parsed.financials.total_revenue,
+                    "total_expenses": parsed.financials.total_expenses,
+                    "total_assets": parsed.financials.total_assets_eoy,
+                    "officers_count": len(parsed.officers),
+                    "parse_quality": parsed.parse_quality,
+                    "snapshot_id": str(snapshot.pk),
+                    "governance": {
+                        "conflict_of_interest_policy": (
+                            parsed.governance.conflict_of_interest_policy
+                        ),
+                        "whistleblower_policy": (parsed.governance.whistleblower_policy),
+                        "document_retention_policy": (parsed.governance.document_retention_policy),
+                        "voting_members": (parsed.governance.voting_members_governing_body),
+                        "independent_members": parsed.governance.independent_voting_members,
+                    },
+                }
+            )
+
+            logger.info(
+                "irs_990_xml_fetched",
+                extra={
+                    "case_id": str(case.pk),
+                    "ein": formatted_ein,
+                    "tax_year": parsed.tax_year,
+                    "return_type": parsed.return_type,
+                    "snapshot_id": str(snapshot.pk),
+                    "parse_quality": parsed.parse_quality,
+                },
+            )
+
         return JsonResponse(
             {
-                "error": f"Failed to fetch from ProPublica: {str(e)}",
-                "fetched": 0,
-                "skipped": 0,
-                "errors": [{"filing": "all", "error": str(e)}],
-                "documents": [],
-            },
-            status=400,
-        )
-
-    if not filings:
-        return JsonResponse(
-            {
-                "fetched": 0,
-                "skipped": 0,
-                "errors": [{"filing": "all", "error": "No filings found for this EIN"}],
-                "documents": [],
+                "fetched": fetched_count,
+                "skipped": skipped_count,
+                "errors": errors,
+                "filings": filing_results,
             },
             status=200,
         )
 
-    # --- Security settings for PDF downloads ---
-    PDF_DOWNLOAD_TIMEOUT = 30  # seconds
-    PDF_MAX_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
-    PDF_CHUNK_SIZE = 64 * 1024  # 64 KB chunks
-
-    # --- Allowed domains for ProPublica CDN and IRS ---
-    ALLOWED_DOMAINS = {
-        "projects.propublica.org",
-        "pp990s3.s3.amazonaws.com",  # legacy S3 hosting
-        "apps.irs.gov",  # IRS direct links
-    }
-
-    def _validate_pdf_url(url: str | None) -> str | None:
-        """Validate that a PDF URL comes from a trusted domain."""
-        if not url:
-            return None
-        try:
-            parsed = urlparse(url)
-            if parsed.scheme not in ("http", "https"):
-                return None
-            if parsed.hostname not in ALLOWED_DOMAINS:
-                return None
-            return url
-        except Exception:
-            return None
-
-    def _download_pdf(url: str) -> bytes:
-        """Download a PDF with timeout and size limits. Raises ValueError on failure."""
-        try:
-            response = requests.get(
-                url,
-                timeout=PDF_DOWNLOAD_TIMEOUT,
-                stream=True,
-            )
-        except requests.exceptions.Timeout:
-            raise ValueError(f"Download timed out after {PDF_DOWNLOAD_TIMEOUT}s")
-        except requests.exceptions.ConnectionError as e:
-            raise ValueError(f"Connection error: {e}")
-        except requests.exceptions.RequestException as e:
-            raise ValueError(f"Request failed: {e}")
-
-        if response.status_code != 200:
-            raise ValueError(f"HTTP {response.status_code}")
-
-        # Chunked download with size limit
-        chunks = []
-        total_bytes = 0
-        for chunk in response.iter_content(chunk_size=PDF_CHUNK_SIZE):
-            total_bytes += len(chunk)
-            if total_bytes > PDF_MAX_SIZE_BYTES:
-                raise ValueError(f"File exceeds {PDF_MAX_SIZE_BYTES // (1024 * 1024)} MB limit")
-            chunks.append(chunk)
-        return b"".join(chunks)
-
-    # --- Process each filing ---
-    fetched_count = 0
-    skipped_count = 0
-    errors = []
-    documents_created = []
-
-    for filing in filings:
-        if not filing.pdf_url:
-            skipped_count += 1
-            continue
-
-        # Validate URL domain
-        if not _validate_pdf_url(filing.pdf_url):
-            errors.append(
-                {
-                    "filing": f"{filing.tax_year}",
-                    "error": "URL failed domain validation (untrusted domain)",
-                }
-            )
-            skipped_count += 1
-            continue
-
-        # Check for duplicate by source_url
-        existing = case.documents.filter(source_url=filing.pdf_url).first()
-        if existing:
-            skipped_count += 1
-            continue
-
-        # Download PDF
-        try:
-            pdf_bytes = _download_pdf(filing.pdf_url)
-        except ValueError as e:
-            errors.append(
-                {
-                    "filing": f"{filing.tax_year}",
-                    "error": f"Download failed: {str(e)}",
-                }
-            )
-            continue
-
-        # Create a file-like object for the upload pipeline
-        filename = f"form_990_{filing.tax_year}.pdf"
-        try:
-            uploaded_file = io.BytesIO(pdf_bytes)
-            uploaded_file.name = filename
-            uploaded_file.size = len(pdf_bytes)
-            uploaded_file.content_type = "application/pdf"
-
-            # Save via the standard upload pipeline
-            document = _process_uploaded_file(
-                uploaded_file=uploaded_file,
-                case=case,
-                doc_type_hint="IRS_990",
-                source_url=filing.pdf_url,
-                run_pipeline=True,
-            )
-            documents_created.append(serialize_document(document))
-            fetched_count += 1
-
-            logger.info(
-                "propublica_990_fetched",
-                extra={
-                    "case_id": str(case.pk),
-                    "ein": ein,
-                    "tax_year": filing.tax_year,
-                    "document_id": str(document.pk),
-                },
-            )
-        except Exception as e:
-            logger.exception(
-                "propublica_990_processing_failed",
-                extra={
-                    "case_id": str(case.pk),
-                    "ein": ein,
-                    "tax_year": filing.tax_year,
-                    "error": str(e),
-                },
-            )
-            errors.append(
-                {
-                    "filing": f"{filing.tax_year}",
-                    "error": f"Processing failed: {str(e)}",
-                }
-            )
-
-    return JsonResponse(
-        {
-            "fetched": fetched_count,
-            "skipped": skipped_count,
-            "errors": errors,
-            "documents": documents_created,
-        },
-        status=200,
-    )
+    except Exception:
+        logger.exception(
+            "fetch_990s_unexpected",
+            extra={"case_id": str(case.pk), "ein": ein},
+        )
+        return JsonResponse(
+            {
+                "error": "Internal error fetching 990 data",
+                "fetched": 0,
+                "skipped": 0,
+                "errors": [],
+                "filings": [],
+            },
+            status=500,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -4311,46 +4331,47 @@ def api_research_ohio_aos(request, pk):
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_research_irs(request, pk):
-    """Search IRS Exempt Organizations Business Master File by organization name.
+    """Search IRS Form 990 e-file data by EIN or organization name.
 
-    This endpoint queries the IRS EO BMF for nonprofit information including
-    ruling dates, exemption status, and financial indicators. Useful for
-    detecting phantom entities (organizations named in documents before IRS
-    ruling dates) and revoked/suspended organizations.
+    This endpoint searches the IRS TEOS (Tax Exempt Organization Search)
+    yearly index files and can fetch + parse the actual 990 XML filings
+    directly from apps.irs.gov. Returns full financial, governance, and
+    officer compensation data.
 
     POST body (JSON):
         {
-            "query": "Example Charity Ministries"              # required: org name
+            "query": "12-3456789"          # EIN (with or without dash)
+            OR
+            "query": "Example Charity Ministries"  # Organization name search
+
+            // Optional:
+            "fetch_xml": false             # If true, also fetch + parse the XML
         }
 
     Returns:
         {
-            "source": "irs_eo_bmf",
+            "source": "irs_teos_xml",
             "results": [
                 {
-                    "ein": "12-3456789",
-                    "name": "...",
-                    "city": "...",
-                    "state": "...",
-                    "status_code": "...",
-                    "status_description": "...",
-                    "ruling_date": "2020-03-15" or null,
-                    "deductibility_code": "...",
-                    "asset_amount": 123456,
-                    "income_amount": 789012,
-                    "is_revoked": false
+                    "ein": "63-0809530",
+                    "taxpayer_name": "WALKER COUNTY HUMANE SOCIETY",
+                    "return_type": "990EZ",
+                    "tax_year": 2023,
+                    "tax_period": "202312",
+                    "object_id": "...",
+                    "batch_id": "2024_TEOS_XML_01A",
+                    "index_year": 2024,
+                    // If fetch_xml=true, also includes:
+                    "parsed": { financials, governance, officers, ... }
                 }
             ],
             "count": N,
-            "staleness_warning": {
-                "level": "LOW" | "MEDIUM" | "HIGH",
-                "message": "..."
-            }
+            "notes": []
         }
 
-    Note: The IRS bulk EO BMF file is downloaded on the first call and cached
-    locally. Subsequent calls are fast (<1 second). Initial download may take
-    10-30 seconds. Data is updated monthly by IRS.
+    The index files are cached in memory after first download (~50MB each,
+    takes 30-60 seconds). Subsequent searches within the same process are
+    instant.
     """
     case = get_object_or_404(Case, pk=pk)
 
@@ -4363,6 +4384,7 @@ def api_research_irs(request, pk):
         )
 
     query = body.get("query", "").strip()
+    fetch_xml = body.get("fetch_xml", False)
 
     if not query:
         return JsonResponse(
@@ -4373,53 +4395,69 @@ def api_research_irs(request, pk):
     try:
         from . import irs_connector
 
-        result = irs_connector.search_ohio_nonprofits(query)
+        # Detect if query looks like an EIN (digits with optional dash)
+        cleaned = query.replace("-", "").replace(" ", "")
+        is_ein = cleaned.isdigit() and 7 <= len(cleaned) <= 9
 
-        # Serialize EoBmfRecord dataclasses to dicts
         records = []
-        for record in result.matches:
-            records.append(
-                {
-                    "ein": f"{record.ein // 10000:02d}-{record.ein % 10000:04d}",
-                    "name": record.name,
-                    "city": record.city,
-                    "state": record.state,
-                    "status_code": record.status_code,
-                    "status_description": record.status_description,
-                    "ruling_date": (
-                        f"{record.ruling_year}-{record.ruling_month:02d}-01"
-                        if record.ruling_year and record.ruling_month
-                        else None
-                    ),
-                    "deductibility_code": record.deductibility_code,
-                    "asset_amount": record.asset_amount,
-                    "income_amount": record.income_amount,
-                    "is_revoked": record.is_revoked,
-                }
-            )
+        notes = []
 
-        # Serialize staleness warning
-        staleness = {
-            "level": result.staleness_warning.level.value,
-            "message": str(result.staleness_warning),
-        }
+        if is_ein:
+            # EIN search — check most recent 3 index years
+            result = irs_connector.search_990_by_ein(cleaned, years=irs_connector.INDEX_YEARS[:3])
+            for filing in result.filings:
+                record = irs_connector.filing_to_dict(filing)
+
+                # Optionally fetch and parse the actual XML
+                if fetch_xml:
+                    try:
+                        xml_text = irs_connector.fetch_990_xml(filing)
+                        parsed = irs_connector.parse_990_xml(
+                            xml_text, filing.object_id, filing.xml_batch_id
+                        )
+                        record["parsed"] = irs_connector.parsed_990_to_dict(parsed)
+                    except (irs_connector.IRSNetworkError, irs_connector.IRSParseError) as e:
+                        record["parsed"] = None
+                        notes.append(f"Could not parse {filing.return_type} {filing.tax_year}: {e}")
+
+                records.append(record)
+
+            if result.total_found == 0:
+                notes.append(
+                    f"No e-filed 990 returns found for EIN {result.ein_formatted} "
+                    f"in {', '.join(str(y) for y in result.years_searched)} indexes. "
+                    f"The organization may file on paper or be below the e-filing threshold."
+                )
+        else:
+            # Name search — search most recent 2 index years
+            filings = irs_connector.search_990_by_name(
+                query, years=irs_connector.INDEX_YEARS[:2], max_results=50
+            )
+            for filing in filings:
+                records.append(irs_connector.filing_to_dict(filing))
+
+            notes.append(
+                "Name search returns the most recent filing per organization. "
+                "Search by EIN for all available filings."
+            )
 
         logger.info(
             "research_irs_search",
             extra={
                 "case_id": str(case.pk),
                 "query": query,
+                "is_ein": is_ein,
+                "fetch_xml": fetch_xml,
                 "results_count": len(records),
             },
         )
 
         return JsonResponse(
             {
-                "source": "irs_eo_bmf",
+                "source": "irs_teos_xml",
                 "results": records,
                 "count": len(records),
-                "notes": [],
-                "staleness_warning": staleness,
+                "notes": notes,
             },
             status=200,
         )
@@ -4432,11 +4470,10 @@ def api_research_irs(request, pk):
         return JsonResponse(
             {
                 "error": f"IRS search failed: {str(e)}",
-                "source": "irs_eo_bmf",
+                "source": "irs_teos_xml",
                 "results": [],
                 "count": 0,
                 "notes": [],
-                "staleness_warning": None,
             },
             status=400,
         )
@@ -4449,11 +4486,10 @@ def api_research_irs(request, pk):
         return JsonResponse(
             {
                 "error": "Internal error searching IRS",
-                "source": "irs_eo_bmf",
+                "source": "irs_teos_xml",
                 "results": [],
                 "count": 0,
                 "notes": [],
-                "staleness_warning": None,
             },
             status=500,
         )

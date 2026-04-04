@@ -38,10 +38,10 @@ const SOURCES: Record<SourceType, SourceConfig> = {
     },
     irs: {
         id: "irs",
-        label: "IRS Tax-Exempt Search",
-        description: "Search nonprofit organizations by EIN, name, or location",
-        placeholder: "Organization name or EIN",
-        columns: ["EIN", "Name", "City", "Status", "Ruling Date", "Assets", "Income", "Revoked?", "Add"],
+        label: "IRS 990 E-File Search",
+        description: "Search IRS 990 filings by EIN or organization name (direct from IRS XML)",
+        placeholder: "EIN (e.g., 12-3456789) or organization name",
+        columns: ["EIN", "Name", "Type", "Tax Year", "Batch", "Add"],
     },
     recorder: {
         id: "recorder",
@@ -305,41 +305,33 @@ export function ResearchTab() {
 
     const renderIrsRow = (row: Record<string, unknown>, rowIndex: number) => {
         const ein = String(row.ein ?? "—");
-        const orgName = String(row.organization_name ?? "—");
-        const city = String(row.city ?? "");
-        const state = String(row.state ?? "");
-        const location = city ? `${city}, ${state}` : "—";
-        const status = String(row.status ?? "—");
-        const rulingDate = row.ruling_date ? formatDate(String(row.ruling_date)) : "—";
-        const totalAssets = row.total_assets ? formatCurrency(Number(row.total_assets)) : "—";
-        const totalRevenue = row.total_revenue ? formatCurrency(Number(row.total_revenue)) : "—";
-        const hasRevocation = Boolean(row.revocation_date);
+        const orgName = String(row.taxpayer_name ?? "—");
+        const returnType = String(row.return_type ?? "—");
+        const taxYear = row.tax_year ? String(row.tax_year) : "—";
+        const batchId = String(row.batch_id ?? "—");
+        // Color code return types
+        const typeColor = returnType === "990" ? "#3b82f6"
+            : returnType === "990EZ" ? "#8b5cf6"
+            : returnType === "990PF" ? "#f59e0b"
+            : "#6b7280";
         return (
             <>
                 <td className={styles.irsEin}>{ein}</td>
                 <td className={styles.irsName}>{orgName}</td>
-                <td>{location}</td>
-                <td className={styles.irsStatus}>
+                <td>
                     <span style={{
                         padding: "2px 6px",
                         borderRadius: "3px",
                         fontSize: "0.75rem",
-                        background: status === "ACTIVE" ? "rgba(34, 197, 94, 0.1)" : "rgba(107, 114, 128, 0.1)",
-                        color: status === "ACTIVE" ? "#22c55e" : "#6b7280"
+                        background: `${typeColor}20`,
+                        color: typeColor,
+                        fontWeight: 600,
                     }}>
-                        {status}
+                        {returnType}
                     </span>
                 </td>
-                <td>{rulingDate}</td>
-                <td style={{ textAlign: "right" }}>{totalAssets}</td>
-                <td style={{ textAlign: "right" }}>{totalRevenue}</td>
-                <td className={styles.irsRevoked}>
-                    {hasRevocation ? (
-                        <span className={styles.revokedFlag}>YES</span>
-                    ) : (
-                        "—"
-                    )}
-                </td>
+                <td>{taxYear}</td>
+                <td style={{ fontSize: "0.75rem", color: "#6b7280" }}>{batchId}</td>
                 <td>
                     {addedRows.has(rowIndex) ? (
                         <span className={styles.addedButton}>✓ Added</span>
@@ -392,14 +384,8 @@ export function ResearchTab() {
         }
     };
 
-    const formatCurrency = (value: number) => {
-        return new Intl.NumberFormat("en-US", {
-            style: "currency",
-            currency: "USD",
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 0,
-        }).format(value);
-    };
+    // formatCurrency available if needed for financial columns:
+    // const formatCurrency = (v: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
 
     const sourceConfig = SOURCES[activeSource];
 

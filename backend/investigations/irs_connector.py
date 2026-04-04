@@ -1,106 +1,51 @@
 """
-IRS Tax Exempt Organization connector for Catalyst.
+IRS Form 990 XML connector for Catalyst.
 
-Strategy: bulk file download + local search + staleness warning.
+Strategy: Index CSV lookup → HTTP range-request extraction from ZIP → XML parsing.
 
-Two data sources, both free and publicly available from the IRS:
+Data source: IRS TEOS (Tax Exempt Organization Search) bulk downloads.
+    - Index CSVs:  apps.irs.gov/pub/epostcard/990/xml/{YEAR}/index_{YEAR}.csv
+    - XML ZIPs:    apps.irs.gov/pub/epostcard/990/xml/{YEAR}/{BATCH_ID}.zip
 
-    1. Publication 78 (Pub78)
-       File: https://apps.irs.gov/pub/epostcard/data-download-pub78.zip
-       Format: pipe-delimited text (EIN|Name|City|State|Country|DeductibilityCode)
-       Contents: Every organization currently eligible to receive tax-deductible
-       charitable contributions. Updated monthly.
-       Use case: "Is this org currently deductibility-eligible?"
+Each ZIP contains thousands of individual 990 XML files (~5-100KB each).
+Instead of downloading entire 100MB ZIPs, we use HTTP range requests to
+read only the ZIP central directory and then extract a single file (~5KB
+of network traffic per filing).
 
-    2. Exempt Organizations Business Master File (EO BMF)
-       Files: https://www.irs.gov/pub/irs-soi/eo1.csv through eo4.csv (by region)
-             plus eo_xx.csv per state (e.g., eo_oh.csv for Ohio)
-       Format: CSV with ~30 columns
-       Contents: All organizations that have received an IRS determination of
-       tax-exempt status — active, revoked, and terminated. Includes ruling date,
-       NTEE code, filing requirement, subsection, and exemption status.
-       Use case: EIN lookup, exemption history, formation timeline.
+This replaces the old bulk-CSV approach (Publication 78 + EO BMF) which:
+    - Downloaded 50MB+ CSV files that Railway's IP got blocked from
+    - Only provided summary data (no governance, no compensation detail)
+    - Had no Part IV/VI/VII data needed by signal rules
 
-Why bulk files instead of the TEOS web API?
-    The IRS Tax Exempt Organization Search (TEOS) web interface at
-    apps.irs.gov/app/eos/ does not expose a documented public REST API.
-    The bulk downloads are the official IRS-supported programmatic access method.
-    They are stable, free, and require no authentication.
+The XML approach gives us:
+    - Part I:   Full financials (revenue, expenses, assets)
+    - Part IV:  Checklist of required schedules (related-party flags)
+    - Part VI:  Governance (conflict policy, board independence, whistleblower)
+    - Part VII: Officer compensation table (name, title, hours, pay)
+    - Schedules: L (related-party transactions), etc.
 
-The staleness design (human-in-the-loop):
-    Every search result is accompanied by a StalenessWarning that tells the
-    investigator when the data was downloaded and whether manual verification
-    at apps.irs.gov/app/eos/ is advisable for anything time-sensitive.
-
-    This matters in practice: the founding investigation found a nonprofit
-    whose tax-exempt status was relevant to a filing date discrepancy.
-    Knowing when an exemption was *granted* versus when a transaction occurred
-    is investigatively significant — but bulk files are only as current as
-    their last download date.
-
-EO BMF column reference (selected fields):
-    EIN                Employer Identification Number (9 digits, no dashes)
-    NAME               Organization name
-    ICO                In care of name
-    STREET             Street address
-    CITY               City
-    STATE              State abbreviation
-    ZIP                ZIP code
-    GROUP              Group exemption number
-    SUBSECTION         IRC subsection code (3 = 501(c)(3), etc.)
-    AFFILIATION        Affiliation code
-    CLASSIFICATION     Classification code
-    RULING             Ruling date (YYYYMM)
-    DEDUCTIBILITY      Deductibility code
-    FOUNDATION         Foundation code
-    ACTIVITY           Activity codes
-    ORGANIZATION       Organization type code
-    STATUS             Exemption status code (1=Unconditional, 2=Conditional,
-                       6=Church, 7=Government, 12=Revoked)
-    TAX_PERIOD         Tax period (YYYYMM) of most recent return filed
-    ASSET_CD           Asset code (financial size range)
-    INCOME_CD          Income code (revenue size range)
-    FILING_REQ_CD      Filing requirement code
-    PF_FILING_REQ_CD   Private foundation filing requirement code
-    ACCT_PD            Accounting period (month, 1-12)
-    ASSET_AMT          Total assets (most recent 990)
-    INCOME_AMT         Total income (most recent 990)
-    REVENUE_AMT        Total revenue (most recent 990)
-    NTEE_CD            NTEE classification code
-    SORT_NAME          Sort name / DBA name
-
-EO BMF regional file URLs:
-    eo1.csv — northeast states (CT, ME, MA, NH, NJ, NY, PA, RI, VT)
-    eo2.csv — mid-Atlantic and southeast (DC, DE, FL, GA, MD, NC, SC, VA, WV, + more)
-    eo3.csv — midwest (IL, IN, MI, MN, OH, WI, + more)
-    eo4.csv — west and south (AL, AK, AR, AZ, CA, CO, + more)
-
-    State-specific files: eo_oh.csv, eo_il.csv, etc. (lowercase two-letter codes)
-    These are subsets of the regional files, included for convenience.
+All hosted on IRS servers (apps.irs.gov), publicly accessible, no auth needed,
+updated monthly, supports HTTP range requests.
 
 Usage:
     from investigations.irs_connector import (
-        fetch_pub78,
-        fetch_eo_bmf,
-        search_pub78,
-        search_eo_bmf,
-        lookup_ein,
+        search_990_by_ein,
+        fetch_990_xml,
+        parse_990_xml,
         IRSError,
-        EoBmfRegion,
     )
 
-    # Quick deductibility check by name (Pub78)
-    records = fetch_pub78()
-    results = search_pub78("Example Charity Ministries", records, state="OH")
-    for r in results.matches:
-        print(r.ein, r.name, r.deductibility_code)
-    print(results.staleness_warning)
+    # Find all filings for an EIN
+    filings = search_990_by_ein("12-3456789")
+    for f in filings:
+        print(f.tax_year, f.return_type, f.taxpayer_name)
 
-    # Full EIN lookup from EO BMF (midwest / Ohio)
-    bmf_records = fetch_eo_bmf(EoBmfRegion.MIDWEST)
-    result = lookup_ein(123456789, bmf_records)
-    if result:
-        print(result.name, result.subsection, result.ruling_date, result.status_description)
+    # Fetch and parse the actual XML
+    xml_text = fetch_990_xml(filings[0])
+    parsed = parse_990_xml(xml_text)
+    print(parsed.financials.total_revenue)
+    print(parsed.governance.conflict_of_interest_policy)
+    print(parsed.officers[0].name, parsed.officers[0].compensation)
 """
 
 from __future__ import annotations
@@ -108,887 +53,1246 @@ from __future__ import annotations
 import csv
 import io
 import logging
-import zipfile
+import struct
+import time
+import zlib
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import datetime
+from typing import Optional
 
 import requests
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Constants
+# Configuration
 # ---------------------------------------------------------------------------
 
-# Pub78 bulk download — pipe-delimited text inside a zip file.
-PUB78_URL = "https://apps.irs.gov/pub/epostcard/data-download-pub78.zip"
+IRS_BASE_URL = "https://apps.irs.gov/pub/epostcard/990/xml"
 
-# EO BMF regional CSV files — full master file split by geography.
-EO_BMF_BASE_URL = "https://www.irs.gov/pub/irs-soi"
+# Which years to search (most recent first). Add new years as IRS publishes them.
+INDEX_YEARS = [2025, 2024, 2023, 2022, 2021, 2020, 2019]
 
-# Timeout for all HTTP requests (connect, read) in seconds.
-REQUEST_TIMEOUT = (10, 60)
+# HTTP settings
+REQUEST_TIMEOUT = (10, 60)  # (connect, read) seconds
+USER_AGENT = "Catalyst-Nonprofit-Research/1.0 (nonprofit fraud investigation tool)"
+POLITE_DELAY = 0.3  # seconds between requests to IRS servers
 
-# SEC-017: Total download deadline in seconds. Prevents slow-drip DoS
-# where a server sends data one byte at a time to hold the thread open.
-DOWNLOAD_DEADLINE_SECONDS = 300  # 5 minutes max for any single download
-
-# SEC-017: Maximum download size in bytes (200 MB).
-# Prevents a compromised or misconfigured server from exhausting memory.
-MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024
-
-# User-Agent so the IRS can identify Catalyst traffic.
-HEADERS = {
-    "User-Agent": "Catalyst/2.0 (Intelligence Triage Platform; contact: investigator)",
-    "Accept": "*/*",
-}
-
-# Staleness thresholds (days). Same tier system as Ohio SOS connector.
-STALENESS_LOW_DAYS = 7
-STALENESS_HIGH_DAYS = 21
-
-# EO BMF status codes → human-readable description.
-_BMF_STATUS_MAP = {
-    "1": "Unconditional Exemption",
-    "2": "Conditional Exemption",
-    "6": "Church — 508(c)(1)(A) exemption",
-    "7": "Government instrumentality",
-    "12": "Revoked",
-    "19": "Exempt under 501(c)(3) — private foundation",
-    "22": "Exempt under 501(c)(3) — public charity",
-    "25": "Exempt under 501(c)(3) — supporting organization",
-}
-
-# EO BMF subsection codes → human-readable IRC section.
-_BMF_SUBSECTION_MAP = {
-    "2": "501(c)(2)",
-    "3": "501(c)(3)",
-    "4": "501(c)(4)",
-    "5": "501(c)(5)",
-    "6": "501(c)(6)",
-    "7": "501(c)(7)",
-    "8": "501(c)(8)",
-    "9": "501(c)(9)",
-    "10": "501(c)(10)",
-    "13": "501(c)(13)",
-    "14": "501(c)(14)",
-    "19": "501(c)(19)",
-    "92": "501(e)",
-    "93": "501(f)",
-}
-
-# EO BMF deductibility codes.
-_BMF_DEDUCTIBILITY_MAP = {
-    "1": "Contributions are deductible",
-    "2": "Contributions are not deductible",
-    "4": "Contributions are deductible by treaty (foreign orgs)",
-}
-
+# Cache: in-memory index cache to avoid re-downloading during a session.
+# Key: year (int), Value: list of IndexRecord
+_index_cache: dict[int, list[IndexRecord]] = {}
+_zip_directory_cache: dict[str, ZipDirectory] = {}
 
 # ---------------------------------------------------------------------------
-# Error type
+# Exceptions
 # ---------------------------------------------------------------------------
 
 
 class IRSError(Exception):
-    """
-    Raised when the IRS connector cannot complete a request.
+    """Base exception for IRS connector errors."""
 
-    Attributes:
-        message:     Human-readable description of what went wrong.
-        status_code: HTTP status code if the error came from HTTP (or None).
-        ein:         The EIN being looked up, if applicable (or None).
-    """
+    pass
 
-    def __init__(
-        self,
-        message: str,
-        status_code: int | None = None,
-        ein: int | None = None,
-    ):
-        super().__init__(message)
-        self.status_code = status_code
-        self.ein = ein
+
+class IRSNetworkError(IRSError):
+    """Network-level failure talking to IRS servers."""
+
+    pass
+
+
+class IRSParseError(IRSError):
+    """Failed to parse XML or index data."""
+
+    pass
+
+
+class IRSNotFoundError(IRSError):
+    """No filing found for the given EIN/criteria."""
+
+    pass
 
 
 # ---------------------------------------------------------------------------
-# Enums
+# Data Classes — Index
 # ---------------------------------------------------------------------------
 
 
-class EoBmfRegion(Enum):
-    """
-    IRS EO BMF regional file identifiers.
+@dataclass
+class IndexRecord:
+    """One row from the IRS yearly index CSV."""
 
-    The IRS splits the master file into four regional CSV files.
-    Each value is the filename suffix used in the download URL.
-
-    NORTHEAST:  eo1.csv — CT, ME, MA, NH, NJ, NY, PA, RI, VT + territories
-    SOUTHEAST:  eo2.csv — DC, DE, FL, GA, MD, NC, SC, VA, WV + more
-    MIDWEST:    eo3.csv — IL, IN, MI, MN, OH, WI + more  ← use for Ohio
-    SOUTH_WEST: eo4.csv — AL, AK, AR, AZ, CA, CO, HI, ID, + more
-
-    STATE_OH:   eo_oh.csv — Ohio only (subset of MIDWEST, smaller download)
-    """
-
-    NORTHEAST = "eo1.csv"
-    SOUTHEAST = "eo2.csv"
-    MIDWEST = "eo3.csv"
-    SOUTH_WEST = "eo4.csv"
-    STATE_OH = "eo_oh.csv"
-    STATE_IL = "eo_il.csv"
-    STATE_IN = "eo_in.csv"
-    STATE_MI = "eo_mi.csv"
-    STATE_KY = "eo_ky.csv"
-    STATE_PA = "eo_pa.csv"
-    STATE_WV = "eo_wv.csv"
+    return_id: str
+    filing_type: str  # "EFILE"
+    ein: str  # 9 digits, no dashes
+    tax_period: str  # "YYYYMM"
+    sub_date: str  # submission year
+    taxpayer_name: str
+    return_type: str  # "990", "990EZ", "990PF"
+    dln: str
+    object_id: str  # Key for ZIP extraction
+    xml_batch_id: str  # e.g., "2024_TEOS_XML_01A"
+    index_year: int = 0  # Which yearly index this came from
 
     @property
-    def url(self) -> str:
-        return f"{EO_BMF_BASE_URL}/{self.value}"
+    def tax_year(self) -> int:
+        """Extract tax year from tax_period (first 4 digits)."""
+        try:
+            return int(self.tax_period[:4])
+        except (ValueError, IndexError):
+            return 0
+
+    @property
+    def ein_formatted(self) -> str:
+        """EIN with dash: 12-3456789."""
+        ein = self.ein.zfill(9)
+        return f"{ein[:2]}-{ein[2:]}"
+
+    @property
+    def zip_url(self) -> str:
+        """Full URL to the ZIP file containing this XML."""
+        year = self.xml_batch_id.split("_")[0]
+        return f"{IRS_BASE_URL}/{year}/{self.xml_batch_id}.zip"
+
+    @property
+    def xml_filename(self) -> str:
+        """Filename inside the ZIP."""
+        return f"{self.xml_batch_id}/{self.object_id}_public.xml"
 
 
 # ---------------------------------------------------------------------------
-# Staleness warning
+# Data Classes — Parsed 990
 # ---------------------------------------------------------------------------
-
-
-class StalenessLevel(Enum):
-    LOW = "LOW"
-    MEDIUM = "MEDIUM"
-    HIGH = "HIGH"
 
 
 @dataclass
-class StalenessWarning:
-    """
-    Always returned alongside search results.
+class FinancialData:
+    """Part I financials + Part X balance sheet."""
 
-    Tells the investigator how fresh the underlying bulk file is and whether
-    manual verification at apps.irs.gov/app/eos/ is advisable.
+    # Part I — Revenue (current year)
+    total_contributions: Optional[int] = None
+    program_service_revenue: Optional[int] = None
+    investment_income: Optional[int] = None
+    other_revenue: Optional[int] = None
+    total_revenue: Optional[int] = None
 
-    Attributes:
-        downloaded_at:  UTC datetime when the bulk file was downloaded.
-        days_old:       How many days ago that was (relative to now UTC).
-        level:          LOW (<7 days), MEDIUM (7-21 days), HIGH (>21 days).
-        message:        Human-readable advisory string.
-    """
+    # Part I — Revenue (prior year, for trend analysis)
+    py_total_revenue: Optional[int] = None
+    py_total_expenses: Optional[int] = None
 
-    downloaded_at: datetime
-    days_old: int
-    level: StalenessLevel
-    message: str
+    # Part I — Expenses
+    grants_paid: Optional[int] = None
+    salaries_and_compensation: Optional[int] = None
+    professional_fundraising: Optional[int] = None
+    other_expenses: Optional[int] = None
+    total_expenses: Optional[int] = None
 
-    def __str__(self) -> str:
-        return self.message
+    # Part I — Bottom line
+    revenue_less_expenses: Optional[int] = None
 
-    @classmethod
-    def from_download_time(cls, downloaded_at: datetime) -> "StalenessWarning":
-        now = datetime.now(tz=timezone.utc)
-        # Make sure both are timezone-aware before subtracting
-        if downloaded_at.tzinfo is None:
-            downloaded_at = downloaded_at.replace(tzinfo=timezone.utc)
-        days_old = (now - downloaded_at).days
+    # Part X — Balance Sheet
+    total_assets_boy: Optional[int] = None
+    total_assets_eoy: Optional[int] = None
+    total_liabilities_boy: Optional[int] = None
+    total_liabilities_eoy: Optional[int] = None
+    net_assets_boy: Optional[int] = None
+    net_assets_eoy: Optional[int] = None
 
-        if days_old < STALENESS_LOW_DAYS:
-            level = StalenessLevel.LOW
-            advisory = "Data is recent. Manual verification optional for time-sensitive matters."
-        elif days_old <= STALENESS_HIGH_DAYS:
-            level = StalenessLevel.MEDIUM
-            advisory = "Data is moderately aged. Verify current status at apps.irs.gov/app/eos/ for active investigations."
-        else:
-            level = StalenessLevel.HIGH
-            advisory = (
-                "WARNING — DATA IS STALE. IRS bulk files are updated monthly. "
-                "This data is over 21 days old. Manually verify all findings at "
-                "apps.irs.gov/app/eos/ before relying on exemption status or deductibility."
-            )
+    # Cash position (for SR-019 CASH_HEAVY)
+    cash_non_interest_bearing_eoy: Optional[int] = None
+    savings_and_temp_investments_eoy: Optional[int] = None
 
-        message = (
-            f"[IRS Bulk Data] Downloaded {downloaded_at.strftime('%Y-%m-%d %H:%M UTC')} "
-            f"({days_old} day{'s' if days_old != 1 else ''} ago). "
-            f"Staleness: {level.value}. {advisory}"
+
+@dataclass
+class GovernanceData:
+    """Part IV checklist + Part VI governance indicators."""
+
+    # Part IV — Checklist of Required Schedules
+    schedule_b_required: Optional[bool] = None  # Major donors
+    political_campaign_activity: Optional[bool] = None
+    lobbying_activities: Optional[bool] = None
+    subject_to_proxy_tax: Optional[bool] = None
+    donor_advised_fund: Optional[bool] = None
+    conservation_easements: Optional[bool] = None
+    report_land_building_equipment: Optional[bool] = None
+    schedule_l_required: Optional[bool] = None  # Related-party transactions
+    loan_outstanding: Optional[bool] = None  # Loans to/from officers
+    grant_to_related_person: Optional[bool] = None  # Grants to related persons
+    business_rln_with_org_member: Optional[bool] = None  # Business with board members
+    business_rln_with_family: Optional[bool] = None  # Business with family
+    business_rln_with_35_ctrl: Optional[bool] = None  # Business with 35% controllers
+    deductible_noncash_contrib: Optional[bool] = None
+    schedule_j_required: Optional[bool] = None  # Compensation > $150K
+    tax_exempt_bonds: Optional[bool] = None
+    # Unrelated business income
+    unrelated_business_income: Optional[bool] = None
+
+    # Part VI Section A — Governing Body
+    voting_members_governing_body: Optional[int] = None
+    independent_voting_members: Optional[int] = None
+    family_or_business_relationship: Optional[bool] = None
+    delegation_of_mgmt_duties: Optional[bool] = None
+    material_diversion_or_misuse: Optional[bool] = None
+    members_or_stockholders: Optional[bool] = None
+    election_of_board_members: Optional[bool] = None
+
+    # Part VI Section B — Policies
+    conflict_of_interest_policy: Optional[bool] = None  # Line 12a — SR-012
+    annual_disclosure_covered: Optional[bool] = None  # Line 12b
+    regular_monitoring_enforced: Optional[bool] = None  # Line 12c
+    whistleblower_policy: Optional[bool] = None  # Line 13
+    document_retention_policy: Optional[bool] = None  # Line 14
+    compensation_process_ceo: Optional[bool] = None  # Line 15a
+    compensation_process_other: Optional[bool] = None  # Line 15b
+
+    # Part VI — Minutes and transparency
+    minutes_of_governing_body: Optional[bool] = None
+    minutes_of_committees: Optional[bool] = None
+    form990_provided_to_governing_body: Optional[bool] = None
+
+
+@dataclass
+class OfficerCompensation:
+    """One row from Part VII — Officers, Directors, Trustees, Key Employees."""
+
+    name: str = ""
+    title: str = ""
+    average_hours_per_week: Optional[float] = None
+    average_hours_related_org: Optional[float] = None
+    reportable_comp_from_org: Optional[int] = None
+    reportable_comp_from_related: Optional[int] = None
+    other_compensation: Optional[int] = None
+    is_former: bool = False
+    is_officer: bool = False
+    is_highest_compensated: bool = False
+    is_key_employee: bool = False
+
+    @property
+    def total_compensation(self) -> int:
+        """Sum of all compensation columns."""
+        return (
+            (self.reportable_comp_from_org or 0)
+            + (self.reportable_comp_from_related or 0)
+            + (self.other_compensation or 0)
         )
-        return cls(
-            downloaded_at=downloaded_at,
-            days_old=days_old,
-            level=level,
-            message=message,
-        )
+
+
+@dataclass
+class Parsed990:
+    """Complete parsed Form 990 result."""
+
+    # Header
+    ein: str = ""
+    taxpayer_name: str = ""
+    tax_year: int = 0
+    tax_period_begin: str = ""  # "YYYY-MM-DD"
+    tax_period_end: str = ""  # "YYYY-MM-DD"
+    return_type: str = ""  # "990", "990EZ", "990PF"
+    formation_year: Optional[int] = None
+    state: str = ""
+    mission: str = ""
+    website: str = ""
+
+    # Sections
+    financials: FinancialData = field(default_factory=FinancialData)
+    governance: GovernanceData = field(default_factory=GovernanceData)
+    officers: list[OfficerCompensation] = field(default_factory=list)
+
+    # Compensation summary
+    total_reportable_comp_from_org: Optional[int] = None
+    individuals_over_100k: Optional[int] = None
+    total_comp_greater_than_150k: Optional[bool] = None
+
+    # Employees
+    num_employees: Optional[int] = None
+    num_volunteers: Optional[int] = None
+
+    # Metadata
+    source_object_id: str = ""
+    source_batch_id: str = ""
+    parse_quality: float = 1.0  # 0.0–1.0
+
+
+@dataclass
+class SearchResult:
+    """Result from search_990_by_ein with all filings found."""
+
+    ein: str
+    ein_formatted: str
+    filings: list[IndexRecord]
+    years_searched: list[int]
+    total_found: int
 
 
 # ---------------------------------------------------------------------------
-# Data structures
+# ZIP Directory Cache
 # ---------------------------------------------------------------------------
 
 
 @dataclass
-class Pub78Record:
-    """
-    A single record from IRS Publication 78 (deductibility-eligible orgs).
+class ZipFileEntry:
+    """One file entry from a ZIP central directory."""
 
-    This is a lightweight record — it tells you the org is eligible to receive
-    deductible contributions and what type of deductibility applies. It does NOT
-    contain ruling dates, NTEE codes, or financial data. Use EoBmfRecord for that.
-
-    Attributes:
-        ein:               IRS EIN as integer (no dashes).
-        name:              Organization name as it appears in IRS records.
-        city:              City of the organization's registered address.
-        state:             Two-letter state code (e.g., "OH"). Empty for foreign orgs.
-        country:           Country code. "US" for domestic orgs.
-        deductibility_code: IRS deductibility code. "1" = deductible.
-        deductibility_description: Human-readable description of deductibility code.
-    """
-
-    ein: int
-    name: str
-    city: str
-    state: str
-    country: str
-    deductibility_code: str
-    deductibility_description: str
+    filename: str
+    compressed_size: int
+    uncompressed_size: int
+    local_header_offset: int
+    compression_method: int  # 8 = deflate, 0 = stored
 
 
 @dataclass
-class EoBmfRecord:
-    """
-    A single record from the IRS Exempt Organizations Business Master File.
+class ZipDirectory:
+    """Parsed ZIP central directory for a batch."""
 
-    This is the authoritative IRS record for an exempt organization. It contains
-    everything Catalyst needs: formation date (ruling), current status, exemption
-    type, and financial size indicators.
-
-    Attributes:
-        ein:              IRS EIN as integer.
-        name:             Organization name.
-        city:             City.
-        state:            State abbreviation.
-        zip_code:         ZIP code.
-        subsection:       IRC subsection code string (e.g., "3" for 501(c)(3)).
-        subsection_description: Human-readable IRC section (e.g., "501(c)(3)").
-        ruling_date:      Date IRS ruling was issued, as "YYYYMM" string.
-                          This is the *exemption grant date* — critical for
-                          SR-002 (entity named in a document before it existed).
-        ruling_year:      Four-digit ruling year (int) or None.
-        ruling_month:     Two-digit ruling month (int) or None.
-        status_code:      IRS exemption status code string.
-        status_description: Human-readable status (e.g., "Unconditional Exemption").
-        is_revoked:       True if status_code == "12" (revoked).
-        deductibility_code: Deductibility code.
-        deductibility_description: Human-readable deductibility.
-        ntee_code:        National Taxonomy of Exempt Entities code (e.g., "B99").
-        foundation_code:  IRS foundation status code.
-        filing_req_code:  Filing requirement code.
-        tax_period:       Tax period (YYYYMM) of most recent filed return.
-        asset_amount:     Total assets from most recent 990 (int or None).
-        income_amount:    Total income from most recent 990 (int or None).
-        revenue_amount:   Total revenue from most recent 990 (int or None).
-        sort_name:        DBA / sort name if different from legal name.
-        raw:              The full raw CSV row as a dict.
-    """
-
-    ein: int
-    name: str
-    city: str
-    state: str
-    zip_code: str
-    subsection: str
-    subsection_description: str
-    ruling_date: str | None
-    ruling_year: int | None
-    ruling_month: int | None
-    status_code: str
-    status_description: str
-    is_revoked: bool
-    deductibility_code: str
-    deductibility_description: str
-    ntee_code: str | None
-    foundation_code: str | None
-    filing_req_code: str | None
-    tax_period: str | None
-    asset_amount: int | None
-    income_amount: int | None
-    revenue_amount: int | None
-    sort_name: str | None
-    raw: dict = field(default_factory=dict, repr=False)
-
-
-@dataclass
-class Pub78SearchResult:
-    """Returned by search_pub78(). Always includes a staleness warning."""
-
-    matches: list[Pub78Record]
-    query: str
-    total_searched: int
-    staleness_warning: StalenessWarning
-
-
-@dataclass
-class EoBmfSearchResult:
-    """Returned by search_eo_bmf(). Always includes a staleness warning."""
-
-    matches: list[EoBmfRecord]
-    query: str
-    total_searched: int
-    staleness_warning: StalenessWarning
+    entries: dict[str, ZipFileEntry]  # filename -> entry
+    fetched_at: datetime = field(default_factory=datetime.now)
 
 
 # ---------------------------------------------------------------------------
-# Internal HTTP helper
+# Index Operations
 # ---------------------------------------------------------------------------
 
 
-def _download(url: str) -> bytes:
-    """Download a file from the given URL and return the raw bytes.
+def _normalize_ein(ein: str) -> str:
+    """Strip dashes and spaces, zero-pad to 9 digits."""
+    cleaned = ein.replace("-", "").replace(" ", "").strip()
+    return cleaned.zfill(9)
 
-    Raises IRSError on network failure or non-200 HTTP status.
 
-    SEC-017: Uses chunked reading with a total deadline and size cap
-    to prevent slow-drip DoS or unbounded memory growth.
+def _fetch_index(year: int) -> list[IndexRecord]:
     """
-    import time
+    Download and parse one yearly index CSV from IRS.
 
-    logger.info("irs_connector: downloading %s", url)
+    The index files are ~50-90MB, so we stream and parse row-by-row.
+    Results are cached in memory for the duration of the process.
+    """
+    if year in _index_cache:
+        logger.info("Using cached index for %d (%d records)", year, len(_index_cache[year]))
+        return _index_cache[year]
+
+    url = f"{IRS_BASE_URL}/{year}/index_{year}.csv"
+    logger.info("Downloading IRS index: %s", url)
+
     try:
-        response = requests.get(
+        resp = requests.get(
             url,
-            headers=HEADERS,
             timeout=REQUEST_TIMEOUT,
+            headers={"User-Agent": USER_AGENT},
             stream=True,
         )
-    except requests.exceptions.ConnectionError as e:
-        raise IRSError(f"Could not connect to IRS data server: {e}") from e
-    except requests.exceptions.Timeout:
-        raise IRSError(f"Request to IRS timed out after {REQUEST_TIMEOUT[1]}s: {url}")
-    except requests.exceptions.RequestException as e:
-        raise IRSError(f"Unexpected request error fetching {url}: {e}") from e
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        raise IRSNetworkError(f"Failed to download index for {year}: {e}") from e
 
-    if response.status_code == 404:
-        raise IRSError(
-            f"IRS data file not found (404): {url}",
-            status_code=404,
-        )
-    if not response.ok:
-        raise IRSError(
-            f"IRS server returned HTTP {response.status_code}: {url}",
-            status_code=response.status_code,
-        )
+    records = []
+    # Stream-parse CSV to avoid loading entire file into memory at once
+    text_stream = io.StringIO(resp.text)
+    reader = csv.DictReader(text_stream)
 
-    # SEC-017: Chunked download with deadline and size cap
-    deadline = time.monotonic() + DOWNLOAD_DEADLINE_SECONDS
-    chunks = []
-    total_bytes = 0
-
-    try:
-        for chunk in response.iter_content(chunk_size=64 * 1024):
-            if time.monotonic() > deadline:
-                response.close()
-                raise IRSError(f"Download exceeded {DOWNLOAD_DEADLINE_SECONDS}s deadline: {url}")
-            total_bytes += len(chunk)
-            if total_bytes > MAX_DOWNLOAD_BYTES:
-                response.close()
-                raise IRSError(
-                    f"Download exceeded {MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB size limit: {url}"
+    for row in reader:
+        try:
+            records.append(
+                IndexRecord(
+                    return_id=row.get("RETURN_ID", ""),
+                    filing_type=row.get("FILING_TYPE", ""),
+                    ein=row.get("EIN", "").strip(),
+                    tax_period=row.get("TAX_PERIOD", ""),
+                    sub_date=row.get("SUB_DATE", ""),
+                    taxpayer_name=row.get("TAXPAYER_NAME", ""),
+                    return_type=row.get("RETURN_TYPE", ""),
+                    dln=row.get("DLN", ""),
+                    object_id=row.get("OBJECT_ID", ""),
+                    xml_batch_id=row.get("XML_BATCH_ID", ""),
+                    index_year=year,
                 )
-            chunks.append(chunk)
-    except requests.exceptions.ChunkedEncodingError as e:
-        raise IRSError(f"Download interrupted (chunked encoding error): {e}") from e
-
-    content = b"".join(chunks)
-    logger.info("irs_connector: downloaded %s (%.1f KB)", url, len(content) / 1024)
-    return content
-
-
-# ---------------------------------------------------------------------------
-# Pub78 — fetch and parse
-# ---------------------------------------------------------------------------
-
-
-def fetch_pub78(url: str = PUB78_URL) -> tuple[list[Pub78Record], StalenessWarning]:
-    """
-    Download and parse the IRS Publication 78 bulk data file.
-
-    The Pub78 file is a zip archive containing a pipe-delimited text file.
-    Fields: EIN | Name | City | State | Country | DeductibilityCode
-
-    Args:
-        url: Override the default Pub78 download URL (useful for testing).
-
-    Returns:
-        (records, staleness_warning) tuple where records is a list of
-        Pub78Record objects and staleness_warning reflects the download time.
-
-    Raises:
-        IRSError: On network failure, bad HTTP status, or parse error.
-
-    Example:
-        records, warning = fetch_pub78()
-        print(f"Loaded {len(records)} Pub78 records. {warning}")
-    """
-    raw_bytes = _download(url)
-    downloaded_at = datetime.now(tz=timezone.utc)
-
-    # Pub78 is delivered as a .zip containing a single pipe-delimited .txt file.
-    try:
-        with zipfile.ZipFile(io.BytesIO(raw_bytes)) as zf:
-            # Find the text file inside the zip
-            txt_names = [n for n in zf.namelist() if n.lower().endswith(".txt")]
-            if not txt_names:
-                raise IRSError("Pub78 zip file contains no .txt data file.")
-            with zf.open(txt_names[0]) as txt_file:
-                text_content = txt_file.read().decode("utf-8", errors="replace")
-    except zipfile.BadZipFile as e:
-        raise IRSError(f"Pub78 download is not a valid zip file: {e}") from e
-
-    records = _parse_pub78(text_content)
-    staleness = StalenessWarning.from_download_time(downloaded_at)
-
-    logger.info(
-        "irs_connector fetch_pub78: parsed %d records, staleness=%s",
-        len(records),
-        staleness.level.value,
-    )
-    return records, staleness
-
-
-def _parse_pub78(text: str) -> list[Pub78Record]:
-    """
-    Parse the pipe-delimited Pub78 text content into a list of Pub78Records.
-
-    Format: EIN|Name|City|State|Country|DeductibilityCode
-    No header row. Some lines may be malformed; those are skipped with a warning.
-    """
-    records: list[Pub78Record] = []
-    for line_no, line in enumerate(text.splitlines(), start=1):
-        line = line.strip()
-        if not line:
-            continue
-        parts = line.split("|")
-        if len(parts) < 6:
-            logger.debug(
-                "irs_connector _parse_pub78: skipping short line %d (%d parts): %r",
-                line_no,
-                len(parts),
-                line[:80],
             )
-            continue
-        ein_str, name, city, state, country, deductibility_code = (
-            parts[0].strip(),
-            parts[1].strip(),
-            parts[2].strip(),
-            parts[3].strip(),
-            parts[4].strip(),
-            parts[5].strip(),
-        )
-        try:
-            ein = int(ein_str)
-        except ValueError:
-            logger.debug(
-                "irs_connector _parse_pub78: skipping line %d — bad EIN %r",
-                line_no,
-                ein_str,
-            )
-            continue
-        if not name:
+        except Exception as e:
+            logger.warning("Skipping malformed index row: %s", e)
             continue
 
-        records.append(
-            Pub78Record(
-                ein=ein,
-                name=name,
-                city=city,
-                state=state,
-                country=country,
-                deductibility_code=deductibility_code,
-                deductibility_description=_BMF_DEDUCTIBILITY_MAP.get(
-                    deductibility_code, f"Code {deductibility_code}"
-                ),
-            )
-        )
-
+    logger.info("Parsed %d records from %d index", len(records), year)
+    _index_cache[year] = records
     return records
 
 
-# ---------------------------------------------------------------------------
-# EO BMF — fetch and parse
-# ---------------------------------------------------------------------------
-
-
-def fetch_eo_bmf(
-    region: EoBmfRegion = EoBmfRegion.STATE_OH,
-    url: str | None = None,
-) -> tuple[list[EoBmfRecord], StalenessWarning]:
+def search_990_by_ein(
+    ein: str,
+    years: Optional[list[int]] = None,
+    return_types: Optional[list[str]] = None,
+) -> SearchResult:
     """
-    Download and parse an IRS EO BMF regional or state-level CSV file.
-
-    The EO BMF is the authoritative IRS master file of all exempt organizations.
-    It includes current status, ruling date, NTEE code, financial size indicators,
-    and filing requirements.
+    Search IRS index CSVs for all 990 filings by a given EIN.
 
     Args:
-        region: Which regional/state file to download. Defaults to STATE_OH
-                (Ohio-only file — smallest download, sufficient for Ohio
-                investigations). Use MIDWEST for all midwest states.
-        url:    Override the download URL entirely (useful for testing).
+        ein: EIN with or without dash (e.g., "12-3456789" or "123456789")
+        years: Which index years to search (default: all in INDEX_YEARS)
+        return_types: Filter by return type (e.g., ["990", "990EZ"]).
+                      Default: all types.
 
     Returns:
-        (records, staleness_warning) tuple.
-
-    Raises:
-        IRSError: On network failure, bad HTTP status, or parse error.
-
-    Example:
-        records, warning = fetch_eo_bmf(EoBmfRegion.STATE_OH)
-        print(f"Loaded {len(records)} EO BMF records. {warning}")
+        SearchResult with all matching filings, sorted by tax year descending.
     """
-    target_url = url or region.url
-    raw_bytes = _download(target_url)
-    downloaded_at = datetime.now(tz=timezone.utc)
+    normalized_ein = _normalize_ein(ein)
+    search_years = years or INDEX_YEARS
 
+    logger.info("Searching for EIN %s across years %s", normalized_ein, search_years)
+
+    all_filings: list[IndexRecord] = []
+    seen_object_ids: set[str] = set()
+
+    for year in search_years:
+        try:
+            index = _fetch_index(year)
+        except IRSNetworkError as e:
+            logger.warning("Could not load index for %d: %s", year, e)
+            continue
+
+        for record in index:
+            if record.ein == normalized_ein and record.object_id not in seen_object_ids:
+                if return_types and record.return_type not in return_types:
+                    continue
+                all_filings.append(record)
+                seen_object_ids.add(record.object_id)
+
+        time.sleep(POLITE_DELAY)
+
+    # Sort by tax year descending, then by submission date descending
+    all_filings.sort(key=lambda r: (r.tax_year, r.sub_date), reverse=True)
+
+    result = SearchResult(
+        ein=normalized_ein,
+        ein_formatted=f"{normalized_ein[:2]}-{normalized_ein[2:]}",
+        filings=all_filings,
+        years_searched=search_years,
+        total_found=len(all_filings),
+    )
+
+    logger.info("Found %d filings for EIN %s", result.total_found, result.ein_formatted)
+    return result
+
+
+def search_990_by_name(
+    name: str,
+    state: Optional[str] = None,
+    years: Optional[list[int]] = None,
+    max_results: int = 50,
+) -> list[IndexRecord]:
+    """
+    Search IRS index CSVs by organization name (case-insensitive substring).
+
+    Args:
+        name: Organization name to search for.
+        state: Optional — not available in index CSV, so this is ignored.
+               (Included for API compatibility; use EIN search for precision.)
+        years: Which index years to search (default: most recent 2 years).
+        max_results: Maximum number of results to return.
+
+    Returns:
+        List of matching IndexRecords, sorted by tax year descending.
+    """
+    search_years = years or INDEX_YEARS[:2]  # Default: only 2 most recent years
+    name_upper = name.upper().strip()
+
+    logger.info("Searching for name '%s' across years %s", name, search_years)
+
+    results: list[IndexRecord] = []
+    seen_eins: set[str] = set()
+
+    for year in search_years:
+        try:
+            index = _fetch_index(year)
+        except IRSNetworkError as e:
+            logger.warning("Could not load index for %d: %s", year, e)
+            continue
+
+        for record in index:
+            if name_upper in record.taxpayer_name.upper():
+                # Deduplicate by EIN — keep most recent filing per org
+                if record.ein not in seen_eins:
+                    results.append(record)
+                    seen_eins.add(record.ein)
+                    if len(results) >= max_results:
+                        break
+
+        if len(results) >= max_results:
+            break
+        time.sleep(POLITE_DELAY)
+
+    results.sort(key=lambda r: (r.tax_year, r.sub_date), reverse=True)
+    logger.info("Found %d orgs matching '%s'", len(results), name)
+    return results
+
+
+# ---------------------------------------------------------------------------
+# ZIP Range-Request Extraction
+# ---------------------------------------------------------------------------
+
+
+def _fetch_zip_directory(zip_url: str) -> ZipDirectory:
+    """
+    Download and parse the central directory of a remote ZIP file.
+
+    ZIP files store their table of contents (central directory) at the END
+    of the file. We can read it with just two small HTTP range requests:
+      1. Last 256KB to find the End of Central Directory record
+      2. The central directory itself (typically 1-2MB)
+
+    This tells us the filename, offset, and size of every file in the ZIP
+    without downloading the entire 100MB archive.
+    """
+    cache_key = zip_url
+    if cache_key in _zip_directory_cache:
+        return _zip_directory_cache[cache_key]
+
+    logger.info("Fetching ZIP directory: %s", zip_url)
+
+    # Step 1: Get file size
     try:
-        text_content = raw_bytes.decode("utf-8", errors="replace")
-    except Exception as e:
-        raise IRSError(f"Could not decode EO BMF file content: {e}") from e
+        head_resp = requests.head(
+            zip_url,
+            timeout=REQUEST_TIMEOUT,
+            headers={"User-Agent": USER_AGENT},
+        )
+        head_resp.raise_for_status()
+        file_size = int(head_resp.headers.get("content-length", 0))
+    except requests.RequestException as e:
+        raise IRSNetworkError(f"Failed to get ZIP size: {e}") from e
 
-    records = _parse_eo_bmf(text_content)
-    staleness = StalenessWarning.from_download_time(downloaded_at)
+    if file_size == 0:
+        raise IRSNetworkError(f"ZIP file has zero size: {zip_url}")
+
+    # Step 2: Download last 256KB to find End of Central Directory (EOCD)
+    eocd_range_start = max(0, file_size - 262144)
+    try:
+        resp = requests.get(
+            zip_url,
+            headers={
+                "Range": f"bytes={eocd_range_start}-{file_size - 1}",
+                "User-Agent": USER_AGENT,
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        raise IRSNetworkError(f"Failed to read ZIP EOCD: {e}") from e
+
+    data = resp.content
+
+    # Find EOCD signature (PK\x05\x06)
+    eocd_pos = data.rfind(b"PK\x05\x06")
+    if eocd_pos < 0:
+        raise IRSParseError("Could not find ZIP End of Central Directory")
+
+    # Parse EOCD
+    num_entries = struct.unpack("<H", data[eocd_pos + 10 : eocd_pos + 12])[0]
+    cd_size = struct.unpack("<I", data[eocd_pos + 12 : eocd_pos + 16])[0]
+    cd_offset = struct.unpack("<I", data[eocd_pos + 16 : eocd_pos + 20])[0]
 
     logger.info(
-        "irs_connector fetch_eo_bmf: region=%s, parsed %d records, staleness=%s",
-        region.value,
-        len(records),
-        staleness.level.value,
+        "ZIP has %d entries, central directory at offset %d (size %d)",
+        num_entries,
+        cd_offset,
+        cd_size,
     )
-    return records, staleness
 
-
-def _parse_eo_bmf(text: str) -> list[EoBmfRecord]:
-    """
-    Parse the EO BMF CSV content into a list of EoBmfRecord objects.
-
-    The EO BMF CSV has a header row. Column names are uppercase.
-    Many fields may be empty strings — we normalize those to None.
-    """
-    records: list[EoBmfRecord] = []
-    reader = csv.DictReader(io.StringIO(text))
-
-    for row_no, row in enumerate(reader, start=2):  # row 1 is the header
-        ein_str = (row.get("EIN") or "").strip()
-        if not ein_str:
-            continue
+    # Step 3: Download the central directory
+    # Check if we already have it in our EOCD download
+    local_cd_start = cd_offset - eocd_range_start
+    if local_cd_start >= 0 and local_cd_start + cd_size <= len(data):
+        cd_data = data[local_cd_start : local_cd_start + cd_size]
+    else:
+        # Need a separate request for the central directory
+        time.sleep(POLITE_DELAY)
         try:
-            ein = int(ein_str)
-        except ValueError:
-            logger.debug(
-                "irs_connector _parse_eo_bmf: skipping row %d — bad EIN %r",
-                row_no,
-                ein_str,
+            resp = requests.get(
+                zip_url,
+                headers={
+                    "Range": f"bytes={cd_offset}-{cd_offset + cd_size - 1}",
+                    "User-Agent": USER_AGENT,
+                },
+                timeout=REQUEST_TIMEOUT,
             )
-            continue
+            resp.raise_for_status()
+            cd_data = resp.content
+        except requests.RequestException as e:
+            raise IRSNetworkError(f"Failed to read ZIP central directory: {e}") from e
 
-        name = (row.get("NAME") or "").strip()
-        if not name:
-            continue
+    # Step 4: Parse all central directory entries
+    entries: dict[str, ZipFileEntry] = {}
+    pos = 0
+    for _ in range(num_entries):
+        if pos + 46 > len(cd_data) or cd_data[pos : pos + 4] != b"PK\x01\x02":
+            break
 
-        ruling_raw = (row.get("RULING") or "").strip()
-        ruling_year: int | None = None
-        ruling_month: int | None = None
-        if len(ruling_raw) == 6:
-            try:
-                ruling_year = int(ruling_raw[:4])
-                ruling_month = int(ruling_raw[4:])
-            except ValueError:
-                pass
+        compression_method = struct.unpack("<H", cd_data[pos + 10 : pos + 12])[0]
+        comp_size = struct.unpack("<I", cd_data[pos + 20 : pos + 24])[0]
+        uncomp_size = struct.unpack("<I", cd_data[pos + 24 : pos + 28])[0]
+        fname_len = struct.unpack("<H", cd_data[pos + 28 : pos + 30])[0]
+        extra_len = struct.unpack("<H", cd_data[pos + 30 : pos + 32])[0]
+        comment_len = struct.unpack("<H", cd_data[pos + 32 : pos + 34])[0]
+        local_offset = struct.unpack("<I", cd_data[pos + 42 : pos + 46])[0]
 
-        subsection = (row.get("SUBSECTION") or "").strip()
-        status_code = (row.get("STATUS") or "").strip()
+        filename = cd_data[pos + 46 : pos + 46 + fname_len].decode("utf-8", errors="replace")
 
-        records.append(
-            EoBmfRecord(
-                ein=ein,
-                name=name,
-                city=(row.get("CITY") or "").strip(),
-                state=(row.get("STATE") or "").strip(),
-                zip_code=(row.get("ZIP") or "").strip(),
-                subsection=subsection,
-                subsection_description=_BMF_SUBSECTION_MAP.get(
-                    subsection, f"501(c)({subsection})" if subsection else "Unknown"
-                ),
-                ruling_date=ruling_raw or None,
-                ruling_year=ruling_year,
-                ruling_month=ruling_month,
-                status_code=status_code,
-                status_description=_BMF_STATUS_MAP.get(status_code, f"Code {status_code}"),
-                is_revoked=(status_code == "12"),
-                deductibility_code=(row.get("DEDUCTIBILITY") or "").strip(),
-                deductibility_description=_BMF_DEDUCTIBILITY_MAP.get(
-                    (row.get("DEDUCTIBILITY") or "").strip(),
-                    f"Code {(row.get('DEDUCTIBILITY') or '').strip()}",
-                ),
-                ntee_code=(row.get("NTEE_CD") or "").strip() or None,
-                foundation_code=(row.get("FOUNDATION") or "").strip() or None,
-                filing_req_code=(row.get("FILING_REQ_CD") or "").strip() or None,
-                tax_period=(row.get("TAX_PERIOD") or "").strip() or None,
-                asset_amount=_safe_int(row.get("ASSET_AMT")),
-                income_amount=_safe_int(row.get("INCOME_AMT")),
-                revenue_amount=_safe_int(row.get("REVENUE_AMT")),
-                sort_name=(row.get("SORT_NAME") or "").strip() or None,
-                raw=dict(row),
-            )
+        entries[filename] = ZipFileEntry(
+            filename=filename,
+            compressed_size=comp_size,
+            uncompressed_size=uncomp_size,
+            local_header_offset=local_offset,
+            compression_method=compression_method,
         )
 
-    return records
+        pos += 46 + fname_len + extra_len + comment_len
+
+    logger.info("Parsed %d ZIP entries", len(entries))
+
+    directory = ZipDirectory(entries=entries)
+    _zip_directory_cache[cache_key] = directory
+    return directory
 
 
-# ---------------------------------------------------------------------------
-# Search — Pub78
-# ---------------------------------------------------------------------------
-
-
-def search_pub78(
-    query: str,
-    records: list[Pub78Record],
-    staleness_warning: StalenessWarning | None = None,
-    state: str | None = None,
-) -> Pub78SearchResult:
+def fetch_990_xml(filing: IndexRecord) -> str:
     """
-    Case-insensitive substring search across Pub78 records by organization name.
+    Fetch a single 990 XML file from an IRS ZIP archive using HTTP range requests.
+
+    This downloads only the specific XML file (~5KB of compressed data) instead
+    of the entire 100MB ZIP archive.
 
     Args:
-        query:            Search term. Cannot be empty.
-        records:          List of Pub78Record objects (from fetch_pub78()).
-        staleness_warning: Pass the StalenessWarning from fetch_pub78(). If None,
-                           a synthetic warning is generated (treat as HIGH staleness).
-        state:            Optional two-letter state filter applied before name matching.
+        filing: An IndexRecord from search_990_by_ein().
 
     Returns:
-        Pub78SearchResult with matching records and always a staleness warning.
-
-    Raises:
-        IRSError: If query is empty or records list is empty.
-
-    Example:
-        records, warning = fetch_pub78()
-        result = search_pub78("Example Charity Ministries", records, warning, state="OH")
-        for r in result.matches:
-            print(r.ein, r.name, r.deductibility_description)
+        The raw XML text of the 990 filing.
     """
-    if not query or not query.strip():
-        raise IRSError("Search query cannot be empty.")
-    if not records:
-        raise IRSError("Records list is empty — call fetch_pub78() first.")
+    zip_url = filing.zip_url
+    target_filename = filing.xml_filename
 
-    if staleness_warning is None:
-        # Generate a synthetic HIGH-staleness warning since we don't know when
-        # the data was downloaded.
-        from datetime import timedelta
+    logger.info("Fetching XML for %s from %s", filing.object_id, zip_url)
 
-        fake_dt = datetime.now(tz=timezone.utc) - timedelta(days=30)
-        staleness_warning = StalenessWarning.from_download_time(fake_dt)
+    # Get ZIP directory
+    directory = _fetch_zip_directory(zip_url)
 
-    q = query.strip().lower()
-    state_filter = state.strip().upper() if state else None
+    if target_filename not in directory.entries:
+        raise IRSNotFoundError(
+            f"File {target_filename} not found in ZIP. ZIP has {len(directory.entries)} entries."
+        )
 
-    pool = records
-    if state_filter:
-        pool = [r for r in pool if r.state.upper() == state_filter]
-
-    matches = [r for r in pool if q in r.name.lower()]
-
-    return Pub78SearchResult(
-        matches=matches,
-        query=query,
-        total_searched=len(pool),
-        staleness_warning=staleness_warning,
+    entry = directory.entries[target_filename]
+    logger.info(
+        "Found %s: compressed=%d, uncompressed=%d, offset=%d",
+        target_filename,
+        entry.compressed_size,
+        entry.uncompressed_size,
+        entry.local_header_offset,
     )
 
+    # Read local file header + compressed data
+    # Local header is 30 bytes + filename length + extra field length
+    # We over-read by 300 bytes to cover filename and extra fields
+    read_size = 30 + 300 + entry.compressed_size
+    range_start = entry.local_header_offset
+    range_end = range_start + read_size - 1
 
-# ---------------------------------------------------------------------------
-# Search — EO BMF
-# ---------------------------------------------------------------------------
+    time.sleep(POLITE_DELAY)
+    try:
+        resp = requests.get(
+            zip_url,
+            headers={
+                "Range": f"bytes={range_start}-{range_end}",
+                "User-Agent": USER_AGENT,
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        raise IRSNetworkError(f"Failed to read XML from ZIP: {e}") from e
 
+    data = resp.content
 
-def search_eo_bmf(
-    query: str,
-    records: list[EoBmfRecord],
-    staleness_warning: StalenessWarning | None = None,
-    state: str | None = None,
-    include_revoked: bool = True,
-) -> EoBmfSearchResult:
-    """
-    Case-insensitive substring search across EO BMF records by organization name.
+    # Verify local file header signature
+    if data[:4] != b"PK\x03\x04":
+        raise IRSParseError("Invalid local file header signature")
 
-    Args:
-        query:            Search term. Cannot be empty.
-        records:          List of EoBmfRecord objects (from fetch_eo_bmf()).
-        staleness_warning: Pass the StalenessWarning from fetch_eo_bmf(). If None,
-                           a synthetic HIGH-staleness warning is generated.
-        state:            Optional two-letter state filter applied before name matching.
-        include_revoked:  If False, exclude records where is_revoked is True.
-                          Default True — revoked orgs are investigatively relevant.
+    # Parse local file header to find where compressed data starts
+    fname_len = struct.unpack("<H", data[26:28])[0]
+    extra_len = struct.unpack("<H", data[28:30])[0]
+    data_start = 30 + fname_len + extra_len
 
-    Returns:
-        EoBmfSearchResult with matching records and always a staleness warning.
+    compressed_data = data[data_start : data_start + entry.compressed_size]
 
-    Raises:
-        IRSError: If query is empty or records list is empty.
+    # Decompress
+    if entry.compression_method == 8:  # DEFLATE
+        try:
+            xml_bytes = zlib.decompress(compressed_data, -15)  # raw deflate
+        except zlib.error as e:
+            raise IRSParseError(f"Failed to decompress XML: {e}") from e
+    elif entry.compression_method == 0:  # STORED (no compression)
+        xml_bytes = compressed_data
+    else:
+        raise IRSParseError(f"Unsupported compression method: {entry.compression_method}")
 
-    Example:
-        records, warning = fetch_eo_bmf(EoBmfRegion.STATE_OH)
-        result = search_eo_bmf("Example Charity Ministries", records, warning, state="OH")
-        for r in result.matches:
-            print(r.ein, r.name, r.ruling_date, r.status_description)
-    """
-    if not query or not query.strip():
-        raise IRSError("Search query cannot be empty.")
-    if not records:
-        raise IRSError("Records list is empty — call fetch_eo_bmf() first.")
-
-    if staleness_warning is None:
-        from datetime import timedelta
-
-        fake_dt = datetime.now(tz=timezone.utc) - timedelta(days=30)
-        staleness_warning = StalenessWarning.from_download_time(fake_dt)
-
-    q = query.strip().lower()
-    state_filter = state.strip().upper() if state else None
-
-    pool = records
-    if state_filter:
-        pool = [r for r in pool if r.state.upper() == state_filter]
-    if not include_revoked:
-        pool = [r for r in pool if not r.is_revoked]
-
-    matches = [r for r in pool if q in r.name.lower()]
-
-    return EoBmfSearchResult(
-        matches=matches,
-        query=query,
-        total_searched=len(pool),
-        staleness_warning=staleness_warning,
-    )
+    xml_text = xml_bytes.decode("utf-8", errors="replace")
+    logger.info("Extracted %d chars of XML for %s", len(xml_text), filing.object_id)
+    return xml_text
 
 
 # ---------------------------------------------------------------------------
-# EIN lookup — exact match from EO BMF
+# XML Parsing
 # ---------------------------------------------------------------------------
 
-
-def lookup_ein(
-    ein: int,
-    records: list[EoBmfRecord],
-    staleness_warning: StalenessWarning | None = None,
-) -> tuple[EoBmfRecord | None, StalenessWarning]:
-    """
-    Look up a single EIN in the EO BMF records list.
-
-    This is the primary EIN verification function. Given an EIN from a 990
-    filing, a UCC filing, or a deed — confirm that the organization exists,
-    when its exemption was granted, and whether it is currently active or revoked.
-
-    Why this matters for signal detection:
-        SR-002 checks whether an entity named in a document predates the
-        entity's IRS formation/ruling date. lookup_ein() provides the ruling_year
-        and ruling_month needed to evaluate that signal.
-
-    Args:
-        ein:              IRS EIN as integer (no dashes).
-        records:          List of EoBmfRecord objects (from fetch_eo_bmf()).
-        staleness_warning: Pass the StalenessWarning from fetch_eo_bmf().
-
-    Returns:
-        (EoBmfRecord, StalenessWarning) if found.
-        (None, StalenessWarning) if not found.
-
-    Example:
-        records, warning = fetch_eo_bmf(EoBmfRegion.STATE_OH)
-        record, w = lookup_ein(123456789, records, warning)
-        if record:
-            print(record.name, record.ruling_date, record.is_revoked)
-        else:
-            print("EIN not found in IRS EO BMF.")
-        print(w)
-    """
-    if isinstance(ein, str):
-        ein = int(ein.replace("-", "").strip())
-
-    if staleness_warning is None:
-        from datetime import timedelta
-
-        fake_dt = datetime.now(tz=timezone.utc) - timedelta(days=30)
-        staleness_warning = StalenessWarning.from_download_time(fake_dt)
-
-    for record in records:
-        if record.ein == ein:
-            logger.info(
-                "irs_connector lookup_ein: found EIN %d — %r (%s)",
-                ein,
-                record.name,
-                record.status_description,
-            )
-            return record, staleness_warning
-
-    logger.info("irs_connector lookup_ein: EIN %d not found in records", ein)
-    return None, staleness_warning
+# IRS e-file namespace
+IRS_NS = "{http://www.irs.gov/efile}"
 
 
-# ---------------------------------------------------------------------------
-# Convenience wrapper — fetch and search in one call
-# ---------------------------------------------------------------------------
+def _tag(name: str) -> str:
+    """Build a namespaced tag."""
+    return f"{IRS_NS}{name}"
 
 
-def search_ohio_nonprofits(
-    query: str,
-    include_revoked: bool = True,
-) -> EoBmfSearchResult:
-    """
-    Convenience function: download the Ohio EO BMF file and search by name.
-
-    Makes one HTTP request to the IRS. Returns matching Ohio nonprofits
-    with a staleness warning. This is the simplest entry point for Ohio
-    investigations — no setup required.
-
-    Args:
-        query:           Organization name search term.
-        include_revoked: Include revoked orgs (default True — they are
-                         investigatively relevant).
-
-    Returns:
-        EoBmfSearchResult with matches and staleness warning.
-
-    Raises:
-        IRSError: On network failure or empty query.
-
-    Example:
-        result = search_ohio_nonprofits("Example Charity Ministries")
-        for r in result.matches:
-            print(r.ein, r.name, r.ruling_date, r.is_revoked)
-    """
-    records, warning = fetch_eo_bmf(EoBmfRegion.STATE_OH)
-    return search_eo_bmf(
-        query=query,
-        records=records,
-        staleness_warning=warning,
-        state="OH",
-        include_revoked=include_revoked,
-    )
+def _text(elem, tag_name: str, default: str = "") -> str:
+    """Get text content of a child element, or default."""
+    if elem is None:
+        return default
+    child = elem.find(_tag(tag_name))
+    if child is not None and child.text:
+        return child.text.strip()
+    return default
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
-def _safe_int(value) -> int | None:
-    """Convert a value to int, returning None if conversion fails or value is None/empty."""
-    if value is None:
-        return None
-    v = str(value).strip()
-    if not v:
+def _int(elem, tag_name: str) -> Optional[int]:
+    """Get integer content of a child element, or None."""
+    text = _text(elem, tag_name)
+    if not text:
         return None
     try:
-        return int(float(v))  # handles "1234.0" style strings
+        # Handle decimal values (e.g., "1234.00" in some filings)
+        return int(float(text))
     except (ValueError, TypeError):
         return None
+
+
+def _bool(elem, tag_name: str) -> Optional[bool]:
+    """Get boolean content of a child element, or None."""
+    text = _text(elem, tag_name).lower()
+    if not text:
+        return None
+    if text in ("true", "1", "x", "yes"):
+        return True
+    if text in ("false", "0", "no"):
+        return False
+    return None
+
+
+def _float(elem, tag_name: str) -> Optional[float]:
+    """Get float content of a child element, or None."""
+    text = _text(elem, tag_name)
+    if not text:
+        return None
+    try:
+        return float(text)
+    except (ValueError, TypeError):
+        return None
+
+
+def _grp_int(elem, grp_tag: str, val_tag: str) -> Optional[int]:
+    """Get integer from a nested group element (e.g., TotalRevenueGrp/TotalRevenueAmt)."""
+    if elem is None:
+        return None
+    grp = elem.find(_tag(grp_tag))
+    if grp is None:
+        return None
+    return _int(grp, val_tag)
+
+
+def parse_990_xml(
+    xml_text: str, source_object_id: str = "", source_batch_id: str = ""
+) -> Parsed990:
+    """
+    Parse a Form 990 XML file into structured Catalyst data.
+
+    Handles 990, 990EZ, and 990PF return types with graceful degradation
+    (990EZ and 990PF have fewer fields — we extract what's available).
+
+    Args:
+        xml_text: Raw XML string from fetch_990_xml().
+        source_object_id: IRS OBJECT_ID for provenance tracking.
+        source_batch_id: IRS XML_BATCH_ID for provenance tracking.
+
+    Returns:
+        Parsed990 with all available financial, governance, and compensation data.
+    """
+    import xml.etree.ElementTree as ET
+
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as e:
+        raise IRSParseError(f"Invalid XML: {e}") from e
+
+    result = Parsed990(
+        source_object_id=source_object_id,
+        source_batch_id=source_batch_id,
+    )
+
+    # --- Return Header ---
+    header = root.find(_tag("ReturnHeader"))
+    if header is not None:
+        result.tax_period_end = _text(header, "TaxPeriodEndDt")
+        result.tax_period_begin = _text(header, "TaxPeriodBeginDt")
+        result.return_type = _text(header, "ReturnTypeCd")
+        result.tax_year = _int(header, "TaxYr") or 0
+
+        filer = header.find(_tag("Filer"))
+        if filer is not None:
+            result.ein = _text(filer, "EIN")
+            biz_name = filer.find(_tag("BusinessName"))
+            if biz_name is not None:
+                result.taxpayer_name = _text(biz_name, "BusinessNameLine1Txt")
+
+    # --- Find the main return document ---
+    return_data = root.find(_tag("ReturnData"))
+    if return_data is None:
+        result.parse_quality = 0.0
+        return result
+
+    # Determine which form type we have
+    irs990 = return_data.find(_tag("IRS990"))
+    irs990ez = return_data.find(_tag("IRS990EZ"))
+    irs990pf = return_data.find(_tag("IRS990PF"))
+
+    if irs990 is not None:
+        _parse_990_full(irs990, result)
+    elif irs990ez is not None:
+        _parse_990ez(irs990ez, result)
+    elif irs990pf is not None:
+        _parse_990pf(irs990pf, result)
+    else:
+        logger.warning("No recognized IRS990/990EZ/990PF element in XML")
+        result.parse_quality = 0.1
+
+    return result
+
+
+def _parse_990_full(elem, result: Parsed990) -> None:
+    """Parse a full Form 990 (the most detailed version)."""
+    fin = result.financials
+    gov = result.governance
+
+    # --- Header fields ---
+    result.formation_year = _int(elem, "FormationYr")
+    result.state = _text(elem, "LegalDomicileStateCd")
+    result.mission = _text(elem, "ActivityOrMissionDesc") or _text(elem, "MissionDesc")
+    result.website = _text(elem, "WebsiteAddressTxt")
+
+    # --- Part I: Revenue (Current Year) ---
+    fin.total_contributions = _int(elem, "CYContributionsGrantsAmt")
+    fin.program_service_revenue = _int(elem, "CYProgramServiceRevenueAmt")
+    fin.investment_income = _int(elem, "CYInvestmentIncomeAmt")
+    fin.other_revenue = _int(elem, "CYOtherRevenueAmt")
+    fin.total_revenue = _int(elem, "CYTotalRevenueAmt")
+
+    # Prior year for trend analysis
+    fin.py_total_revenue = _int(elem, "PYTotalRevenueAmt")
+    fin.py_total_expenses = _int(elem, "PYTotalExpensesAmt")
+
+    # --- Part I: Expenses ---
+    fin.grants_paid = _int(elem, "CYGrantsAndSimilarPaidAmt")
+    fin.salaries_and_compensation = _int(elem, "CYSalariesCompEmpBnftPaidAmt")
+    fin.professional_fundraising = _int(elem, "CYTotalProfFndrsngExpnsAmt")
+    fin.other_expenses = _int(elem, "CYOtherExpensesAmt")
+    fin.total_expenses = _int(elem, "CYTotalExpensesAmt")
+    fin.revenue_less_expenses = _int(elem, "CYRevenuesLessExpensesAmt")
+
+    # --- Part X: Balance Sheet ---
+    fin.total_assets_boy = _int(elem, "TotalAssetsBOYAmt")
+    fin.total_assets_eoy = _int(elem, "TotalAssetsEOYAmt")
+    fin.total_liabilities_boy = _int(elem, "TotalLiabilitiesBOYAmt")
+    fin.total_liabilities_eoy = _int(elem, "TotalLiabilitiesEOYAmt")
+    fin.net_assets_boy = _int(elem, "NetAssetsOrFundBalancesBOYAmt")
+    fin.net_assets_eoy = _int(elem, "NetAssetsOrFundBalancesEOYAmt")
+
+    # Cash position
+    fin.cash_non_interest_bearing_eoy = _grp_int(elem, "CashNonInterestBearingGrp", "EOYAmt")
+    fin.savings_and_temp_investments_eoy = _grp_int(elem, "SavingsAndTempCashInvstGrp", "EOYAmt")
+
+    # --- Employee counts ---
+    result.num_employees = _int(elem, "TotalEmployeeCnt")
+    result.num_volunteers = _int(elem, "TotalVolunteersCnt")
+
+    # --- Part IV: Checklist of Required Schedules ---
+    gov.schedule_b_required = _bool(elem, "ScheduleBRequiredInd")
+    gov.political_campaign_activity = _bool(elem, "PoliticalCampaignActyInd")
+    gov.donor_advised_fund = _bool(elem, "DonorAdvisedFundInd")
+    gov.conservation_easements = _bool(elem, "ConservationEasementsInd")
+    gov.report_land_building_equipment = _bool(elem, "ReportLandBuildingEquipmentInd")
+    gov.schedule_j_required = _bool(elem, "ScheduleJRequiredInd")
+    gov.tax_exempt_bonds = _bool(elem, "TaxExemptBondsInd")
+    gov.loan_outstanding = _bool(elem, "LoanOutstandingInd")
+    gov.grant_to_related_person = _bool(elem, "GrantToRelatedPersonInd")
+    gov.business_rln_with_org_member = _bool(elem, "BusinessRlnWithOrgMemInd")
+    gov.business_rln_with_family = _bool(elem, "BusinessRlnWithFamMemInd")
+    gov.business_rln_with_35_ctrl = _bool(elem, "BusinessRlnWith35CtrlEntInd")
+    gov.deductible_noncash_contrib = _bool(elem, "DeductibleNonCashContriInd")
+    gov.unrelated_business_income = _bool(elem, "UnrelatedBusIncmOverLimitInd")
+    gov.subject_to_proxy_tax = _bool(elem, "SubjectToProxyTaxInd")
+    gov.lobbying_activities = (
+        _bool(elem, "LobbyingActivitiesInd")
+        if elem.find(_tag("LobbyingActivitiesInd")) is not None
+        else None
+    )
+
+    # --- Part VI Section A: Governing Body ---
+    gov.voting_members_governing_body = _int(elem, "GoverningBodyVotingMembersCnt")
+    gov.independent_voting_members = _int(elem, "IndependentVotingMemberCnt")
+    gov.family_or_business_relationship = _bool(elem, "FamilyOrBusinessRlnInd")
+    gov.delegation_of_mgmt_duties = _bool(elem, "DelegationOfMgmtDutiesInd")
+    gov.material_diversion_or_misuse = _bool(elem, "MaterialDiversionOrMisuseInd")
+    gov.members_or_stockholders = _bool(elem, "MembersOrStockholdersInd")
+    gov.election_of_board_members = _bool(elem, "ElectionOfBoardMembersInd")
+
+    # Also check the VotingMembersGoverningBodyCnt / VotingMembersIndependentCnt
+    # (some filings use these instead)
+    if gov.voting_members_governing_body is None:
+        gov.voting_members_governing_body = _int(elem, "VotingMembersGoverningBodyCnt")
+    if gov.independent_voting_members is None:
+        gov.independent_voting_members = _int(elem, "VotingMembersIndependentCnt")
+
+    # --- Part VI Section B: Policies ---
+    gov.conflict_of_interest_policy = _bool(elem, "ConflictOfInterestPolicyInd")
+    gov.annual_disclosure_covered = _bool(elem, "AnnualDisclosureCoveredPrsnInd")
+    gov.regular_monitoring_enforced = _bool(elem, "RegularMonitoringEnfrcInd")
+    gov.whistleblower_policy = _bool(elem, "WhistleblowerPolicyInd")
+    gov.document_retention_policy = _bool(elem, "DocumentRetentionPolicyInd")
+    gov.compensation_process_ceo = _bool(elem, "CompensationProcessCEOInd")
+    gov.compensation_process_other = _bool(elem, "CompensationProcessOtherInd")
+    gov.minutes_of_governing_body = _bool(elem, "MinutesOfGoverningBodyInd")
+    gov.minutes_of_committees = _bool(elem, "MinutesOfCommitteesInd")
+    gov.form990_provided_to_governing_body = _bool(elem, "Form990ProvidedToGvrnBodyInd")
+
+    # --- Part VII: Officer/Director/Trustee Compensation ---
+    result.total_reportable_comp_from_org = _int(elem, "TotalReportableCompFromOrgAmt")
+    result.individuals_over_100k = _int(elem, "IndivRcvdGreaterThan100KCnt")
+    result.total_comp_greater_than_150k = _bool(elem, "TotalCompGreaterThan150KInd")
+
+    for grp in elem.findall(_tag("Form990PartVIISectionAGrp")):
+        officer = OfficerCompensation()
+        # Name can be in PersonNm or BusinessName
+        person_nm = grp.find(_tag("PersonNm"))
+        if person_nm is not None and person_nm.text:
+            officer.name = person_nm.text.strip()
+        else:
+            biz_nm = grp.find(_tag("BusinessName"))
+            if biz_nm is not None:
+                officer.name = _text(biz_nm, "BusinessNameLine1Txt")
+
+        officer.title = _text(grp, "TitleTxt")
+        officer.average_hours_per_week = _float(grp, "AverageHoursPerWeekRt")
+        officer.average_hours_related_org = _float(grp, "AverageHoursPerWeekRltdOrgRt")
+        officer.reportable_comp_from_org = _int(grp, "ReportableCompFromOrgAmt")
+        officer.reportable_comp_from_related = _int(grp, "ReportableCompFromRltdOrgAmt")
+        officer.other_compensation = _int(grp, "OtherCompensationAmt")
+        officer.is_former = _bool(grp, "FormerOfcrDirectorTrusteeInd") or False
+        officer.is_officer = _bool(grp, "OfficerInd") or False
+        officer.is_highest_compensated = _bool(grp, "HighestCompensatedEmployeeInd") or False
+        officer.is_key_employee = _bool(grp, "KeyEmployeeInd") or False
+
+        result.officers.append(officer)
+
+    # --- Parse quality score ---
+    # Count how many key fields we got
+    key_fields = [
+        fin.total_revenue,
+        fin.total_expenses,
+        fin.total_assets_eoy,
+        gov.conflict_of_interest_policy,
+        gov.voting_members_governing_body,
+    ]
+    filled = sum(1 for f in key_fields if f is not None)
+    result.parse_quality = filled / len(key_fields)
+
+
+def _parse_990ez(elem, result: Parsed990) -> None:
+    """Parse Form 990-EZ (simplified version with fewer fields)."""
+    fin = result.financials
+    gov = result.governance
+
+    result.formation_year = _int(elem, "FormationYr")
+    result.state = _text(elem, "LegalDomicileStateCd") or _text(elem, "StateAbbreviationCd")
+    result.mission = _text(elem, "PrimaryExemptPurposeTxt")
+    result.website = _text(elem, "WebsiteAddressTxt")
+
+    # Revenue
+    fin.total_contributions = _int(elem, "ContributionsGiftsGrantsEtcAmt")
+    fin.program_service_revenue = _int(elem, "ProgramServiceRevenueAmt")
+    fin.investment_income = _int(elem, "InvestmentIncomeAmt")
+    fin.total_revenue = _int(elem, "TotalRevenueAmt")
+
+    # Expenses
+    fin.salaries_and_compensation = _int(elem, "SalariesOtherCompEmplBnftAmt")
+    fin.total_expenses = _int(elem, "TotalExpensesAmt")
+    fin.revenue_less_expenses = _int(elem, "ExcessOrDeficitForYearAmt")
+
+    # Balance Sheet
+    fin.total_assets_boy = (
+        _int(elem, "Form990TotalAssetsGrp/BOYAmt")
+        if elem.find(_tag("Form990TotalAssetsGrp"))
+        else None
+    )
+    fin.total_assets_eoy = _int(elem, "TotalAssetsEOYAmt")
+    fin.total_liabilities_eoy = (
+        _int(elem, "SumOfTotalLiabilitiesGrp/EOYAmt")
+        if elem.find(_tag("SumOfTotalLiabilitiesGrp"))
+        else None
+    )
+    fin.net_assets_eoy = _int(elem, "NetAssetsOrFundBalancesEOYAmt")
+
+    # 990-EZ has fewer governance fields
+    gov.schedule_b_required = (
+        _bool(elem, "ScheduleBRequiredInd")
+        if elem.find(_tag("ScheduleBRequiredInd")) is not None
+        else _bool(elem, "ScheduleBNotRequiredInd")
+    )
+    # Invert ScheduleBNotRequired
+    if gov.schedule_b_required is None:
+        not_required = _bool(elem, "ScheduleBNotRequiredInd")
+        if not_required is not None:
+            gov.schedule_b_required = not not_required
+
+    # Officers from Part IV of 990-EZ
+    for grp in elem.findall(_tag("OfficerDirectorTrusteeEmplGrp")):
+        officer = OfficerCompensation()
+        person_nm = grp.find(_tag("PersonNm"))
+        if person_nm is not None and person_nm.text:
+            officer.name = person_nm.text.strip()
+        officer.title = _text(grp, "TitleTxt")
+        officer.average_hours_per_week = _float(grp, "AverageHrsPerWkDevotedToPosRt")
+        officer.reportable_comp_from_org = _int(grp, "CompensationAmt")
+        officer.is_officer = True
+        result.officers.append(officer)
+
+    result.parse_quality = 0.6  # 990-EZ has less data
+
+
+def _parse_990pf(elem, result: Parsed990) -> None:
+    """Parse Form 990-PF (private foundation)."""
+    fin = result.financials
+
+    result.mission = _text(elem, "ActivityOrMissionDesc")
+
+    # Financials from AnalysisOfRevenueAndExpenses
+    analysis = elem.find(_tag("AnalysisOfRevenueAndExpenses"))
+    if analysis is not None:
+        fin.total_contributions = _int(analysis, "ContriRcvdRevAndExpnssAmt")
+        fin.investment_income = _int(analysis, "DividendsRevAndExpnssAmt")
+        fin.total_revenue = _int(analysis, "TotalRevAndExpnssAmt")
+        fin.salaries_and_compensation = _int(analysis, "CompOfcrDirTrstRevAndExpnssAmt")
+        fin.total_expenses = _int(analysis, "TotOprExpensesRevAndExpnssAmt")
+        fin.revenue_less_expenses = _int(analysis, "ExcessRevenueOverExpensesAmt")
+
+    # Balance Sheet
+    balance = elem.find(_tag("Form990PFBalanceSheetsGrp"))
+    if balance is not None:
+        fin.total_assets_boy = _grp_int(balance, "TotalAssetsBOYGrp", "BOYAmt")
+        fin.total_assets_eoy = _grp_int(balance, "TotalAssetsEOYGrp", "EOYAmt")
+
+    # FMV of assets
+    fmv = _int(elem, "FMVAssetsEOYAmt")
+    if fmv and not fin.total_assets_eoy:
+        fin.total_assets_eoy = fmv
+
+    # Officers from OfficerDirTrstKeyEmplInfoGrp
+    info_grp = elem.find(_tag("OfficerDirTrstKeyEmplInfoGrp"))
+    if info_grp is not None:
+        for officer_grp in info_grp.findall(_tag("OfficerDirTrstKeyEmplGrp")):
+            officer = OfficerCompensation()
+            person_nm = officer_grp.find(_tag("PersonNm"))
+            if person_nm is not None and person_nm.text:
+                officer.name = person_nm.text.strip()
+            officer.title = _text(officer_grp, "TitleTxt")
+            officer.average_hours_per_week = _float(officer_grp, "AverageHrsPerWkDevotedToPosRt")
+            officer.reportable_comp_from_org = _int(officer_grp, "CompensationAmt")
+            officer.is_officer = True
+            result.officers.append(officer)
+
+    result.parse_quality = 0.5  # 990-PF has different structure
+
+
+# ---------------------------------------------------------------------------
+# Convenience: Full Pipeline (search + fetch + parse)
+# ---------------------------------------------------------------------------
+
+
+def fetch_and_parse_990(
+    ein: str,
+    tax_year: Optional[int] = None,
+    return_type: Optional[str] = None,
+) -> list[Parsed990]:
+    """
+    Complete pipeline: search for an EIN, fetch XML for each filing, parse all.
+
+    Args:
+        ein: EIN with or without dash.
+        tax_year: Optional — only fetch filings for this tax year.
+        return_type: Optional — only fetch this return type (e.g., "990").
+
+    Returns:
+        List of Parsed990 objects, one per filing, sorted by tax year descending.
+    """
+    return_types = [return_type] if return_type else None
+    search_result = search_990_by_ein(ein, return_types=return_types)
+
+    if search_result.total_found == 0:
+        logger.warning("No filings found for EIN %s", ein)
+        return []
+
+    results: list[Parsed990] = []
+    for filing in search_result.filings:
+        if tax_year and filing.tax_year != tax_year:
+            continue
+
+        try:
+            xml_text = fetch_990_xml(filing)
+            parsed = parse_990_xml(
+                xml_text,
+                source_object_id=filing.object_id,
+                source_batch_id=filing.xml_batch_id,
+            )
+            results.append(parsed)
+            logger.info(
+                "Parsed %s %s for EIN %s (quality: %.1f)",
+                parsed.return_type,
+                parsed.tax_year,
+                parsed.ein,
+                parsed.parse_quality,
+            )
+        except (IRSNetworkError, IRSParseError) as e:
+            logger.error("Failed to fetch/parse %s: %s", filing.object_id, e)
+            continue
+
+        time.sleep(POLITE_DELAY)
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Utility: Convert Parsed990 to dict (for JSON serialization / API responses)
+# ---------------------------------------------------------------------------
+
+
+def parsed_990_to_dict(parsed: Parsed990) -> dict:
+    """Convert a Parsed990 to a JSON-serializable dictionary."""
+    return {
+        "ein": parsed.ein,
+        "ein_formatted": f"{parsed.ein[:2]}-{parsed.ein[2:]}"
+        if len(parsed.ein) >= 3
+        else parsed.ein,
+        "taxpayer_name": parsed.taxpayer_name,
+        "tax_year": parsed.tax_year,
+        "tax_period_begin": parsed.tax_period_begin,
+        "tax_period_end": parsed.tax_period_end,
+        "return_type": parsed.return_type,
+        "formation_year": parsed.formation_year,
+        "state": parsed.state,
+        "mission": parsed.mission,
+        "website": parsed.website,
+        "financials": {
+            "total_contributions": parsed.financials.total_contributions,
+            "program_service_revenue": parsed.financials.program_service_revenue,
+            "investment_income": parsed.financials.investment_income,
+            "other_revenue": parsed.financials.other_revenue,
+            "total_revenue": parsed.financials.total_revenue,
+            "py_total_revenue": parsed.financials.py_total_revenue,
+            "py_total_expenses": parsed.financials.py_total_expenses,
+            "grants_paid": parsed.financials.grants_paid,
+            "salaries_and_compensation": parsed.financials.salaries_and_compensation,
+            "professional_fundraising": parsed.financials.professional_fundraising,
+            "other_expenses": parsed.financials.other_expenses,
+            "total_expenses": parsed.financials.total_expenses,
+            "revenue_less_expenses": parsed.financials.revenue_less_expenses,
+            "total_assets_boy": parsed.financials.total_assets_boy,
+            "total_assets_eoy": parsed.financials.total_assets_eoy,
+            "total_liabilities_boy": parsed.financials.total_liabilities_boy,
+            "total_liabilities_eoy": parsed.financials.total_liabilities_eoy,
+            "net_assets_boy": parsed.financials.net_assets_boy,
+            "net_assets_eoy": parsed.financials.net_assets_eoy,
+            "cash_non_interest_bearing_eoy": parsed.financials.cash_non_interest_bearing_eoy,
+            "savings_and_temp_investments_eoy": parsed.financials.savings_and_temp_investments_eoy,
+        },
+        "governance": {
+            "schedule_b_required": parsed.governance.schedule_b_required,
+            "political_campaign_activity": parsed.governance.political_campaign_activity,
+            "donor_advised_fund": parsed.governance.donor_advised_fund,
+            "schedule_l_required": parsed.governance.schedule_l_required,
+            "loan_outstanding": parsed.governance.loan_outstanding,
+            "grant_to_related_person": parsed.governance.grant_to_related_person,
+            "business_rln_with_org_member": parsed.governance.business_rln_with_org_member,
+            "business_rln_with_family": parsed.governance.business_rln_with_family,
+            "business_rln_with_35_ctrl": parsed.governance.business_rln_with_35_ctrl,
+            "unrelated_business_income": parsed.governance.unrelated_business_income,
+            "schedule_j_required": parsed.governance.schedule_j_required,
+            "tax_exempt_bonds": parsed.governance.tax_exempt_bonds,
+            "voting_members_governing_body": parsed.governance.voting_members_governing_body,
+            "independent_voting_members": parsed.governance.independent_voting_members,
+            "family_or_business_relationship": parsed.governance.family_or_business_relationship,
+            "delegation_of_mgmt_duties": parsed.governance.delegation_of_mgmt_duties,
+            "material_diversion_or_misuse": parsed.governance.material_diversion_or_misuse,
+            "conflict_of_interest_policy": parsed.governance.conflict_of_interest_policy,
+            "annual_disclosure_covered": parsed.governance.annual_disclosure_covered,
+            "regular_monitoring_enforced": parsed.governance.regular_monitoring_enforced,
+            "whistleblower_policy": parsed.governance.whistleblower_policy,
+            "document_retention_policy": parsed.governance.document_retention_policy,
+            "compensation_process_ceo": parsed.governance.compensation_process_ceo,
+            "compensation_process_other": parsed.governance.compensation_process_other,
+            "minutes_of_governing_body": parsed.governance.minutes_of_governing_body,
+            "minutes_of_committees": parsed.governance.minutes_of_committees,
+            "form990_provided_to_governing_body": parsed.governance.form990_provided_to_governing_body,
+        },
+        "officers": [
+            {
+                "name": o.name,
+                "title": o.title,
+                "average_hours_per_week": o.average_hours_per_week,
+                "reportable_comp_from_org": o.reportable_comp_from_org,
+                "reportable_comp_from_related": o.reportable_comp_from_related,
+                "other_compensation": o.other_compensation,
+                "total_compensation": o.total_compensation,
+                "is_officer": o.is_officer,
+                "is_former": o.is_former,
+                "is_highest_compensated": o.is_highest_compensated,
+                "is_key_employee": o.is_key_employee,
+            }
+            for o in parsed.officers
+        ],
+        "total_reportable_comp_from_org": parsed.total_reportable_comp_from_org,
+        "individuals_over_100k": parsed.individuals_over_100k,
+        "num_employees": parsed.num_employees,
+        "num_volunteers": parsed.num_volunteers,
+        "parse_quality": parsed.parse_quality,
+        "source": "IRS_TEOS_XML",
+        "source_object_id": parsed.source_object_id,
+        "source_batch_id": parsed.source_batch_id,
+    }
+
+
+def filing_to_dict(record: IndexRecord) -> dict:
+    """Convert an IndexRecord to a JSON-serializable dictionary for search results."""
+    return {
+        "ein": record.ein_formatted,
+        "taxpayer_name": record.taxpayer_name,
+        "return_type": record.return_type,
+        "tax_year": record.tax_year,
+        "tax_period": record.tax_period,
+        "object_id": record.object_id,
+        "batch_id": record.xml_batch_id,
+        "index_year": record.index_year,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Cache management
+# ---------------------------------------------------------------------------
+
+
+def clear_caches() -> None:
+    """Clear all in-memory caches (index + ZIP directory)."""
+    _index_cache.clear()
+    _zip_directory_cache.clear()
+    logger.info("Cleared IRS connector caches")
