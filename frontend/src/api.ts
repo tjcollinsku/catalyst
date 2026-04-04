@@ -777,6 +777,49 @@ export async function searchIRS(
     });
 }
 
+export interface Fetch990Result {
+    fetched: number;
+    skipped: number;
+    errors: Array<{ filing: string; error: string }>;
+    filings: Array<{
+        tax_year: number;
+        return_type: string;
+        taxpayer_name: string;
+        total_revenue: number | null;
+        total_expenses: number | null;
+        total_assets: number | null;
+        officers_count: number;
+        parse_quality: number;
+        snapshot_id: string | null;
+        status?: string;
+        governance?: {
+            conflict_of_interest_policy: boolean | null;
+            whistleblower_policy: boolean | null;
+            document_retention_policy: boolean | null;
+            voting_members: number | null;
+            independent_members: number | null;
+        };
+    }>;
+}
+
+export async function fetch990Data(
+    caseId: string,
+    ein: string,
+    options?: ApiRequestOptions
+): Promise<Fetch990Result> {
+    return request<Fetch990Result>(
+        `/api/cases/${caseId}/fetch-990s/`,
+        {
+            method: "POST",
+            body: JSON.stringify({ ein }),
+        },
+        {
+            ...options,
+            timeoutMs: options?.timeoutMs ?? 180000,
+        }
+    );
+}
+
 export async function searchRecorder(
     caseId: string,
     county: string,
