@@ -358,19 +358,30 @@ def _normalize_ein(ein: str) -> str:
     return cleaned.zfill(9)
 
 
-def _fetch_index(year: int) -> list[IndexRecord]:
+def _stream_search_index(
+    year: int,
+    *,
+    ein_filter: Optional[str] = None,
+    name_filter: Optional[str] = None,
+    max_results: int = 200,
+) -> list[IndexRecord]:
     """
-    Download and parse one yearly index CSV from IRS.
+    Stream-download an IRS yearly index CSV and filter on-the-fly.
 
-    The index files are ~50-90MB, so we stream and parse row-by-row.
-    Results are cached in memory for the duration of the process.
+    CRITICAL: We never load the full CSV into memory. The index files
+    are 50-90MB with ~700K+ rows. On Railway (512MB-1GB containers),
+    loading the whole thing causes OOM or timeouts.
+
+    Instead we:
+      1. Stream the HTTP response line-by-line
+      2. Check each row against the filter (EIN or name)
+      3. Keep only matching rows (typically <20 per org)
+      4. Stop early once max_results is reached
+
+    Memory usage: ~O(matches) instead of O(all_rows).
     """
-    if year in _index_cache:
-        logger.info("Using cached index for %d (%d records)", year, len(_index_cache[year]))
-        return _index_cache[year]
-
     url = f"{IRS_BASE_URL}/{year}/index_{year}.csv"
-    logger.info("Downloading IRS index: %s", url)
+    logger.info("Streaming IRS index: %s", url)
 
     try:
         resp = requests.get(
@@ -383,15 +394,42 @@ def _fetch_index(year: int) -> list[IndexRecord]:
     except requests.RequestException as e:
         raise IRSNetworkError(f"Failed to download index for {year}: {e}") from e
 
-    records = []
-    # Stream-parse CSV to avoid loading entire file into memory at once
-    text_stream = io.StringIO(resp.text)
-    reader = csv.DictReader(text_stream)
+    matches: list[IndexRecord] = []
+    header: list[str] = []
+    line_buf = ""
 
-    for row in reader:
-        try:
-            records.append(
-                IndexRecord(
+    for chunk in resp.iter_content(chunk_size=64 * 1024, decode_unicode=True):
+        if chunk is None:
+            continue
+        line_buf += chunk
+        lines = line_buf.split("\n")
+        # Keep last partial line in buffer
+        line_buf = lines[-1]
+
+        for line in lines[:-1]:
+            line = line.strip()
+            if not line:
+                continue
+
+            if not header:
+                header = [h.strip().strip('"') for h in line.split(",")]
+                continue
+
+            # Fast pre-filter before full CSV parse
+            if ein_filter and ein_filter not in line:
+                continue
+            if name_filter and name_filter not in line.upper():
+                continue
+
+            # Parse matching row
+            try:
+                vals = next(csv.reader(io.StringIO(line)))
+                row = dict(zip(header, vals))
+            except Exception:
+                continue
+
+            try:
+                record = IndexRecord(
                     return_id=row.get("RETURN_ID", ""),
                     filing_type=row.get("FILING_TYPE", ""),
                     ein=row.get("EIN", "").strip(),
@@ -404,14 +442,31 @@ def _fetch_index(year: int) -> list[IndexRecord]:
                     xml_batch_id=row.get("XML_BATCH_ID", ""),
                     index_year=year,
                 )
-            )
-        except Exception as e:
-            logger.warning("Skipping malformed index row: %s", e)
-            continue
+            except Exception as e:
+                logger.warning("Skipping row: %s", e)
+                continue
 
-    logger.info("Parsed %d records from %d index", len(records), year)
-    _index_cache[year] = records
-    return records
+            # Confirm match (full CSV parse may differ)
+            if ein_filter and record.ein != ein_filter:
+                continue
+            if name_filter:
+                if name_filter not in record.taxpayer_name.upper():
+                    continue
+
+            matches.append(record)
+            if len(matches) >= max_results:
+                resp.close()
+                break
+
+        if len(matches) >= max_results:
+            break
+
+    logger.info(
+        "Found %d matches in %d index (streamed)",
+        len(matches),
+        year,
+    )
+    return matches
 
 
 def search_990_by_ein(
@@ -422,51 +477,67 @@ def search_990_by_ein(
     """
     Search IRS index CSVs for all 990 filings by a given EIN.
 
+    Uses streaming search — never loads full index into memory.
+
     Args:
-        ein: EIN with or without dash (e.g., "12-3456789" or "123456789")
-        years: Which index years to search (default: all in INDEX_YEARS)
-        return_types: Filter by return type (e.g., ["990", "990EZ"]).
-                      Default: all types.
+        ein: EIN with or without dash
+        years: Which index years to search (default: all)
+        return_types: Filter by return type (e.g., ["990"])
 
     Returns:
-        SearchResult with all matching filings, sorted by tax year descending.
+        SearchResult with matching filings, newest first.
     """
     normalized_ein = _normalize_ein(ein)
     search_years = years or INDEX_YEARS
 
-    logger.info("Searching for EIN %s across years %s", normalized_ein, search_years)
+    logger.info(
+        "Searching for EIN %s across years %s",
+        normalized_ein,
+        search_years,
+    )
 
     all_filings: list[IndexRecord] = []
     seen_object_ids: set[str] = set()
 
     for year in search_years:
         try:
-            index = _fetch_index(year)
+            matches = _stream_search_index(year, ein_filter=normalized_ein)
         except IRSNetworkError as e:
-            logger.warning("Could not load index for %d: %s", year, e)
+            logger.warning(
+                "Could not load index for %d: %s",
+                year,
+                e,
+            )
             continue
 
-        for record in index:
-            if record.ein == normalized_ein and record.object_id not in seen_object_ids:
-                if return_types and record.return_type not in return_types:
-                    continue
+        for record in matches:
+            if record.object_id not in seen_object_ids:
+                if return_types:
+                    if record.return_type not in return_types:
+                        continue
                 all_filings.append(record)
                 seen_object_ids.add(record.object_id)
 
         time.sleep(POLITE_DELAY)
 
-    # Sort by tax year descending, then by submission date descending
-    all_filings.sort(key=lambda r: (r.tax_year, r.sub_date), reverse=True)
+    all_filings.sort(
+        key=lambda r: (r.tax_year, r.sub_date),
+        reverse=True,
+    )
 
     result = SearchResult(
         ein=normalized_ein,
-        ein_formatted=f"{normalized_ein[:2]}-{normalized_ein[2:]}",
+        ein_formatted=(f"{normalized_ein[:2]}-{normalized_ein[2:]}"),
         filings=all_filings,
         years_searched=search_years,
         total_found=len(all_filings),
     )
 
-    logger.info("Found %d filings for EIN %s", result.total_found, result.ein_formatted)
+    logger.info(
+        "Found %d filings for EIN %s",
+        result.total_found,
+        result.ein_formatted,
+    )
     return result
 
 
@@ -477,48 +548,67 @@ def search_990_by_name(
     max_results: int = 50,
 ) -> list[IndexRecord]:
     """
-    Search IRS index CSVs by organization name (case-insensitive substring).
+    Search IRS index CSVs by org name (case-insensitive).
+
+    Uses streaming search — never loads full index into memory.
+    Only searches most recent 2 years by default to limit time.
 
     Args:
         name: Organization name to search for.
-        state: Optional — not available in index CSV, so this is ignored.
-               (Included for API compatibility; use EIN search for precision.)
-        years: Which index years to search (default: most recent 2 years).
-        max_results: Maximum number of results to return.
+        state: Ignored (not in index CSV).
+        years: Years to search (default: most recent 2).
+        max_results: Max results to return.
 
     Returns:
-        List of matching IndexRecords, sorted by tax year descending.
+        Matching IndexRecords, sorted by tax year desc.
     """
-    search_years = years or INDEX_YEARS[:2]  # Default: only 2 most recent years
+    search_years = years or INDEX_YEARS[:2]
     name_upper = name.upper().strip()
 
-    logger.info("Searching for name '%s' across years %s", name, search_years)
+    logger.info(
+        "Searching for name '%s' across years %s",
+        name,
+        search_years,
+    )
 
     results: list[IndexRecord] = []
     seen_eins: set[str] = set()
 
     for year in search_years:
         try:
-            index = _fetch_index(year)
+            matches = _stream_search_index(
+                year,
+                name_filter=name_upper,
+                max_results=max_results,
+            )
         except IRSNetworkError as e:
-            logger.warning("Could not load index for %d: %s", year, e)
+            logger.warning(
+                "Could not load index for %d: %s",
+                year,
+                e,
+            )
             continue
 
-        for record in index:
-            if name_upper in record.taxpayer_name.upper():
-                # Deduplicate by EIN — keep most recent filing per org
-                if record.ein not in seen_eins:
-                    results.append(record)
-                    seen_eins.add(record.ein)
-                    if len(results) >= max_results:
-                        break
+        for record in matches:
+            if record.ein not in seen_eins:
+                results.append(record)
+                seen_eins.add(record.ein)
+                if len(results) >= max_results:
+                    break
 
         if len(results) >= max_results:
             break
         time.sleep(POLITE_DELAY)
 
-    results.sort(key=lambda r: (r.tax_year, r.sub_date), reverse=True)
-    logger.info("Found %d orgs matching '%s'", len(results), name)
+    results.sort(
+        key=lambda r: (r.tax_year, r.sub_date),
+        reverse=True,
+    )
+    logger.info(
+        "Found %d orgs matching '%s'",
+        len(results),
+        name,
+    )
     return results
 
 
