@@ -1,5 +1,5 @@
 # CLAUDE.md — Catalyst System Map
-**Last updated:** 2026-04-03 (Session 29)
+**Last updated:** 2026-04-05 (Session 30)
 **Owner:** Tyler Collins (tjcollinsku@gmail.com)
 **Purpose:** This is the single source of truth for the entire Catalyst system. Read this FIRST before doing any work.
 
@@ -457,19 +457,34 @@ Results visible in Pipeline tab (Signals → Detections → Findings)
 
 ---
 
-## CURRENT PRIORITIES (Session 30)
+## CURRENT PRIORITIES (Session 31)
 
-### Priority 1: IRSx Integration (YELLOW — Tyler confirmed)
-Replace bulk CSV IRS connector with IRSx library. IRSx pulls 990 XML directly from AWS S3 (s3://irs-form-990/), which is reliable from Railway. Gets full Part IV/VI/VII governance data that signal rules need. This also makes ProPublica connector obsolete for financial data.
+### Priority 0: Tyler Learns the Codebase (ACTIVE)
+Claude wrote most of the code in sessions 1-29. Tyler needs to understand every file he'd be asked about in an interview. Current approach: guided walkthrough of each layer — models first, then views, then frontend. No new features until Tyler can explain the existing ones.
 
-### Priority 2: Ohio SOS Alternative Approach
-Current approach downloads 4 bulk CSV files (~50MB each) from publicfiles.ohiosos.gov — Railway gets HTTP 403. Options: (A) web scrape the SOS search page directly, (B) cache bulk files in S3/R2 on a schedule. Option A is simpler.
+**Completed so far (Session 30):**
+- models.py: Case, Document, Person, Organization, link tables (PersonDocument, OrgDocument)
+- Key concepts understood: UUIDs, ForeignKey/RESTRICT/CASCADE/SET_NULL, TextChoices, ArrayField, many-to-many relationships, abstract base models
+- views.py: case listing (GET with pagination/filtering), case creation (POST with validation + audit log), document upload pipeline (validate → hash → save → extract → classify → entity extraction)
+- Key concepts understood: pagination (limit/offset), serializer validation, transaction.atomic(), SHA-256 hashing for chain of custody
 
-### Priority 3: ODNR Parcel API Recovery
-Both ArcGIS endpoints (gis.ohiodnr.gov primary + geo1.oit.ohio.gov fallback) unreachable from Railway. Monitor for recovery. Alternative: Ohio Parcels Hub (ohioparcels-geohio.hub.arcgis.com) may have a different API endpoint.
+**Next up:**
+- Frontend: how React calls the API endpoints and displays data
+- entity_extraction.py / entity_resolution.py: how the system finds and deduplicates entities
+- signal_rules.py: how fraud detection rules work
+- Connectors: what each one does and why some are broken
 
-### Priority 4: Integrate form990_parser.py
-After classification identifies a 990, run form990_parser to extract governance data (Part IV checklist, Part VI board composition, Part VII compensation table).
+### Priority 1: IRSx Integration (YELLOW — Tyler confirmed, ON HOLD)
+Replace bulk CSV IRS connector with IRSx library. On hold until Tyler understands the existing codebase well enough to participate in building it.
+
+### Priority 2: Ohio SOS Alternative Approach (ON HOLD)
+Current approach downloads 4 bulk CSV files (~50MB each) from publicfiles.ohiosos.gov — Railway gets HTTP 403. On hold for same reason as Priority 1.
+
+### Priority 3: ODNR Parcel API Recovery (ON HOLD)
+Both ArcGIS endpoints unreachable from Railway. Monitor for recovery.
+
+### Priority 4: Integrate form990_parser.py (ON HOLD)
+After classification identifies a 990, run form990_parser to extract governance data.
 
 ---
 
@@ -486,7 +501,7 @@ Located in `docs/team/`:
 
 ## SESSION HISTORY
 
-29 sessions completed. Key milestones:
+30 sessions completed. Key milestones:
 - Sessions 1-5: Initial Django + React scaffold, models, basic CRUD
 - Sessions 6-10: Entity extraction, signal rules, document processing pipeline
 - Sessions 11-15: Connectors (Ohio SOS, county auditor/recorder, ProPublica)
@@ -496,6 +511,7 @@ Located in `docs/team/`:
 - Session 27: 8 production bugs fixed, frontend redesign complete
 - Session 28: System audit, CLAUDE.md creation, 5 research endpoints built, Research tab frontend built, all connectors wired to UI
 - Session 29: Production debugging — fixed frontend crash (missing `notes` field), rewrote Ohio AOS connector (ASP.NET postback), fixed county enum case mismatch, fixed recorder logger crash, added ODNR fallback URL. Result: Ohio AOS + County Recorder confirmed working on Railway. ODNR/SOS/IRS blocked by external API issues. Commits: 4578786, f5b6325, 7ae653b, plus logger fix.
+- Session 30: **Pivot session.** Tyler recognized that Claude wrote most of the code and he can't explain it in interviews. Shifted from feature-building to codebase education. Walked through models.py (Case, Document, Person, Organization, link tables) and views.py (case CRUD, document upload pipeline). Tyler can now explain: UUIDs, ForeignKeys, TextChoices, ArrayField, many-to-many relationships, pagination, SHA-256 hashing, serializer validation, transaction.atomic(). No code changes — learning session only. Next: frontend layer, then entity extraction, then signal rules.
 
 ---
 
@@ -518,5 +534,8 @@ Located in `docs/team/`:
 > "I don't mind making decisions, I just need to know when to make them."
 > "We need to stop relying on ProPublica if the information is incomplete."
 > "I don't want to have to find-download-then upload. That doesn't make sense."
+> "Claude has written most of it and there is so much in there that I can't explain."
+> "I need to learn the balance, be able to explain the code but also learn how to make AI work for me."
 
 **The prime directive: Make Catalyst useful for actual investigation work, not just a file cabinet.**
+**The learning directive (Session 30): Tyler must be able to explain every file in this project before building new features.**
