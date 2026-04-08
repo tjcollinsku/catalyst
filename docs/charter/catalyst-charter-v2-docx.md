@@ -157,12 +157,12 @@ The following signal rules are derived directly from patterns identified in the 
 | SR-002 | **CRITICAL** | Entity named as grantee or party in a document predates the entity's formation date as recorded with the Secretary of State. | Example Charity RE LLC deed Sept 2017; LLC formed Aug 2019 |
 | SR-003 | **HIGH** | Purchase price deviates more than 50% from county-assessed value, in either direction. | $300K paid for $37,490 appraised property |
 | SR-004 | **HIGH** | Three or more UCC amendments to the same master financing statement file number occur within a 24-hour window. | 5 amendments in 12 minutes, Aug 2 2022 |
-| SR-005 | **HIGH** | Zero-consideration transfer between parties who share a common officer, attorney, or family relationship in other documents in the case. | Insider deed ($0), Example Example Example Example Veterans Center deed ($0) |
+| SR-005 | **HIGH** | Zero-consideration transfer between parties who share a common officer, attorney, or family relationship in other documents in the case. | Insider deed ($0), Example Example Example Example Example Veterans Center deed ($0) |
 | SR-006 | **HIGH** | IRS Form 990 Part IV Line 28a, 28b, or 28c answered Yes with no corresponding Schedule L present in the filing. | 2018-2024 990 filings, 7 consecutive years |
 | SR-007 | **HIGH** | Building permit applicant differs from the recorded owner of the parcel on which construction is permitted. | Example Charity Ministries permits on LLC-owned land |
 | SR-008 | **MEDIUM** | Survey or plat recorded for a property more than 90 days before the recorded purchase date for the same parcel. | Mescher survey Aug 2023; Bohman purchase Jan 2024 |
 | SR-009 | **MEDIUM** | Single contractor named on 100% of permits for a given applicant across multiple years with no evidence of competitive bidding. | Doe Construction on all 5 Example Charity permits 2018-2025 |
-| SR-010 | **MEDIUM** | Tax-exempt organization has not filed a required Form 990 for one or more years in which it held tax-exempt status. | Example Example Example Example Veterans Center: no 990 filed, tax-exempt since July 2023 |
+| SR-010 | **MEDIUM** | Tax-exempt organization has not filed a required Form 990 for one or more years in which it held tax-exempt status. | Example Example Example Example Example Veterans Center: no 990 filed, tax-exempt since July 2023 |
 
 25. FR-601: The system shall evaluate all uploaded documents and entities against the signal rule set upon intake completion.
 

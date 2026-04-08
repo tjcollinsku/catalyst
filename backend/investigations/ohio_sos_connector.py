@@ -831,7 +831,7 @@ def search_entities(
 
 # These are the report types that cover the entities most likely to appear
 # in a Catalyst investigation based on the founding Example Charity Inc. case:
-#   - Nonprofits (Example Charity Ministries, Example Example Example Example Veterans Center)
+#   - Nonprofits (Example Charity Ministries, Example Example Example Example Example Veterans Center)
 #   - Domestic LLCs (Example Charity RE LLC, Example Hmains LLP)
 #   - Amendments (changes in officers, registered agents, addresses)
 

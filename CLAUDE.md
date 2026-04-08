@@ -1,5 +1,5 @@
 # CLAUDE.md — Catalyst System Map
-**Last updated:** 2026-04-05 (Session 30)
+**Last updated:** 2026-04-07 (Session 32)
 **Owner:** Tyler Collins (tjcollinsku@gmail.com)
 **Purpose:** This is the single source of truth for the entire Catalyst system. Read this FIRST before doing any work.
 
@@ -27,8 +27,8 @@ Tyler is a beginner programmer building this through the IBM Full-Stack certific
 Catalyst/
 ├── backend/
 │   ├── investigations/          ← ALL backend logic lives here
-│   │   ├── models.py            ← 21 Django models (1847 lines)
-│   │   ├── views.py             ← 45 API endpoints (3947 lines) — CORE
+│   │   ├── models.py            ← 27 Django models (1847 lines) [being consolidated — see Session 32]
+│   │   ├── views.py             ← 47 API endpoints (6141 lines) — CORE
 │   │   ├── urls.py              ← URL routing
 │   │   ├── serializers.py       ← JSON serialization (1476 lines)
 │   │   ├── forms.py             ← Legacy HTML forms
@@ -49,12 +49,12 @@ Catalyst/
 │   │   ├── form990_parser.py    ← IRS 990 text parser (Part IV/VI/VII)
 │   │   │
 │   │   ├── # --- CONNECTORS ---
-│   │   ├── propublica_connector.py    ← ProPublica 990 API [PARTIALLY WIRED]
-│   │   ├── county_recorder_connector.py ← 88 OH counties [PARTIALLY WIRED]
-│   │   ├── county_auditor_connector.py  ← ODNR parcel API [NOT WIRED]
-│   │   ├── irs_connector.py            ← IRS Pub 78 + EO BMF [NOT WIRED]
-│   │   ├── ohio_sos_connector.py       ← OH Secretary of State [NOT WIRED]
-│   │   ├── ohio_aos_connector.py       ← OH Auditor of State [NOT WIRED]
+│   │   ├── propublica_connector.py    ← ProPublica 990 API [SUPERSEDED by IRS TEOS]
+│   │   ├── county_recorder_connector.py ← 88 OH counties [WORKING ✅]
+│   │   ├── county_auditor_connector.py  ← ODNR parcel API [BROKEN — ODNR down]
+│   │   ├── irs_connector.py            ← IRS TEOS 990 XML pipeline [WORKING ✅]
+│   │   ├── ohio_sos_connector.py       ← OH Secretary of State [LOCAL CSV ✅]
+│   │   ├── ohio_aos_connector.py       ← OH Auditor of State [WORKING ✅]
 │   │   └── verify_recorder_portals.py  ← Utility script
 │   │
 │   ├── backend/                 ← Django project settings
@@ -100,26 +100,26 @@ This is the #1 problem. We have 6 data source connectors. Here is their actual s
 
 | Connector | Backend File | Has Endpoint? | Frontend Calls It? | Works on Railway? | Root Cause if Broken |
 |-----------|-------------|---------------|--------------------|--------------------|----------------------|
-| ProPublica | propublica_connector.py | YES (`/api/cases/<uuid>/fetch-990s/`) | **NO** — no button exists | Untested | No UI button |
+| IRS TEOS XML | irs_connector.py | YES (`/research/irs/` + `/fetch-990s/`) | **YES** — Fetch 990 Data button | **YES** ✅ | — |
 | County Recorder | county_recorder_connector.py | YES (`/research/recorder/`) + auto DEED | Research tab (URL builder) | **YES** ✅ | — |
-| County Auditor | county_auditor_connector.py | YES (`/research/parcels/`) | Research tab | **NO** ❌ | ODNR ArcGIS API returning 404; fallback URL times out |
-| IRS (Pub 78/BMF) | irs_connector.py | YES (`/research/irs/`) | Research tab | **NO** ❌ | Bulk CSV download — same pattern as SOS, likely fails |
-| Ohio SOS | ohio_sos_connector.py | YES (`/research/ohio-sos/`) | Research tab | **NO** ❌ | HTTP 403 — SOS file server blocking Railway IP |
 | Ohio AOS | ohio_aos_connector.py | YES (`/research/ohio-aos/`) | Research tab | **YES** ✅ | — |
+| Ohio SOS | ohio_sos_connector.py | YES (`/research/ohio-sos/`) + admin upload | Research tab | **YES** ✅ (local CSV) | Requires manual CSV upload via admin endpoint |
+| County Auditor | county_auditor_connector.py | YES (`/research/parcels/`) | Research tab | **NO** ❌ | ODNR ArcGIS API returning 404; fallback URL times out |
+| ProPublica | propublica_connector.py | YES (`/fetch-990s/`) | Superseded | N/A | Replaced by IRS TEOS XML for financial data |
 
-**Session 29 update:** Tested all connectors on production. 2 of 6 confirmed working (AOS, Recorder). 3 broken due to external API issues (ODNR down, SOS blocking, IRS untested but same pattern). ProPublica still has no UI. AOS was rewritten to use ASP.NET ViewState postback. Recorder had logger crash (`name` is reserved in Python LogRecord).
+**Session 30 update:** IRS connector completely rewritten — now fetches 990 XML directly from IRS TEOS (apps.irs.gov) using HTTP range requests (~5KB per filing vs 100MB bulk). Parses full 990: Part I financials, Part IV checklist, Part VI governance, Part VII officer compensation. Frontend has "Fetch 990 Data" button with expandable detail panel. Ohio SOS rewritten to use local CSV approach — admin uploads CSVs, connector searches from disk. **4 of 6 connectors now working.** Only ODNR remains broken (external API issue).
 
 ### WHAT NEEDS TO BE BUILT
 
-1. **IRSx integration** — Replace bulk CSV approach with IRSx library (pulls 990 XML from AWS S3). Fixes reliability AND gets full Part IV/VI/VII data.
-2. **Ohio SOS alternative** — Switch from bulk file download to web scraping (avoids 403 block from Railway).
+1. ~~**IRSx integration**~~ — **DONE (Session 30).** Replaced with IRS TEOS XML pipeline. Full 990 data including Parts IV/VI/VII.
+2. ~~**Ohio SOS alternative**~~ — **DONE (Session 30).** Local CSV upload approach. Admin uploads CSVs, connector searches from disk.
 3. **ODNR parcel API** — Monitor if ArcGIS endpoint recovers, or find new URL. Both primary and fallback URLs currently unreachable from Railway.
-4. **Result-to-case wiring** — "Add to Case" buttons exist but need testing on working connectors (AOS, Recorder).
-5. **ProPublica UI button** — Add fetch-990s button to frontend (low priority if IRSx replaces it).
+4. **Result-to-case wiring** — "Add to Case" buttons exist but need testing on working connectors (AOS, Recorder, IRS, SOS).
+5. ~~**ProPublica UI button**~~ — **SUPERSEDED.** IRS TEOS XML provides richer data. "Fetch 990 Data" button now exists on Research tab.
 
 ---
 
-## DATA MODELS (21 Models)
+## DATA MODELS (27 Models — see Session 32 for planned consolidation)
 
 ### Core Investigation Models
 - **Case** — name, status (ACTIVE/PAUSED/REFERRED/CLOSED), notes, referral_ref
@@ -187,7 +187,7 @@ This is the #1 problem. We have 6 data source connectors. Here is their actual s
 
 ---
 
-## API ENDPOINTS (45 Total)
+## API ENDPOINTS (47 Total)
 
 ### Case Management
 ```
@@ -206,7 +206,7 @@ POST   /api/cases/<uuid>/documents/bulk/        → Upload files (multipart)
 POST   /api/cases/<uuid>/documents/process-pending/ → Batch OCR
 GET    /api/cases/<uuid>/documents/<uuid>/      → Document detail
 DELETE /api/cases/<uuid>/documents/<uuid>/      → Delete document
-POST   /api/cases/<uuid>/referral-memo/         → Generate memo
+POST   /api/cases/<uuid>/referral-memo/         → AI-powered referral memo generation
 ```
 
 ### Signals & Detections
@@ -255,17 +255,23 @@ POST   /api/cases/<uuid>/ai/ask/                → Free-text AI chat
 
 ### Data Fetching
 ```
-POST   /api/cases/<uuid>/fetch-990s/            → Fetch 990 PDFs from ProPublica [NO UI BUTTON YET]
+POST   /api/cases/<uuid>/fetch-990s/            → Fetch 990 XML from IRS TEOS + create FinancialSnapshots
 ```
 
-### Research Endpoints (NEW — Session 28)
+### Research Endpoints
 ```
 POST   /api/cases/<uuid>/research/parcels/      → County Auditor parcel search (ODNR API)
-POST   /api/cases/<uuid>/research/ohio-sos/     → Ohio SOS entity lookup
+POST   /api/cases/<uuid>/research/ohio-sos/     → Ohio SOS entity lookup (local CSV)
 POST   /api/cases/<uuid>/research/ohio-aos/     → Ohio AOS audit report search
-POST   /api/cases/<uuid>/research/irs/          → IRS EO BMF nonprofit lookup
+POST   /api/cases/<uuid>/research/irs/          → IRS TEOS 990 XML lookup (by EIN or name)
 POST   /api/cases/<uuid>/research/recorder/     → County Recorder portal URL builder
 POST   /api/cases/<uuid>/research/add-to-case/ → Import research result as entity/note
+```
+
+### Admin Endpoints (NEW — Session 30)
+```
+POST   /api/admin/upload-sos-csv/               → Upload Ohio SOS CSV file for local search
+GET    /api/admin/sos-csv-status/                → Check which SOS CSVs are uploaded
 ```
 
 ### Notes
@@ -354,39 +360,45 @@ Results visible in Pipeline tab (Signals → Detections → Findings)
 
 ## CONNECTOR DETAILS
 
-### propublica_connector.py (667 lines) — PARTIALLY WIRED
-- **What it does:** Calls ProPublica API by EIN, returns list of 990 filings
-- **What it returns:** Filing year, form type, revenue, expenses, assets (SUMMARY ONLY)
-- **Limitation:** Does NOT return Part IV, VI, VII line items. Only summary financials.
-- **Wired to:** `api_case_fetch_990s()` endpoint exists, but NO frontend button calls it
-- **Key function:** `fetch_990_by_ein(ein)` → `(list[dict], error)`
+### irs_connector.py (1466 lines) — WORKING ✅
+- **What it does:** Fetches 990 XML data directly from IRS TEOS (apps.irs.gov). Uses HTTP range requests to extract individual XML files from ZIP archives (~5KB per filing instead of 100MB bulk downloads).
+- **What it returns:** Full 990 data: Part I financials, Part IV checklist, Part VI governance, Part VII officer compensation
+- **Wired to:** `api_research_irs()` (search by EIN or name) + `api_case_fetch_990s()` (fetch + create FinancialSnapshots)
+- **Frontend:** "Fetch 990 Data" button on Research tab with expandable detail panel
+- **Signal integration:** `evaluate_xml_financial_snapshots()` runs SR-006, SR-011, SR-012, SR-013, SR-025, SR-028, SR-029 using structured data
+- **Replaces:** Old bulk CSV approach (Pub 78 + EO BMF) and ProPublica summary-only API
 
-### county_recorder_connector.py (2045 lines) — PARTIALLY WIRED
+### propublica_connector.py (667 lines) — SUPERSEDED
+- **What it does:** Calls ProPublica API by EIN, returns list of 990 filings
+- **What it returns:** Filing year, form type, revenue, expenses, assets (SUMMARY ONLY — no Part IV/VI/VII)
+- **Status:** Superseded by IRS TEOS XML pipeline. Code retained but no longer primary data source.
+
+### county_recorder_connector.py (2045 lines) — WORKING ✅
 - **What it does:** Maps all 88 Ohio counties to recorder portals, builds search URLs, parses OCR'd deed documents
 - **Wired to:** `parse_recorder_document()` auto-triggers when a DEED is uploaded
 - **Key functions:** `get_search_url(county, name)`, `parse_recorder_document(text)`, `get_county_info(county)`
 
-### county_auditor_connector.py (1795 lines) — NOT WIRED
+### ohio_aos_connector.py (189 lines) — WORKING ✅
+- **What it does:** Scrapes Ohio Auditor of State audit reports, finds "Finding for Recovery" determinations
+- **Wired to:** Research tab via `api_research_ohio_aos()`
+- **Key functions:** Search by entity name using ASP.NET ViewState postback
+- **Why it matters:** Government audit findings are direct evidence of mismanagement
+
+### ohio_sos_connector.py (896 lines) — WORKING ✅ (local CSV)
+- **What it does:** Ohio Secretary of State entity lookup (business registration, statutory agents, formation dates)
+- **How it works now:** Admin uploads 4 CSV files from publicfiles.ohiosos.gov via `POST /api/admin/upload-sos-csv/`. Connector searches from disk instead of downloading at runtime.
+- **Admin endpoints:** `upload-sos-csv/` (upload) + `sos-csv-status/` (check which files exist)
+- **Key functions:** Query by entity name, entity number, or registered agent
+- **Why it matters:** Verifies if organizations actually exist, detects PHANTOM_OFFICER (SR-002)
+- **Requires:** Tyler to download CSVs on home PC and upload them
+
+### county_auditor_connector.py (1795 lines) — BROKEN ❌
 - **What it does:** Two modes:
   - Mode 1: Queries ODNR statewide parcel API (ArcGIS REST) — covers all 88 Ohio counties
   - Mode 2: Builds direct URLs to county auditor portals
 - **Key functions:** `search_parcels_by_owner(name)`, `search_parcels_by_pin(parcel)`, `get_auditor_url(county)`
 - **Why it matters:** Cross-county property ownership detection for fraud patterns
-
-### irs_connector.py (994 lines) — NOT WIRED
-- **What it does:** IRS Publication 78 lookup (deductibility check) + Exempt Organizations BMF search
-- **Key functions:** `check_pub78(ein)`, `search_eo_bmf(ein)`
-- **Limitation:** Uses bulk file download + local search, needs staleness management
-
-### ohio_sos_connector.py (717 lines) — NOT WIRED
-- **What it does:** Ohio Secretary of State entity lookup (business registration, statutory agents, formation dates)
-- **Key functions:** Query by entity name, entity number, or registered agent
-- **Why it matters:** Verifies if organizations actually exist, detects PHANTOM_OFFICER (SR-002)
-
-### ohio_aos_connector.py (189 lines) — NOT WIRED
-- **What it does:** Scrapes Ohio Auditor of State audit reports, finds "Finding for Recovery" determinations
-- **Key functions:** Search by entity name
-- **Why it matters:** Government audit findings are direct evidence of mismanagement
+- **Status:** ODNR ArcGIS API returning 404 from Railway. Both primary and fallback URLs unreachable.
 
 ---
 
@@ -406,13 +418,19 @@ Results visible in Pipeline tab (Signals → Detections → Findings)
 - County enum case mismatch — frontend sends "Darke", backend expected "DARKE"; added `.upper()` normalization
 - Null byte corruption — cleaned `\x00` bytes from 4 files (views.py, App.tsx, form990_parser.py, urls.py)
 
+### Fixed (Session 30 — from other machine)
+- IRS connector OOM — rewrote to stream CSV index files instead of loading into memory
+- IRS bulk download blocked — replaced entirely with IRS TEOS XML pipeline (HTTP range requests)
+- ProPublica fetch endpoint had no UI button — added "Fetch 990 Data" button with expandable detail panel
+- Ohio SOS HTTP 403 — rewrote connector to use locally uploaded CSVs instead of runtime download
+- Referral memo was placeholder — replaced with AI-powered (Claude) narrative generator
+- Ruff F841 unused variable in views.py — fixed
+
 ### Known Issues
 - Git pre-commit hook points to Windows Python path (doesn't work in sandbox)
-- form990_parser.py not integrated into extraction pipeline
-- ProPublica fetch endpoint has no UI button
+- form990_parser.py not integrated into extraction pipeline (may be partially superseded by IRS TEOS XML parser)
 - ODNR ArcGIS parcel API returning 404 from Railway (both primary and fallback URLs)
-- Ohio SOS bulk file server returning HTTP 403 from Railway (all 4 CSV files blocked)
-- IRS bulk EO BMF download likely fails on Railway (same pattern as SOS — untested)
+- Ohio SOS requires manual CSV upload — Tyler needs to download files from publicfiles.ohiosos.gov on home PC
 - Null bytes occasionally appear at end of files written by Cowork Edit tool; pre-commit hooks fix them but require re-stage
 
 ---
@@ -449,7 +467,7 @@ Results visible in Pipeline tab (Signals → Detections → Findings)
 ### External Data Sources
 - **IRS TEOS XML** — Direct 990 e-file XML from apps.irs.gov (Session 30) ✅
 - ProPublica Nonprofit Explorer API (superseded by IRS TEOS XML for financial data)
-- Ohio SOS (bulk CSV + bizimage API for document PDFs)
+- Ohio SOS (local CSV upload + search from disk; bizimage API for document PDFs)
 - ODNR Statewide Parcel API (ArcGIS REST)
 - Ohio Auditor of State (web scraper)
 - County recorder portals (88 counties, multiple vendors)
@@ -457,34 +475,86 @@ Results visible in Pipeline tab (Signals → Detections → Findings)
 
 ---
 
-## CURRENT PRIORITIES (Session 31)
+## CURRENT PRIORITIES (Session 32)
 
-### Priority 0: Tyler Learns the Codebase (ACTIVE)
-Claude wrote most of the code in sessions 1-29. Tyler needs to understand every file he'd be asked about in an interview. Current approach: guided walkthrough of each layer — models first, then views, then frontend. No new features until Tyler can explain the existing ones.
+### THE REFRAME (Session 32 — most important thing in this file)
 
-**Completed so far (Session 30):**
-- models.py: Case, Document, Person, Organization, link tables (PersonDocument, OrgDocument)
-- Key concepts understood: UUIDs, ForeignKey/RESTRICT/CASCADE/SET_NULL, TextChoices, ArrayField, many-to-many relationships, abstract base models
-- views.py: case listing (GET with pagination/filtering), case creation (POST with validation + audit log), document upload pipeline (validate → hash → save → extract → classify → entity extraction)
-- Key concepts understood: pagination (limit/offset), serializer validation, transaction.atomic(), SHA-256 hashing for chain of custody
+Catalyst is **not** investigation software. It is **referral packaging software
+for citizen investigators handing off to professionals with subpoena power.**
+The customer of the OUTPUT is the AG/IRS/FBI investigator, not Tyler. Every
+design decision flows from that reframe.
 
-**Next up:**
-- Frontend: how React calls the API endpoints and displays data
-- entity_extraction.py / entity_resolution.py: how the system finds and deduplicates entities
-- signal_rules.py: how fraud detection rules work
-- Connectors: what each one does and why some are broken
+The quality bar is "heavy confidence that it was going to go somewhere" — a
+referral package a professional investigator can read in 15 minutes and act
+on. That is the only thing that matters.
 
-### Priority 1: IRSx Integration (YELLOW — Tyler confirmed, ON HOLD)
-Replace bulk CSV IRS connector with IRSx library. On hold until Tyler understands the existing codebase well enough to participate in building it.
+Corollary: Catalyst is a **portfolio piece**, not a product. It needs to get
+Tyler hired. It does not need to scale, handle every edge case, or cover every
+signal rule imaginable. First 70% is 100% — not 100% of everything at 70%.
 
-### Priority 2: Ohio SOS Alternative Approach (ON HOLD)
-Current approach downloads 4 bulk CSV files (~50MB each) from publicfiles.ohiosos.gov — Railway gets HTTP 403. On hold for same reason as Priority 1.
+### Priority 0: Recruiter-Facing Repo Presentation (ACTIVE — blocks everything else)
 
-### Priority 3: ODNR Parcel API Recovery (ON HOLD)
-Both ArcGIS endpoints unreachable from Railway. Monitor for recovery.
+Tyler has job applications already out. The repo needs to look like "a project
+under active, intentional development" **right now**, not at the end of the
+14-day rebuild. A recruiter clicking the repo today should see a clean story
+in under 60 seconds.
 
-### Priority 4: Integrate form990_parser.py (ON HOLD)
-After classification identifies a 990, run form990_parser to extract governance data.
+In progress this session:
+- README refactor (product-first hook, "Why it exists" story, contact block with GitHub/email/LinkedIn, engineering-honest framing)
+- New STATUS.md at repo root: Working / In Active Refactor / Planned columns
+- Surface cleanup: delete stale CURRENT_STATE.md, fix CLAUDE.md model count (DONE), gitignore pytest cache, triage root-level audit markdown files and stray directories
+
+Open decisions at end of Session 32:
+- LinkedIn URL (needs Tyler to paste)
+- Whether to keep referral case numbers (, ) in README — currently pulled out for anonymity
+
+### Priority 1: 14-Day Shipping Window (after repo cleanup lands)
+
+5–7 hours/day, target: portfolio-ready referral-package version. Major scope
+decisions already made this session:
+
+1. **Collapse Signal / Detection / Finding into one `Finding` model.** The
+   three-table design conflates two different concepts (automatic ingestion
+   vs. manual triage workbench). One Finding with `status`
+   (NEW/NEEDS_EVIDENCE/DISMISSED/CONFIRMED) and `evidence_weight`
+   (SPECULATIVE/DIRECTIONAL/DOCUMENTED/TRACED). The second dimension exists
+   because directionally-meaningful-but-unproven findings (like the timeline
+   compression on Example Hmains LLP) need a place to live with proper
+   labeling, not a binary keep/throw.
+2. **Cut the signal rule set from 29 down to ~5–7** — only rules grounded
+   in patterns from the founding investigation. No speculative rules.
+3. **Build the deterministic referral package exporter.** Template-driven,
+   citation-bearing, NOT AI-generated. This is the central deliverable of
+   the whole system. Every sentence in the output traces back to a citation
+   in the case file.
+4. **Cut:** `SocialMediaConnection` model (bot can't scan social anyway;
+   use Document + Relationship instead), `GovernmentReferral` model,
+   AI-generated narrative memo feature.
+5. **Build Example Charity as a pre-loaded demo case.** Anonymized. Available on
+   first launch so anyone — recruiter, interviewer, sample user — can see
+   what a finished case looks like.
+
+### Priority 2: Tyler Learns the Codebase (continues alongside rebuild)
+
+Tyler must be able to explain every file in the project before the rebuild
+ships. Session 30 covered: models.py (Case, Document, Person, Organization,
+link tables), views.py (case CRUD, document upload pipeline). Concepts
+understood: UUIDs, ForeignKey behaviors, TextChoices, ArrayField, M2M,
+pagination, SHA-256 hashing, transaction.atomic(), serializer validation.
+
+Still to walk through: frontend → API, entity_extraction.py,
+entity_resolution.py, signal_rules.py, each connector.
+
+### Already Shipped (Session 30)
+
+- **IRS TEOS XML Pipeline ✅** — Replaced bulk CSV approach with direct 990 XML from IRS TEOS (apps.irs.gov). HTTP range requests pull ~5KB per filing. Parses Part I financials, Part IV checklist, Part VI governance, Part VII officer compensation. Frontend has "Fetch 990 Data" button with expandable detail panel.
+- **Ohio SOS Local CSV ✅** — Rewrote connector to search from locally uploaded CSV files instead of runtime download. Added admin upload endpoints. Tyler needs to grab the files from publicfiles.ohiosos.gov on his home PC.
+- **AI-Powered Referral Memo ✅ (being CUT in rebuild)** — Was built in Session 30. Being removed in favor of a deterministic template-driven referral package exporter per Session 32 reframe.
+
+### On Hold
+
+- **ODNR Parcel API Recovery** — Both ArcGIS endpoints unreachable from Railway. Monitoring for upstream fix. Not blocking anything critical.
+- **form990_parser.py integration** — May be partially superseded by the IRS TEOS XML parser which now extracts Parts IV/VI/VII directly. Revisit after rebuild.
 
 ---
 
@@ -501,7 +571,7 @@ Located in `docs/team/`:
 
 ## SESSION HISTORY
 
-30 sessions completed. Key milestones:
+32 sessions completed. Key milestones:
 - Sessions 1-5: Initial Django + React scaffold, models, basic CRUD
 - Sessions 6-10: Entity extraction, signal rules, document processing pipeline
 - Sessions 11-15: Connectors (Ohio SOS, county auditor/recorder, ProPublica)
@@ -511,7 +581,62 @@ Located in `docs/team/`:
 - Session 27: 8 production bugs fixed, frontend redesign complete
 - Session 28: System audit, CLAUDE.md creation, 5 research endpoints built, Research tab frontend built, all connectors wired to UI
 - Session 29: Production debugging — fixed frontend crash (missing `notes` field), rewrote Ohio AOS connector (ASP.NET postback), fixed county enum case mismatch, fixed recorder logger crash, added ODNR fallback URL. Result: Ohio AOS + County Recorder confirmed working on Railway. ODNR/SOS/IRS blocked by external API issues. Commits: 4578786, f5b6325, 7ae653b, plus logger fix.
-- Session 30: **Pivot session.** Tyler recognized that Claude wrote most of the code and he can't explain it in interviews. Shifted from feature-building to codebase education. Walked through models.py (Case, Document, Person, Organization, link tables) and views.py (case CRUD, document upload pipeline). Tyler can now explain: UUIDs, ForeignKeys, TextChoices, ArrayField, many-to-many relationships, pagination, SHA-256 hashing, serializer validation, transaction.atomic(). No code changes — learning session only. Next: frontend layer, then entity extraction, then signal rules.
+- Session 30: **Pivot session + major feature work (other machine).** Two tracks:
+  - **Learning track (Cowork):** Tyler recognized that Claude wrote most of the code and he can't explain it in interviews. Walked through models.py (Case, Document, Person, Organization, link tables) and views.py (case CRUD, document upload pipeline). Tyler can now explain: UUIDs, ForeignKeys, TextChoices, ArrayField, many-to-many relationships, pagination, SHA-256 hashing, serializer validation, transaction.atomic().
+  - **Feature track (Claude Code on other machine):** IRS connector completely rewritten — IRS TEOS XML pipeline replaces bulk CSV (8ec7826). Frontend "Fetch 990 Data" button added (1fe58b8). AI-powered referral memo generator replaces placeholder (fab0d3e). IRS streaming fix for OOM (8c2151c). Ohio SOS rewritten for local CSV approach with admin upload endpoints (8feeccb). Ruff/null-byte cleanup (d2fb504). Commits: 8ec7826, 1fe58b8, fab0d3e, e03b929, 8c2151c, d2fb504, 8feeccb.
+  - **Result:** 4 of 6 connectors now working (IRS, SOS, AOS, Recorder). Only ODNR broken. ProPublica superseded.
+- Session 32: **The reframe session.** Tyler walked through raw narrative of the founding investigation (Ohio nonprofit, $XK → $X.XM, Karen Example, UCC filings, Example Construction, ExampleVendor, AOS dormant entities, the property transaction, ExampleBoardMember board overlap). Key reframe landed: **Catalyst is referral packaging software for citizen investigators handing to professionals with subpoena power — not investigation software.** The customer of the output is the AG/IRS/FBI investigator, not Tyler. Quality bar: "heavy confidence that it was going to go somewhere." Major scope decisions: collapse Signal/Detection/Finding into one Finding with status + evidence_weight fields; cut signal rule set from 29 to ~5-7 grounded rules; kill AI-generated narrative memo and replace with deterministic template-driven referral package exporter; cut SocialMediaConnection and GovernmentReferral models; build Example Charity as preloaded demo case. Committed to 14-day shipping window (5-7 hrs/day). **New constraint mid-session:** Tyler has job applications already out — repo must look presentable to recruiters TODAY, not at end of rebuild. Day 1 reshaped: README refactor (product-first hook + "Why it exists" story + GitHub/email/LinkedIn contact block), STATUS.md creation with Working/In Active Refactor/Planned columns, surface cleanup (stale CURRENT_STATE.md, wrong model count in CLAUDE.md, pytest cache in repo). Drafts written for README and STATUS.md; awaiting Tyler's LinkedIn URL and referral-case-number decision before committing to disk. "One project, two pitches" framing established: universal pitch for general recruiters, niche pitch for fraud/forensic firms.
+
+---
+
+## RESUME-READY TALKING POINTS (added Session 32)
+
+Lift these directly for resume bullets, cover letters, LinkedIn headline, or
+interview framing. All claims here are true as of Session 32 — if you edit
+the system, keep these accurate.
+
+### One-line elevator pitch (universal)
+> "I built a full-stack public-records investigation platform for citizen
+> investigators — Django + PostgreSQL backend, React + TypeScript frontend,
+> six external data source connectors, 47 API endpoints, deployed on
+> Railway — and used it to support a real fraud investigation that produced
+> formal referrals to four federal and state agencies."
+
+### One-line elevator pitch (niche — fraud / forensic / compliance firms)
+> "I conducted a public-records investigation into an Ohio nonprofit that
+> resulted in formal referrals to the Ohio AG, IRS, FBI, and a federal
+> agency OIG, then rebuilt the manual investigation process as a full-stack
+> platform with evidence-grade chain of custody, automated entity
+> extraction, and a deterministic referral package exporter."
+
+### Resume bullets (rank-ordered — strongest first)
+
+- **Designed and shipped a full-stack investigation platform** (Django 4.2 / PostgreSQL 16 / React 18 / TypeScript / D3.js / Docker / Railway) that ingests documents, extracts entities, and exports referral packages — built from a real fraud investigation I ran by hand.
+- **Architected an audit-first data model** with SHA-256 chain of custody on every document, append-only audit logging on every mutation, and immutable timestamp guards on government referral filing dates — treating legal defensibility as a primary requirement, not an afterthought.
+- **Built six independent, failure-isolated external data connectors** for public records (IRS Form 990 XML via TEOS range requests, Ohio Secretary of State, Ohio Auditor of State, all 88 Ohio county recorder portals, ProPublica Nonprofit Explorer, ODNR statewide parcel layer) with full mock-HTTP offline test coverage.
+- **Implemented a human-in-the-loop entity resolution pipeline** (rule-based extraction → normalization → fuzzy matching → investigator confirmation) that surfaces match candidates rather than silent-merging, as a deliberate legal defensibility decision.
+- **Integrated the Anthropic Claude API** as a fallback for messy document extraction and as a triage/exploration aid — while keeping the deliverable (referral package export) deterministic and citation-bearing rather than AI-generated.
+- **Designed a fraud signal detection engine** with pattern rules (shell entities, timeline compression, excessive officer compensation, address nexus) derived directly from anomalies I encountered in the founding investigation — not speculative.
+- **Shipped a React + TypeScript + D3 frontend** with a force-directed entity-relationship graph synchronized to a brushable timeline, dark/light/auto theming, skeleton loading states, and WCAG-aware accessibility (skip-to-content, ARIA live regions, reduced-motion support).
+- **Wrote 555+ backend tests** covering connectors, API endpoints, and signal rules, with CI running ruff, TypeScript type-check, and Vite build on every push.
+- **Reframed the product mid-build** after recognizing the right customer of the output is the professional investigator, not the citizen user — then consolidated an over-engineered three-table workflow (Signal / Detection / Finding) into a single two-dimensional model, cut speculative features, and refocused on a defensible referral package as the core deliverable.
+
+### Skills / keywords for resume keyword scanning
+
+Python · Django · Django REST Framework · PostgreSQL · SQLAlchemy-style ORMs · migrations · SQL · React · TypeScript · Vite · React Router · D3.js · CSS Modules · Docker · Docker Compose · Railway · GitHub Actions · CI/CD · ruff · pytest · REST API design · authentication · CSRF · rate limiting · PDF text extraction · OCR (Tesseract) · Anthropic Claude API · LLM integration · web scraping (requests + BeautifulSoup + ASP.NET ViewState) · fuzzy matching · entity resolution · data pipelines · ETL · chain of custody · audit logging · full-stack development · agile / session-based development · technical writing
+
+### Interview story beats
+
+1. **The origin story** — "I started with a real investigation, not a product idea. I built Catalyst backwards from the pain of doing the work by hand."
+2. **The audit-first decision** — "Chain of custody isn't a nice-to-have when the output will be read by an AG investigator. I put SHA-256 and an append-only audit log on every mutation from day one."
+3. **The human-in-the-loop decision** — "I could have auto-merged fuzzy matches. I chose to surface candidates instead because a silent merge in an evidence chain is worse than an extra click."
+4. **The reframe** — "I realized the system I was building wasn't investigation software. It was referral packaging software for a professional investigator with subpoena power. That reframe cut three models, killed an AI feature, and changed the whole UI."
+5. **The working-with-AI story** — "Most of the early scaffmain was written by an AI coding assistant. I learned the hard way that I had to be able to explain every file before building more. That's where this project is right now — I can walk you through models.py and views.py line by line."
+
+### What to leave out of resumes / interviews (until you decide)
+- The specific Ohio nonprofit name
+- The referral case numbers (, ) unless you're comfortable making the case identifiable
+- "Vibe-coded by an AI" framing — use "AI-assisted development with deliberate ownership of the codebase" instead
 
 ---
 
@@ -539,3 +664,5 @@ Located in `docs/team/`:
 
 **The prime directive: Make Catalyst useful for actual investigation work, not just a file cabinet.**
 **The learning directive (Session 30): Tyler must be able to explain every file in this project before building new features.**
+**The reframe directive (Session 32): Catalyst is referral packaging software for citizen investigators handing off to professionals with subpoena power. The customer of the output is the investigator with the badge, not Tyler. Every design decision flows from that. First 70% is 100% — not 100% of everything at 70%.**
+**The portfolio directive (Session 32): Catalyst is a portfolio piece that needs to get Tyler hired. It does not need to scale or cover every edge case. The repo must look presentable to recruiters DURING the rebuild, not only after.**
