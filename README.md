@@ -4,9 +4,8 @@ Investigation intelligence platform for fraud pattern detection, defensible
 audit history, and human-in-the-loop evidence workflows.
 
 Built to support a real nonprofit fraud investigation that produced formal
-referrals to the Ohio Attorney General Charitable Law Section (Ref ),
-the IRS (Form 13909), the FBI, and the Example Lender Administration OIG
-(Case ). The manual investigation process exposed specific
+referrals to the Ohio Attorney General Charitable Law Section,
+the IRS, the FBI, and the Example Lender Administration OIG. The manual investigation process exposed specific
 organizational and tooling gaps — Catalyst is the systematic solution to those
 gaps.
 
