@@ -79,5 +79,5 @@ can name what needs to change and why. If the rebuild outlined here has
 landed since you last checked, this file will reflect that.
 
 If you're a contributor or future maintainer: start with
-[CLAUDE.md](CLAUDE.md) for the full system map, and
-[docs/](docs) for charter, architecture, and session history.
+[CLAUDE.md](CLAUDE.md) for the full system map, then this file for the
+current state of the refactor.
