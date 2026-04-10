@@ -1,10 +1,10 @@
 import { LegalCitation } from "../types";
 
 /**
- * Maps signal rule_id → relevant legal citations.
+ * Maps finding rule_id → relevant legal citations.
  * Citations link to authoritative sources (Ohio Legislature, IRS, Cornell LII).
  */
-export const SIGNAL_CITATIONS: Record<string, LegalCitation[]> = {
+export const FINDING_CITATIONS: Record<string, LegalCitation[]> = {
     "SR-001": [
         {
             code: "ORC \u00A71339.05",

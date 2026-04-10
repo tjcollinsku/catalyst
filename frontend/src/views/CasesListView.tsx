@@ -4,9 +4,9 @@ import styles from "./CasesListView.module.css";
 import {
     createCase,
     fetchCases,
-    fetchSignalSummary,
+    fetchFindingSummary,
     isAbortError,
-    SignalSummaryItem,
+    FindingSummaryItem,
 } from "../api";
 import { CaseSummary, NewCasePayload } from "../types";
 import { Button } from "../components/ui/Button";
@@ -78,12 +78,12 @@ export function CasesListView() {
             try {
                 const [casesRes, summaryRes] = await Promise.all([
                     fetchCases(100, 0, { signal: controller.signal }),
-                    fetchSignalSummary({ signal: controller.signal }),
+                    fetchFindingSummary({ signal: controller.signal }),
                 ]);
                 setCases(casesRes.results);
                 const sevMap: Record<string, string> = {};
                 const cntMap: Record<string, number> = {};
-                for (const item of summaryRes.results as SignalSummaryItem[]) {
+                for (const item of summaryRes.results as FindingSummaryItem[]) {
                     sevMap[item.case_id] = item.highest_severity;
                     cntMap[item.case_id] = item.open_count;
                 }

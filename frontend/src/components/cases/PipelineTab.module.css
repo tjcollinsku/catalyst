@@ -181,6 +181,25 @@
 .sevLow { background: rgba(96, 165, 250, 0.15); color: #60a5fa; }
 .sevInfo { background: rgba(148, 163, 184, 0.12); color: var(--text-soft); }
 
+/* ── Evidence weight badges ────────────────────────────── */
+
+.weightBadge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border: 1px solid transparent;
+}
+
+.weightSpeculative { background: rgba(148, 163, 184, 0.12); color: var(--text-soft); border-color: var(--border-subtle); }
+.weightDirectional { background: rgba(251, 191, 36, 0.12); color: #d97706; border-color: rgba(251, 191, 36, 0.3); }
+.weightDocumented { background: rgba(96, 165, 250, 0.12); color: #3b82f6; border-color: rgba(96, 165, 250, 0.3); }
+.weightTraced { background: rgba(34, 197, 94, 0.12); color: #16a34a; border-color: rgba(34, 197, 94, 0.3); }
+
 .confBar {
     display: inline-flex;
     align-items: center;

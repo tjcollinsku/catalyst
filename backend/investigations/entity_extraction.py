@@ -626,7 +626,7 @@ _ORG_DESIGNATORS = (
 _ORG_PATTERN = re.compile(
     r"""
     (                                   # Capture: the full org name
-        (?:[A-Z][a-zA-Z0-9&,'.\-]+\s+)+ # One or more capitalized words
+        (?:[A-Z][a-zA-Z0-9&,'.\-]+\s+){1,8} # 1-8 capitalized words (cap prevents runaway)
         (?:"""
     + _ORG_DESIGNATORS
     + r""")  # Ending in a legal designator
@@ -634,6 +634,12 @@ _ORG_PATTERN = re.compile(
     )
     """,
     re.VERBOSE,
+)
+
+# Leading junk tokens that get mashed onto org names from timestamps,
+# OCR artifacts, or page headers (e.g. "PM Do Good In His Name Inc")
+_ORG_LEADING_JUNK = re.compile(
+    r"^(?:AM|PM|ST|ND|RD|TH)\s+", re.IGNORECASE
 )
 
 # ---------------------------------------------------------------------------
@@ -916,8 +922,27 @@ def extract_entities(text: str, doc_type: str = "OTHER") -> dict[str, list[dict[
 
     # --- Organization extraction ---
 
+    # Pattern to strip trailing form section headers that got mashed
+    # into org names (e.g. "INC Section A. Officers, Directors, Trust")
+    _section_tail = re.compile(
+        r"\s+Section\s+[A-Z]\.?\s.*$", re.IGNORECASE
+    )
+
+    # If a person's ALL-CAPS name precedes the org name in the text,
+    # the org regex swallows it: "KAREN HOMAN Do Good Real Estate, LLC"
+    # Strip any leading ALL-CAPS words that look like a person name.
+    _leading_person = re.compile(
+        r"^([A-Z]{2,}(?:\s+[A-Z]{2,}){0,2})\s+(?=[A-Z][a-z])"
+    )
+
     for m in _ORG_PATTERN.finditer(text):
         raw = m.group(1).strip().rstrip(",")
+        # Strip leading timestamp junk ("PM Do Good..." → "Do Good...")
+        raw = _ORG_LEADING_JUNK.sub("", raw)
+        # Strip leading person name ("KAREN HOMAN Do Good..." → "Do Good...")
+        raw = _leading_person.sub("", raw)
+        # Strip trailing section headers ("INC Section A..." → "INC")
+        raw = _section_tail.sub("", raw).strip()
         normalized = " ".join(raw.split())
         key = normalized.lower()
         if key not in seen_orgs and _is_plausible_org_name(normalized):

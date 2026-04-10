@@ -92,7 +92,8 @@ def _get_client():
     try:
         from anthropic import Anthropic
     except ImportError:
-        raise ImportError("The 'anthropic' package is required. pip install anthropic")
+        raise ImportError(
+            "The 'anthropic' package is required. pip install anthropic")
     return Anthropic(api_key=_get_api_key())
 
 
@@ -156,16 +157,7 @@ def _check_rate_limit(case_id: str) -> bool:
 
 def _build_case_context(case, max_chars: int = MAX_CONTEXT_CHARS) -> str:
     """Build a text summary of the case for use as AI context."""
-    from .models import (
-        Detection,
-        Document,
-        FinancialInstrument,
-        Finding,
-        Organization,
-        Person,
-        Property,
-        Signal,
-    )
+    from .models import Document, FinancialInstrument, Finding, Organization, Person, Property
 
     parts = []
     parts.append(f"CASE: {case.name} (ID: {case.pk})")
@@ -187,38 +179,24 @@ def _build_case_context(case, max_chars: int = MAX_CONTEXT_CHARS) -> str:
     if orgs.exists():
         parts.append("ORGANIZATIONS:")
         for o in orgs[:10]:
-            parts.append(f"  - {o.name} (type={o.org_type}, EIN={o.ein or 'N/A'})")
+            parts.append(
+                f"  - {o.name} (type={o.org_type}, EIN={o.ein or 'N/A'})")
         parts.append("")
 
     props = Property.objects.filter(case=case)
     if props.exists():
         parts.append("PROPERTIES:")
         for pr in props[:15]:
-            parts.append(f"  - {pr.address or pr.parcel_number} (assessed={pr.assessed_value})")
+            parts.append(
+                f"  - {pr.address or pr.parcel_number} (assessed={pr.assessed_value})")
         parts.append("")
 
     instruments = FinancialInstrument.objects.filter(case=case)
     if instruments.exists():
         parts.append("FINANCIAL INSTRUMENTS:")
         for fi in instruments[:10]:
-            parts.append(f"  - {fi.instrument_type} #{fi.filing_number} (amount={fi.amount})")
-        parts.append("")
-
-    # Signals
-    signals = Signal.objects.filter(case=case).order_by("-severity", "-detected_at")
-    if signals.exists():
-        parts.append("SIGNALS (top 15):")
-        for s in signals[:15]:
-            parts.append(f"  - [{s.severity}] {s.rule_id}: {(s.detected_summary or '')[:120]}")
-        parts.append("")
-
-    # Detections
-    detections = Detection.objects.filter(case=case).order_by("-severity")
-    if detections.exists():
-        parts.append("DETECTIONS:")
-        for d in detections[:10]:
-            conf = f"{d.confidence_score:.0%}"
-            parts.append(f"  - [{d.severity}] {d.signal_type} (confidence={conf})")
+            parts.append(
+                f"  - {fi.instrument_type} #{fi.filing_number} (amount={fi.amount})")
         parts.append("")
 
     # Findings
@@ -226,7 +204,8 @@ def _build_case_context(case, max_chars: int = MAX_CONTEXT_CHARS) -> str:
     if findings.exists():
         parts.append("FINDINGS:")
         for f in findings[:10]:
-            parts.append(f"  - [{f.severity}] {f.title}: {f.narrative[:150]}...")
+            details = (f.narrative or f.description or "")[:150]
+            parts.append(f"  - [{f.severity}] {f.title}: {details}")
         parts.append("")
 
     # Documents
@@ -234,7 +213,8 @@ def _build_case_context(case, max_chars: int = MAX_CONTEXT_CHARS) -> str:
     if docs.exists():
         parts.append(f"DOCUMENTS ({docs.count()} total, showing recent 20):")
         for doc in docs[:20]:
-            parts.append(f"  - {doc.display_name or doc.filename} (type={doc.doc_type})")
+            parts.append(
+                f"  - {doc.display_name or doc.filename} (type={doc.doc_type})")
         parts.append("")
 
     text = "\n".join(parts)
@@ -244,16 +224,15 @@ def _build_case_context(case, max_chars: int = MAX_CONTEXT_CHARS) -> str:
 def _build_entity_context(entity_type: str, entity_id: str, case) -> str:
     """Build focused context about a specific entity."""
     from .models import (
-        Detection,
-        EntitySignal,
         FinancialInstrument,
+        Finding,
+        FindingEntity,
         Organization,
         OrgDocument,
         Person,
         PersonDocument,
         PersonOrganization,
         Property,
-        Signal,
     )
 
     parts = []
@@ -262,7 +241,8 @@ def _build_entity_context(entity_type: str, entity_id: str, case) -> str:
         p = Person.objects.filter(pk=entity_id, case=case).first()
         if p:
             parts.append(f"PERSON: {p.full_name}")
-            parts.append(f"Roles: {', '.join(p.role_tags) if p.role_tags else 'none'}")
+            parts.append(
+                f"Roles: {', '.join(p.role_tags) if p.role_tags else 'none'}")
             if p.aliases:
                 parts.append(f"Aliases: {', '.join(p.aliases)}")
             if p.date_of_death:
@@ -274,32 +254,33 @@ def _build_entity_context(entity_type: str, entity_id: str, case) -> str:
 
             # Documents
             for pd in PersonDocument.objects.filter(person=p).select_related("document")[:10]:
-                parts.append(f"  Document: {pd.document.display_name or pd.document.filename}")
+                parts.append(
+                    f"  Document: {pd.document.display_name or pd.document.filename}")
 
-            # Signals referencing this entity
-            sig_ids = EntitySignal.objects.filter(
-                entity_id=entity_id, entity_type="person"
-            ).values_list("signal_id", flat=True)
-            for sig in Signal.objects.filter(pk__in=sig_ids):
-                summary = (sig.detected_summary or "")[:100]
-                parts.append(f"  Signal: [{sig.severity}] {sig.rule_id} — {summary}")
-
-            # Detections
-            for det in Detection.objects.filter(person_id=entity_id):
-                conf = f"{det.confidence_score:.0%}"
-                parts.append(f"  Detection: [{det.severity}] {det.signal_type} (conf={conf})")
+            # Findings referencing this entity
+            finding_ids = FindingEntity.objects.filter(
+                entity_id=entity_id,
+                entity_type="person",
+            ).values_list("finding_id", flat=True)
+            for finding in Finding.objects.filter(pk__in=finding_ids).order_by("-created_at")[:10]:
+                summary = (finding.narrative or finding.description or "")[
+                    :100]
+                parts.append(
+                    f"  Finding: [{finding.severity}] {finding.title} — {summary}")
 
     elif entity_type == "organization":
         o = Organization.objects.filter(pk=entity_id, case=case).first()
         if o:
             parts.append(f"ORGANIZATION: {o.name}")
-            parts.append(f"Type: {o.org_type}, EIN: {o.ein or 'N/A'}, Status: {o.status}")
+            parts.append(
+                f"Type: {o.org_type}, EIN: {o.ein or 'N/A'}, Status: {o.status}")
 
             for po in PersonOrganization.objects.filter(org=o).select_related("person"):
                 parts.append(f"  Officer: {po.person.full_name} — {po.role}")
 
             for od in OrgDocument.objects.filter(org=o).select_related("document")[:10]:
-                parts.append(f"  Document: {od.document.display_name or od.document.filename}")
+                parts.append(
+                    f"  Document: {od.document.display_name or od.document.filename}")
 
     elif entity_type == "property":
         pr = Property.objects.filter(pk=entity_id, case=case).first()
@@ -311,7 +292,8 @@ def _build_entity_context(entity_type: str, entity_id: str, case) -> str:
             parts.append(county_info)
 
     elif entity_type == "financial_instrument":
-        fi = FinancialInstrument.objects.filter(pk=entity_id, case=case).first()
+        fi = FinancialInstrument.objects.filter(
+            pk=entity_id, case=case).first()
         if fi:
             header = f"FINANCIAL INSTRUMENT: {fi.instrument_type} #{fi.filing_number}"
             parts.append(header)
@@ -320,22 +302,28 @@ def _build_entity_context(entity_type: str, entity_id: str, case) -> str:
     return "\n".join(parts)
 
 
-def _build_signal_context(signal) -> str:
-    """Build focused context about a specific signal."""
+def _build_finding_context(finding) -> str:
+    """Build focused context about a specific finding."""
     parts = [
-        f"SIGNAL: {signal.rule_id}",
-        f"Severity: {signal.severity}",
-        f"Status: {signal.status}",
-        f"Summary: {signal.detected_summary or 'No summary'}",
-        f"Detected: {signal.detected_at}",
+        f"FINDING: {finding.rule_id or 'MANUAL'}",
+        f"Severity: {finding.severity}",
+        f"Status: {finding.status}",
+        f"Title: {finding.title}",
+        f"Evidence Weight: {finding.evidence_weight}",
+        f"Source: {finding.source}",
     ]
-    if signal.trigger_doc:
-        doc_name = signal.trigger_doc.display_name or signal.trigger_doc.filename
+    if finding.description:
+        parts.append(f"Description: {finding.description}")
+    if finding.narrative:
+        parts.append(f"Narrative: {finding.narrative}")
+    if finding.trigger_doc:
+        doc_name = finding.trigger_doc.display_name or finding.trigger_doc.filename
         parts.append(f"Trigger document: {doc_name}")
-        if signal.trigger_doc.extracted_text:
-            parts.append(f"Document excerpt: {signal.trigger_doc.extracted_text[:2000]}")
-    if signal.investigator_note:
-        parts.append(f"Investigator note: {signal.investigator_note}")
+        if finding.trigger_doc.extracted_text:
+            parts.append(
+                f"Document excerpt: {finding.trigger_doc.extracted_text[:2000]}")
+    if finding.investigator_note:
+        parts.append(f"Investigator note: {finding.investigator_note}")
     return "\n".join(parts)
 
 
@@ -352,8 +340,8 @@ def _call_ai(
     max_tokens: int = MAX_TOKENS,
 ) -> dict:
     """Make a Claude API call and return parsed JSON response."""
-    client = _get_client()
     try:
+        client = _get_client()
         response = client.messages.create(
             model=model,
             max_tokens=max_tokens,
@@ -417,15 +405,16 @@ def ai_summarize(case, target_type: str, target_id: str) -> dict:
     # Strip frontend type prefixes (e.g. "signal-uuid" → "uuid")
     clean_id = _strip_id_prefix(target_id)
 
-    if target_type == "signal":
-        from .models import Signal
+    if target_type in {"signal", "finding"}:
+        from .models import Finding
 
-        signal = (
-            Signal.objects.filter(pk=clean_id, case=case).select_related("trigger_doc").first()
+        finding = (
+            Finding.objects.filter(pk=clean_id, case=case).select_related(
+                "trigger_doc").first()
         )
-        if not signal:
-            return {"error": "Signal not found."}
-        context = _build_signal_context(signal)
+        if not finding:
+            return {"error": "Finding not found."}
+        context = _build_finding_context(finding)
     else:
         context = _build_entity_context(target_type, clean_id, case)
 
@@ -545,11 +534,11 @@ Respond ONLY with valid JSON:
 """
 
 
-def ai_narrative(case, detection_ids: list[str], tone: str = "formal") -> dict:
-    """Draft a finding narrative from detection evidence. Uses Sonnet."""
-    # Strip frontend type prefixes from detection IDs
-    detection_ids = [_strip_id_prefix(did) for did in detection_ids]
-    sorted_ids = sorted(detection_ids)
+def ai_narrative(case, finding_ids: list[str], tone: str = "formal") -> dict:
+    """Draft a finding narrative from finding evidence. Uses Sonnet."""
+    # Strip frontend type prefixes from finding IDs
+    finding_ids = [_strip_id_prefix(fid) for fid in finding_ids]
+    sorted_ids = sorted(finding_ids)
     ck = _cache_key("narrative", str(case.pk), ",".join(sorted_ids), tone)
     cached = _cache_get(ck)
     if cached:
@@ -559,20 +548,25 @@ def ai_narrative(case, detection_ids: list[str], tone: str = "formal") -> dict:
     if not _check_rate_limit(str(case.pk)):
         return {"error": "Rate limit exceeded. Try again in a minute."}
 
-    from .models import Detection
+    from .models import Finding
 
-    detections = Detection.objects.filter(pk__in=detection_ids, case=case)
-    if not detections.exists():
-        return {"error": "No detections found."}
+    findings = Finding.objects.filter(pk__in=finding_ids, case=case)
+    if not findings.exists():
+        return {"error": "No findings found."}
 
-    # Build detection context
+    # Build finding context
     parts = [f"Case: {case.name}\n"]
-    for det in detections:
-        parts.append(f"DETECTION: {det.signal_type} [{det.severity}]")
-        parts.append(f"  Confidence: {det.confidence_score:.0%}")
-        parts.append(f"  Evidence: {json.dumps(det.evidence_snapshot, default=str)[:600]}")
-        if det.investigator_note:
-            parts.append(f"  Investigator note: {det.investigator_note}")
+    for finding in findings:
+        parts.append(f"FINDING: {finding.title} [{finding.severity}]")
+        parts.append(f"  Status: {finding.status}")
+        parts.append(f"  Evidence Weight: {finding.evidence_weight}")
+        parts.append(
+            f"  Evidence: {json.dumps(finding.evidence_snapshot or {}, default=str)[:600]}"
+        )
+        if finding.narrative:
+            parts.append(f"  Narrative: {finding.narrative[:600]}")
+        if finding.investigator_note:
+            parts.append(f"  Investigator note: {finding.investigator_note}")
         parts.append("")
 
     # Add broader case context for cross-referencing
@@ -636,16 +630,17 @@ def ai_ask(case, question: str, conversation_history: list[dict] | None = None) 
     messages = []
 
     if conversation_history:
-        for msg in conversation_history[-6:]:  # Keep last 6 messages for context
+        # Keep last 6 messages for context
+        for msg in conversation_history[-6:]:
             messages.append({"role": msg["role"], "content": msg["content"]})
 
     # Current question with case context
     user_content = f"CASE DATA:\n{case_ctx}\n\nQUESTION: {question}"
     messages.append({"role": "user", "content": user_content})
 
-    # Use the client directly for multi-turn
-    client = _get_client()
     try:
+        # Use the client directly for multi-turn
+        client = _get_client()
         response = client.messages.create(
             model=MODEL_SONNET,
             max_tokens=MAX_TOKENS,

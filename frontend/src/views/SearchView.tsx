@@ -14,18 +14,16 @@ import { EmptyState } from "../components/ui/EmptyState";
 
 const TYPE_ICONS: Record<string, string> = {
     case: "\uD83D\uDCC1",
-    signal: "\u26A1",
+    finding: "\u26A1",
     entity: "\uD83D\uDC64",
     document: "\uD83D\uDCC4",
-    detection: "\uD83D\uDD0D",
 };
 
 const TYPE_LABELS: Record<string, string> = {
     case: "Case",
-    signal: "Signal",
+    finding: "Finding",
     entity: "Entity",
     document: "Document",
-    detection: "Detection",
 };
 
 export function SearchView() {
@@ -168,7 +166,7 @@ export function SearchView() {
             {/* Type filter pills */}
             {searchedQuery && results.length > 0 && (
                 <div className={styles.entityTypePills}>
-                    {(["all", "case", "signal", "entity", "document"] as const).map((t) => (
+                    {(["all", "case", "finding", "entity", "document"] as const).map((t) => (
                         <button
                             key={t}
                             className={`${styles.typePill} ${typeFilter === t ? styles.active : ""}`}

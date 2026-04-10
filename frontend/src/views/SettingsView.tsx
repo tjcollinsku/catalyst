@@ -268,8 +268,8 @@ export function SettingsView() {
                                 <dd>React 18 + TypeScript 5.6 + Vite 5</dd>
                                 <dt>Backend</dt>
                                 <dd>Django 5 + PostgreSQL 16</dd>
-                                <dt>Signal Rules</dt>
-                                <dd>10 rules (SR-001 through SR-010)</dd>
+                                <dt>Finding Rules</dt>
+                                <dd>14 rules (SR-003 through SR-029)</dd>
                                 <dt>Entity Types</dt>
                                 <dd>Person, Organization, Property, Financial Instrument</dd>
                             </dl>

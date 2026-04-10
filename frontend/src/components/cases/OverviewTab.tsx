@@ -217,12 +217,12 @@ export function OverviewTab() {
                 </button>
                 <button
                     className={styles.overviewKpi}
-                    onClick={() => navigate(`/cases/${caseId}/signals`)}
+                    onClick={() => navigate(`/cases/${caseId}/pipeline`)}
                 >
-                    <span className={styles.overviewKpiValue}>{d.signals.total}</span>
-                    <span className={styles.overviewKpiLabel}>Signals</span>
+                    <span className={styles.overviewKpiValue}>{d.findings?.total ?? 0}</span>
+                    <span className={styles.overviewKpiLabel}>Findings</span>
                     <span className={styles.overviewKpiSub}>
-                        {d.signals.by_status?.OPEN ?? 0} open
+                        {d.findings?.by_status?.NEW ?? 0} new
                     </span>
                 </button>
                 <div className={styles.overviewKpi}>
@@ -234,12 +234,12 @@ export function OverviewTab() {
                 </div>
                 <button
                     className={styles.overviewKpi}
-                    onClick={() => navigate(`/cases/${caseId}/findings`)}
+                    onClick={() => navigate(`/cases/${caseId}/pipeline`)}
                 >
-                    <span className={styles.overviewKpiValue}>{d.findings.total}</span>
-                    <span className={styles.overviewKpiLabel}>Findings</span>
+                    <span className={styles.overviewKpiValue}>{d.findings?.by_status?.CONFIRMED ?? 0}</span>
+                    <span className={styles.overviewKpiLabel}>Confirmed</span>
                     <span className={styles.overviewKpiSub}>
-                        {d.detections.confirmed} confirmed detections
+                        ready for referral
                     </span>
                 </button>
             </div>
@@ -313,14 +313,15 @@ export function OverviewTab() {
 
             {/* ── Row 3: Dashboard Cards Grid ── */}
             <div className={styles.overviewGrid}>
-                {/* ── Signal Severity Breakdown ── */}
+                {/* ── Finding Severity Breakdown ── */}
                 <section className={styles.overviewCard}>
-                    <h3>Signal Severity</h3>
+                    <h3>Finding Severity</h3>
                     <div className="severity-bars">
                         {(["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const).map((sev) => {
-                            const count = d.signals.by_severity[sev] ?? 0;
+                            const sevData = d.findings?.by_severity ?? {};
+                            const count = sevData[sev] ?? 0;
                             const maxCount = Math.max(
-                                ...Object.values(d.signals.by_severity).map(Number),
+                                ...Object.values(sevData).map(Number),
                                 1,
                             );
                             return (
@@ -342,20 +343,23 @@ export function OverviewTab() {
                     </div>
                 </section>
 
-                {/* ── Top Triggered Rules ── */}
+                {/* ── Finding Status Breakdown ── */}
                 <section className={styles.overviewCard}>
-                    <h3>Top Signal Rules</h3>
-                    {d.signals.top_rules.length === 0 ? (
-                        <p className={styles.overviewEmpty}>No signals detected yet.</p>
+                    <h3>Finding Status</h3>
+                    {(d.findings?.total ?? 0) === 0 ? (
+                        <p className={styles.overviewEmpty}>No findings detected yet.</p>
                     ) : (
                         <ul className={styles.topRulesList}>
-                            {d.signals.top_rules.slice(0, 7).map((r) => (
-                                <li key={r.rule_id} className={styles.topRuleItem}>
-                                    <span className={styles.topRuleId}>{r.rule_id}</span>
-                                    <span className={styles.topRuleSummary}>{r.summary}</span>
-                                    <span className={styles.topRuleCount}>{r.count}</span>
-                                </li>
-                            ))}
+                            {(["NEW", "NEEDS_EVIDENCE", "CONFIRMED", "DISMISSED"] as const).map((st) => {
+                                const count = d.findings?.by_status?.[st] ?? 0;
+                                if (count === 0) return null;
+                                return (
+                                    <li key={st} className={styles.topRuleItem}>
+                                        <span className={styles.topRuleId}>{st}</span>
+                                        <span className={styles.topRuleCount}>{count}</span>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     )}
                 </section>

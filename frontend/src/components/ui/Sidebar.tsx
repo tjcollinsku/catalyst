@@ -24,10 +24,9 @@ const footerNav: NavItem[] = [
 
 interface SidebarProps {
     triageCount?: number;
-    draftReferralCount?: number;
 }
 
-export function Sidebar({ triageCount, draftReferralCount }: SidebarProps) {
+export function Sidebar({ triageCount }: SidebarProps) {
     function renderLink(item: NavItem) {
         let badge = item.badge;
         let badgeColor = item.badgeColor;
@@ -35,10 +34,6 @@ export function Sidebar({ triageCount, draftReferralCount }: SidebarProps) {
         if (item.to === "/triage" && triageCount && triageCount > 0) {
             badge = triageCount;
             badgeColor = "red";
-        }
-        if (item.to === "/referrals" && draftReferralCount && draftReferralCount > 0) {
-            badge = draftReferralCount;
-            badgeColor = "blue";
         }
 
         return (

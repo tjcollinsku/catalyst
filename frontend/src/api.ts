@@ -8,10 +8,7 @@ import {
     CaseDetail,
     CaseGraphResponse,
     CaseSummary,
-    CrossCaseReferral,
-    CrossCaseSignal,
-    DetectionItem,
-    DetectionUpdatePayload,
+    CrossCaseFinding,
     DocumentDetail,
     DocumentItem,
     EntityItem,
@@ -20,13 +17,8 @@ import {
     FindingUpdatePayload,
     NewCasePayload,
     NewFindingPayload,
-    NewReferralPayload,
     PaginatedResponse,
-    ReferralItem,
-    ReferralUpdatePayload,
     SearchResponse,
-    SignalItem,
-    SignalUpdatePayload
 } from "./types";
 
 const API_BASE = "";
@@ -226,12 +218,12 @@ export async function fetchCaseFinancials(
     return request<{ results: FinancialSnapshotItem[] }>(`/api/cases/${caseId}/financials/`, {}, options);
 }
 
-export async function fetchCaseSignals(
+export async function fetchCaseFindings(
     caseId: string,
     options?: ApiRequestOptions
-): Promise<PaginatedResponse<SignalItem>> {
-    return request<PaginatedResponse<SignalItem>>(
-        `/api/cases/${caseId}/signals/?limit=100&offset=0&order_by=detected_at&direction=desc`,
+): Promise<PaginatedResponse<FindingItem>> {
+    return request<PaginatedResponse<FindingItem>>(
+        `/api/cases/${caseId}/findings/?limit=100&offset=0&order_by=created_at&direction=desc`,
         {},
         options
     );
@@ -244,54 +236,18 @@ export async function createCase(payload: NewCasePayload, options?: ApiRequestOp
     }, options);
 }
 
-export async function updateSignal(
+export async function updateFinding(
     caseId: string,
-    signalId: string,
-    payload: SignalUpdatePayload,
+    findingId: string,
+    payload: FindingUpdatePayload,
     options?: ApiRequestOptions
-): Promise<SignalItem> {
-    return request<SignalItem>(`/api/cases/${caseId}/signals/${signalId}/`, {
+): Promise<FindingItem> {
+    return request<FindingItem>(`/api/cases/${caseId}/findings/${findingId}/`, {
         method: "PATCH",
         body: JSON.stringify(payload)
     }, options);
 }
 
-export async function fetchReferrals(caseId: string, options?: ApiRequestOptions): Promise<{ results: ReferralItem[] }> {
-    return request<{ results: ReferralItem[] }>(`/api/cases/${caseId}/referrals/`, {}, options);
-}
-
-export async function createReferral(
-    caseId: string,
-    payload: NewReferralPayload,
-    options?: ApiRequestOptions
-): Promise<ReferralItem> {
-    return request<ReferralItem>(`/api/cases/${caseId}/referrals/`, {
-        method: "POST",
-        body: JSON.stringify(payload)
-    }, options);
-}
-
-export async function updateReferral(
-    caseId: string,
-    referralId: number,
-    payload: ReferralUpdatePayload,
-    options?: ApiRequestOptions
-): Promise<ReferralItem> {
-    return request<ReferralItem>(`/api/cases/${caseId}/referrals/${referralId}/`, {
-        method: "PATCH",
-        body: JSON.stringify(payload)
-    }, options);
-}
-
-export async function deleteReferral(
-    caseId: string,
-    referralId: number,
-    options?: ApiRequestOptions
-): Promise<void> {
-    return request<void>(`/api/cases/${caseId}/referrals/${referralId}/`, {
-        method: "DELETE"
-    }, options);
-}
 
 export async function deleteDocument(
     caseId: string,
@@ -303,14 +259,14 @@ export async function deleteDocument(
     }, options);
 }
 
-export interface SignalSummaryItem {
+export interface FindingSummaryItem {
     case_id: string;
     highest_severity: string;
     open_count: number;
 }
 
-export async function fetchSignalSummary(options?: ApiRequestOptions): Promise<{ results: SignalSummaryItem[] }> {
-    return request<{ results: SignalSummaryItem[] }>("/api/signal-summary/", {}, options);
+export async function fetchFindingSummary(options?: ApiRequestOptions): Promise<{ results: FindingSummaryItem[] }> {
+    return request<{ results: FindingSummaryItem[] }>("/api/signal-summary/", {}, options);
 }
 
 export interface BulkUploadResult {
@@ -362,66 +318,39 @@ export async function generateReferralMemo(caseId: string, options?: ApiRequestO
     }, options);
 }
 
-export async function fetchDetections(
+export async function generateReferralPdf(
     caseId: string,
-    options?: ApiRequestOptions
-): Promise<PaginatedResponse<DetectionItem>> {
-    return request<PaginatedResponse<DetectionItem>>(
-        `/api/cases/${caseId}/detections/?limit=100&offset=0&order_by=detected_at&direction=desc`,
-        {},
-        options
-    );
+    options?: { include_confirmed_only?: boolean; min_evidence_weight?: string }
+): Promise<Blob> {
+    const resp = await fetch(`/api/cases/${caseId}/referral-pdf/`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCSRFToken(),
+        },
+        credentials: "include",
+        body: JSON.stringify(options ?? {}),
+    });
+    if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: "PDF generation failed" }));
+        throw new Error(err.error || "PDF generation failed");
+    }
+    return resp.blob();
 }
 
-export async function updateDetection(
-    caseId: string,
-    detectionId: string,
-    payload: DetectionUpdatePayload,
-    options?: ApiRequestOptions
-): Promise<DetectionItem> {
-    return request<DetectionItem>(`/api/cases/${caseId}/detections/${detectionId}/`, {
-        method: "PATCH",
-        body: JSON.stringify(payload)
-    }, options);
-}
-
-export async function deleteDetection(
-    caseId: string,
-    detectionId: string,
-    options?: ApiRequestOptions
-): Promise<void> {
-    return request<void>(`/api/cases/${caseId}/detections/${detectionId}/`, {
-        method: "DELETE"
-    }, options);
-}
-
-export interface ReevaluateSignalsResult {
+export interface ReevaluateFindingsResult {
     documents_evaluated: number;
-    new_detections: DetectionItem[];
+    triggers_found: number;
+    new_findings: FindingItem[];
 }
 
-export async function reevaluateSignals(
+export async function reevaluateFindings(
     caseId: string,
     options?: ApiRequestOptions
-): Promise<ReevaluateSignalsResult> {
-    return request<ReevaluateSignalsResult>(`/api/cases/${caseId}/reevaluate-signals/`, {
+): Promise<ReevaluateFindingsResult> {
+    return request<ReevaluateFindingsResult>(`/api/cases/${caseId}/reevaluate-findings/`, {
         method: "POST"
     }, options);
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   Findings (Milestone 2)
-   ═══════════════════════════════════════════════════════════════ */
-
-export async function fetchFindings(
-    caseId: string,
-    options?: ApiRequestOptions
-): Promise<PaginatedResponse<FindingItem>> {
-    return request<PaginatedResponse<FindingItem>>(
-        `/api/cases/${caseId}/findings/?limit=100&offset=0&order_by=created_at&direction=desc`,
-        {},
-        options
-    );
 }
 
 export async function createFinding(
@@ -431,18 +360,6 @@ export async function createFinding(
 ): Promise<FindingItem> {
     return request<FindingItem>(`/api/cases/${caseId}/findings/`, {
         method: "POST",
-        body: JSON.stringify(payload)
-    }, options);
-}
-
-export async function updateFinding(
-    caseId: string,
-    findingId: string,
-    payload: FindingUpdatePayload,
-    options?: ApiRequestOptions
-): Promise<FindingItem> {
-    return request<FindingItem>(`/api/cases/${caseId}/findings/${findingId}/`, {
-        method: "PATCH",
         body: JSON.stringify(payload)
     }, options);
 }
@@ -458,48 +375,34 @@ export async function deleteFinding(
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Cross-case endpoints (Phase C)
+   Cross-case endpoints
    ═══════════════════════════════════════════════════════════════ */
 
-export interface CrossCaseSignalFilters {
+export interface CrossCaseFindingFilters {
     status?: string;
     severity?: string;
     case_id?: string;
     rule_id?: string;
 }
 
-export async function fetchCrossCaseSignals(
-    filters: CrossCaseSignalFilters = {},
+export async function fetchCrossCaseFindings(
+    filters: CrossCaseFindingFilters = {},
     limit = 100,
     offset = 0,
     options?: ApiRequestOptions
-): Promise<PaginatedResponse<CrossCaseSignal>> {
+): Promise<PaginatedResponse<CrossCaseFinding>> {
     const params = new URLSearchParams();
     params.set("limit", String(limit));
     params.set("offset", String(offset));
-    params.set("order_by", "detected_at");
+    params.set("order_by", "created_at");
     params.set("direction", "desc");
     if (filters.status) params.set("status", filters.status);
     if (filters.severity) params.set("severity", filters.severity);
     if (filters.case_id) params.set("case_id", filters.case_id);
     if (filters.rule_id) params.set("rule_id", filters.rule_id);
-    return request<PaginatedResponse<CrossCaseSignal>>(`/api/signals/?${params}`, {}, options);
+    return request<PaginatedResponse<CrossCaseFinding>>(`/api/findings/?${params}`, {}, options);
 }
 
-export async function fetchCrossCaseReferrals(
-    filters: { status?: string; agency?: string; case_id?: string } = {},
-    limit = 100,
-    offset = 0,
-    options?: ApiRequestOptions
-): Promise<PaginatedResponse<CrossCaseReferral>> {
-    const params = new URLSearchParams();
-    params.set("limit", String(limit));
-    params.set("offset", String(offset));
-    if (filters.status) params.set("status", filters.status);
-    if (filters.agency) params.set("agency", filters.agency);
-    if (filters.case_id) params.set("case_id", filters.case_id);
-    return request<PaginatedResponse<CrossCaseReferral>>(`/api/referrals/?${params}`, {}, options);
-}
 
 export async function fetchEntities(
     filters: { type?: string; q?: string; case_id?: string } = {},

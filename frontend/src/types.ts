@@ -24,18 +24,43 @@ export interface DocumentItem {
     updated_at: string;
 }
 
-export interface SignalItem {
+/* ── Finding status / weight enums (match backend TextChoices) ── */
+export type FindingStatus = "NEW" | "NEEDS_EVIDENCE" | "DISMISSED" | "CONFIRMED";
+export type EvidenceWeight = "SPECULATIVE" | "DIRECTIONAL" | "DOCUMENTED" | "TRACED";
+export type FindingSource = "AUTO" | "MANUAL";
+export type FindingSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFORMATIONAL";
+
+export interface FindingEntityLink {
+    entity_id: string;
+    entity_type: string;
+    context_note: string;
+}
+
+export interface FindingDocumentLink {
+    document_id: string;
+    page_reference: string;
+    context_note: string;
+}
+
+export interface FindingItem {
     id: string;
     rule_id: string;
     title: string;
     description: string;
-    detected_summary: string;
-    trigger_entity_id: string | null;
-    trigger_doc_id: string | null;
+    narrative: string;
+    severity: FindingSeverity;
+    status: FindingStatus;
+    evidence_weight: EvidenceWeight;
+    source: FindingSource;
     investigator_note: string;
-    severity: string;
-    status: string;
-    detected_at: string;
+    legal_refs: string[];
+    evidence_snapshot: Record<string, unknown>;
+    trigger_doc_id: string | null;
+    trigger_entity_id: string | null;
+    created_at: string;
+    updated_at: string;
+    entity_links: FindingEntityLink[];
+    document_links: FindingDocumentLink[];
 }
 
 export interface CaseDetail extends CaseSummary {
@@ -58,80 +83,32 @@ export interface NewCasePayload {
     referral_ref?: string;
 }
 
-export interface SignalUpdatePayload {
-    status?: string;
+export interface FindingUpdatePayload {
+    title?: string;
+    narrative?: string;
+    severity?: FindingSeverity;
+    status?: FindingStatus;
+    evidence_weight?: EvidenceWeight;
     investigator_note?: string;
+    legal_refs?: string[];
 }
 
-export type ReferralStatus = "DRAFT" | "SUBMITTED" | "ACKNOWLEDGED" | "CLOSED";
-
-export interface ReferralItem {
-    referral_id: number;
-    case_id: string | null;
-    agency_name: string;
-    submission_id: string;
-    contact_alias: string;
-    status: ReferralStatus;
-    notes: string;
-    filing_date: string;
-}
-
-export interface NewReferralPayload {
-    agency_name: string;
-    submission_id?: string;
-    contact_alias?: string;
-    notes?: string;
-}
-
-export interface ReferralUpdatePayload {
-    agency_name?: string;
-    submission_id?: string;
-    contact_alias?: string;
-    notes?: string;
-    status?: ReferralStatus;
-}
-
-export type DetectionStatus = "OPEN" | "REVIEWED" | "CONFIRMED" | "DISMISSED" | "ESCALATED";
-export type DetectionSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFORMATIONAL";
-
-export interface DetectionItem {
-    id: string;
-    case_id: string;
-    signal_type: string;
-    severity: DetectionSeverity;
-    status: DetectionStatus;
-    detection_method: string;
-    primary_document_id: string | null;
-    secondary_document_id: string | null;
-    person_id: string | null;
-    organization_id: string | null;
-    property_record_id: string | null;
-    financial_instrument_id: string | null;
-    evidence_snapshot: Record<string, unknown>;
-    confidence_score: number;
-    investigator_note: string;
-    detected_at: string;
-    reviewed_at: string | null;
-    reviewed_by: string;
-}
-
-export interface DetectionUpdatePayload {
-    status?: DetectionStatus;
+export interface NewFindingPayload {
+    title: string;
+    narrative?: string;
+    severity: FindingSeverity;
+    evidence_weight?: EvidenceWeight;
     investigator_note?: string;
-    reviewed_by?: string;
-    confidence_score?: number;
+    legal_refs?: string[];
 }
 
-/* ── Cross-case signal (includes case_name from backend) ─────── */
-export interface CrossCaseSignal extends SignalItem {
+
+/* ── Cross-case finding (includes case_name from backend) ────── */
+export interface CrossCaseFinding extends FindingItem {
     case_name: string;
     case_id?: string;
 }
 
-/* ── Cross-case referral (includes case_name) ────────────────── */
-export interface CrossCaseReferral extends ReferralItem {
-    case_name: string;
-}
 
 /* ── Entities ────────────────────────────────────────────────── */
 export type EntityType = "person" | "organization" | "property" | "financial_instrument";
@@ -182,7 +159,7 @@ export interface ActivityEntry {
 }
 
 /* ── Search ─────────────────────────────────────────────────── */
-export type SearchResultType = "document" | "signal" | "entity" | "case" | "detection";
+export type SearchResultType = "document" | "finding" | "entity" | "case";
 
 export interface SearchResult {
     type: SearchResultType;
@@ -265,62 +242,7 @@ export interface DocumentDetail extends DocumentItem {
     financial_snapshots: FinancialSnapshotItem[];
 }
 
-/* ── Findings ────────────────────────────────────────────── */
-export type FindingSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFORMATIONAL";
-export type FindingConfidence = "CONFIRMED" | "PROBABLE" | "POSSIBLE";
-export type FindingStatus = "DRAFT" | "REVIEWED" | "INCLUDED_IN_MEMO" | "EXCLUDED" | "REFERRED";
-
-export interface FindingEntityLink {
-    id: string;
-    entity_id: string;
-    entity_type: string;
-    context_note: string;
-}
-
-export interface FindingDocumentLink {
-    id: string;
-    document_id: string;
-    page_reference: string;
-    context_note: string;
-}
-
-export interface FindingItem {
-    id: string;
-    case_id: string;
-    detection_id: string | null;
-    title: string;
-    narrative: string;
-    severity: FindingSeverity;
-    confidence: FindingConfidence;
-    status: FindingStatus;
-    signal_type: string;
-    signal_rule_id: string;
-    legal_refs: string[];
-    created_at: string;
-    updated_at: string;
-    entity_links: FindingEntityLink[];
-    document_links: FindingDocumentLink[];
-}
-
-export interface FindingUpdatePayload {
-    title?: string;
-    narrative?: string;
-    severity?: FindingSeverity;
-    confidence?: FindingConfidence;
-    status?: FindingStatus;
-    legal_refs?: string[];
-}
-
-export interface NewFindingPayload {
-    title: string;
-    narrative: string;
-    severity: FindingSeverity;
-    confidence: FindingConfidence;
-    signal_type?: string;
-    signal_rule_id?: string;
-    detection_id?: string;
-    legal_refs?: string[];
-}
+/* (FindingItem and related types are now defined at the top of this file) */
 
 /* ── External search launchers ───────────────────────────── */
 export interface ExternalSearchLauncher {
@@ -341,8 +263,7 @@ export type GraphNodeType = "person" | "organization" | "property" | "financial_
 
 export interface GraphNodeMetadata {
     /* Shared */
-    signal_count: number;
-    detection_count: number;
+    finding_count: number;
     doc_count: number;
     /* Person */
     role_tags?: string[];
@@ -421,7 +342,7 @@ export interface GraphStats {
 }
 
 /* ── Timeline events ────────────────────────────────────── */
-export type TimelineLayer = "document" | "signal" | "financial" | "transaction";
+export type TimelineLayer = "document" | "finding" | "financial" | "transaction";
 
 export interface TimelineEvent {
     id: string;
@@ -431,7 +352,7 @@ export interface TimelineEvent {
     metadata: {
         /* document */
         doc_type?: string;
-        /* signal */
+        /* finding */
         severity?: string;
         rule_id?: string;
         entity_id?: string | null;

@@ -19,7 +19,7 @@ const G_NAV_MAP: Record<string, string> = {
 };
 
 export function AppShell() {
-    const { caseName, triageCount, draftReferralCount } = useShellContext();
+    const { caseName, triageCount } = useShellContext();
     const { theme, setTheme } = useTheme();
 
     const THEME_CYCLE: ThemeMode[] = ["dark", "light", "auto"];
@@ -138,7 +138,7 @@ export function AppShell() {
     return (
         <div className={styles.shell}>
             <a href="#main-content" className="skip-to-content">Skip to content</a>
-            <Sidebar triageCount={triageCount} draftReferralCount={draftReferralCount} />
+            <Sidebar triageCount={triageCount} />
 
             <div className={styles.shellMain}>
                 <header className={styles.topbar} role="banner">

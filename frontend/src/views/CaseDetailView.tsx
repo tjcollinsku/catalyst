@@ -7,37 +7,21 @@ import {
     BulkUploadResult,
     createFinding,
     deleteDocument,
-    deleteDetection,
     deleteFinding,
-    deleteReferral,
     fetchCaseDetail,
-    fetchCaseSignals,
-    fetchDetections,
-    fetchFindings,
-    fetchReferrals,
+    fetchCaseFindings,
     generateReferralMemo,
-    createReferral,
     isAbortError,
     processPendingOcr,
-    reevaluateSignals,
-    updateDetection,
+    reevaluateFindings,
     updateFinding,
-    updateReferral,
-    updateSignal,
 } from "../api";
 import {
     CaseDetail,
-    DetectionItem,
-    DetectionUpdatePayload,
     DocumentItem,
     FindingItem,
     FindingUpdatePayload,
     NewFindingPayload,
-    NewReferralPayload,
-    ReferralItem,
-    ReferralUpdatePayload,
-    SignalItem,
-    SignalUpdatePayload,
 } from "../types";
 import { ToastItem, ToastStack } from "../components/ui/ToastStack";
 import { StateBlock } from "../components/ui/StateBlock";
@@ -66,32 +50,15 @@ export interface CaseDetailContext {
     processingPendingOcr: boolean;
     onGenerateMemo: () => void;
     generatingMemo: boolean;
-    /* Signals */
-    signals: SignalItem[];
-    onUpdateSignal: (signalId: string, payload: SignalUpdatePayload) => void;
-    savingSignalId: string | null;
-    onReevaluateSignals: () => void;
-    reevaluatingSignals: boolean;
-    /* Detections */
-    detections: DetectionItem[];
-    loadingDetections: boolean;
-    savingDetectionId: string | null;
-    onUpdateDetection: (detectionId: string, payload: DetectionUpdatePayload) => void;
-    onDeleteDetection: (detectionId: string) => void;
-    /* Findings */
+    /* Findings (consolidated — replaces signals + detections + old findings) */
     findings: FindingItem[];
     loadingFindings: boolean;
     savingFindingId: string | null;
     onCreateFinding: (payload: NewFindingPayload) => void;
     onUpdateFinding: (findingId: string, payload: FindingUpdatePayload) => void;
     onDeleteFinding: (findingId: string) => void;
-    /* Referrals */
-    referrals: ReferralItem[];
-    loadingReferrals: boolean;
-    savingReferralId: number | null;
-    onCreateReferral: (payload: NewReferralPayload) => void;
-    onUpdateReferral: (referralId: number, payload: ReferralUpdatePayload) => void;
-    onDeleteReferral: (referralId: number) => void;
+    onReevaluateFindings: () => void;
+    reevaluatingFindings: boolean;
     /* Utility */
     pushToast: (tone: "error" | "success", message: string) => void;
 }
@@ -114,25 +81,11 @@ export function CaseDetailView() {
     const [caseDetail, setCaseDetail] = useState<CaseDetail | null>(null);
     const [loading, setLoading] = useState(true);
 
-    /* ── Signals ──────────────────────────────────────────── */
-    const [signals, setSignals] = useState<SignalItem[]>([]);
-    const [savingSignalId, setSavingSignalId] = useState<string | null>(null);
-    const [reevaluatingSignals_, setReevaluatingSignals] = useState(false);
-
-    /* ── Detections ───────────────────────────────────────── */
-    const [detections, setDetections] = useState<DetectionItem[]>([]);
-    const [loadingDetections, setLoadingDetections] = useState(true);
-    const [savingDetectionId, setSavingDetectionId] = useState<string | null>(null);
-
     /* ── Findings ─────────────────────────────────────────── */
     const [findings, setFindings] = useState<FindingItem[]>([]);
     const [loadingFindings, setLoadingFindings] = useState(true);
     const [savingFindingId, setSavingFindingId] = useState<string | null>(null);
-
-    /* ── Referrals ────────────────────────────────────────── */
-    const [referrals, setReferrals] = useState<ReferralItem[]>([]);
-    const [loadingReferrals, setLoadingReferrals] = useState(true);
-    const [savingReferralId, setSavingReferralId] = useState<number | null>(null);
+    const [reevaluatingFindings_, setReevaluatingFindings] = useState(false);
 
     /* ── Documents ────────────────────────────────────────── */
     const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
@@ -145,33 +98,23 @@ export function CaseDetailView() {
         const controller = new AbortController();
         async function load() {
             setLoading(true);
-            setLoadingDetections(true);
             setLoadingFindings(true);
-            setLoadingReferrals(true);
             try {
-                const [detail, signalsRes, detectionsRes, findingsRes, referralsRes] = await Promise.all([
+                const [detail, findingsRes] = await Promise.all([
                     fetchCaseDetail(caseId!, { signal: controller.signal }),
-                    fetchCaseSignals(caseId!, { signal: controller.signal }),
-                    fetchDetections(caseId!, { signal: controller.signal }),
-                    fetchFindings(caseId!, { signal: controller.signal }),
-                    fetchReferrals(caseId!, { signal: controller.signal }),
+                    fetchCaseFindings(caseId!, { signal: controller.signal }),
                 ]);
                 if (!controller.signal.aborted) {
                     setCaseDetail(detail);
                     setCaseName(detail.name);
-                    setSignals(signalsRes.results);
-                    setDetections(detectionsRes.results);
                     setFindings(findingsRes.results);
-                    setReferrals(referralsRes.results);
                 }
             } catch (err) {
                 if (!isAbortError(err)) pushToast("error", (err as Error).message);
             } finally {
                 if (!controller.signal.aborted) {
                     setLoading(false);
-                    setLoadingDetections(false);
                     setLoadingFindings(false);
-                    setLoadingReferrals(false);
                 }
             }
         }
@@ -267,78 +210,6 @@ export function CaseDetailView() {
         }
     }, [caseId, pushToast]);
 
-    /* ── Signal handlers ──────────────────────────────────── */
-    const handleUpdateSignal = useCallback(
-        async (signalId: string, payload: SignalUpdatePayload) => {
-            if (!caseId) return;
-            setSavingSignalId(signalId);
-            try {
-                const updated = await updateSignal(caseId, signalId, payload);
-                setSignals((prev) => prev.map((s) => (s.id === signalId ? updated : s)));
-                pushToast("success", "Signal updated");
-                refreshBadges();
-            } catch (err) {
-                pushToast("error", (err as Error).message);
-            } finally {
-                setSavingSignalId(null);
-            }
-        },
-        [caseId, pushToast],
-    );
-
-    const handleReevaluateSignals = useCallback(async () => {
-        if (!caseId) return;
-        setReevaluatingSignals(true);
-        try {
-            const result = await reevaluateSignals(caseId);
-            if (result.new_detections.length > 0) {
-                setDetections((prev) => [...result.new_detections, ...prev]);
-                pushToast("success", `${result.new_detections.length} new detection(s) found`);
-            } else {
-                pushToast("success", "Re-evaluation complete — no new detections");
-            }
-        } catch (err) {
-            pushToast("error", (err as Error).message);
-        } finally {
-            setReevaluatingSignals(false);
-        }
-    }, [caseId, pushToast]);
-
-    /* ── Detection handlers ───────────────────────────────── */
-    const handleUpdateDetection = useCallback(
-        async (detectionId: string, payload: DetectionUpdatePayload) => {
-            if (!caseId) return;
-            setSavingDetectionId(detectionId);
-            try {
-                const updated = await updateDetection(caseId, detectionId, payload);
-                setDetections((prev) => prev.map((d) => (d.id === detectionId ? updated : d)));
-                pushToast("success", "Detection updated");
-            } catch (err) {
-                pushToast("error", (err as Error).message);
-            } finally {
-                setSavingDetectionId(null);
-            }
-        },
-        [caseId, pushToast],
-    );
-
-    const handleDeleteDetection = useCallback(
-        async (detectionId: string) => {
-            if (!caseId) return;
-            setSavingDetectionId(detectionId);
-            try {
-                await deleteDetection(caseId, detectionId);
-                setDetections((prev) => prev.filter((d) => d.id !== detectionId));
-                pushToast("success", "Detection deleted");
-            } catch (err) {
-                pushToast("error", (err as Error).message);
-            } finally {
-                setSavingDetectionId(null);
-            }
-        },
-        [caseId, pushToast],
-    );
-
     /* ── Finding handlers ─────────────────────────────────── */
     const handleCreateFinding = useCallback(
         async (payload: NewFindingPayload) => {
@@ -362,13 +233,14 @@ export function CaseDetailView() {
                 const updated = await updateFinding(caseId, findingId, payload);
                 setFindings((prev) => prev.map((f) => (f.id === findingId ? updated : f)));
                 pushToast("success", "Finding updated");
+                refreshBadges();
             } catch (err) {
                 pushToast("error", (err as Error).message);
             } finally {
                 setSavingFindingId(null);
             }
         },
-        [caseId, pushToast],
+        [caseId, pushToast, refreshBadges],
     );
 
     const handleDeleteFinding = useCallback(
@@ -388,54 +260,25 @@ export function CaseDetailView() {
         [caseId, pushToast],
     );
 
-    /* ── Referral handlers ────────────────────────────────── */
-    const handleCreateReferral = useCallback(
-        async (payload: NewReferralPayload) => {
-            if (!caseId) return;
-            try {
-                const created = await createReferral(caseId, payload);
-                setReferrals((prev) => [created, ...prev]);
-                pushToast("success", `Referral created: ${created.agency_name}`);
-            } catch (err) {
-                pushToast("error", (err as Error).message);
+    const handleReevaluateFindings = useCallback(async () => {
+        if (!caseId) return;
+        setReevaluatingFindings(true);
+        try {
+            const result = await reevaluateFindings(caseId);
+            if (result.new_findings.length > 0) {
+                setFindings((prev) => [...result.new_findings, ...prev]);
+                pushToast("success", `${result.new_findings.length} new finding(s) detected`);
+            } else {
+                pushToast("success", "Re-evaluation complete — no new findings");
             }
-        },
-        [caseId, pushToast],
-    );
+            refreshBadges();
+        } catch (err) {
+            pushToast("error", (err as Error).message);
+        } finally {
+            setReevaluatingFindings(false);
+        }
+    }, [caseId, pushToast, refreshBadges]);
 
-    const handleUpdateReferral = useCallback(
-        async (referralId: number, payload: ReferralUpdatePayload) => {
-            if (!caseId) return;
-            setSavingReferralId(referralId);
-            try {
-                const updated = await updateReferral(caseId, referralId, payload);
-                setReferrals((prev) => prev.map((r) => (r.referral_id === referralId ? updated : r)));
-                pushToast("success", "Referral updated");
-            } catch (err) {
-                pushToast("error", (err as Error).message);
-            } finally {
-                setSavingReferralId(null);
-            }
-        },
-        [caseId, pushToast],
-    );
-
-    const handleDeleteReferral = useCallback(
-        async (referralId: number) => {
-            if (!caseId) return;
-            setSavingReferralId(referralId);
-            try {
-                await deleteReferral(caseId, referralId);
-                setReferrals((prev) => prev.filter((r) => r.referral_id !== referralId));
-                pushToast("success", "Referral deleted");
-            } catch (err) {
-                pushToast("error", (err as Error).message);
-            } finally {
-                setSavingReferralId(null);
-            }
-        },
-        [caseId, pushToast],
-    );
 
     /* ── Outlet context ───────────────────────────────────── */
     const context: CaseDetailContext = {
@@ -450,28 +293,14 @@ export function CaseDetailView() {
         processingPendingOcr: processingPendingOcr_,
         onGenerateMemo: () => void handleGenerateMemo(),
         generatingMemo,
-        signals,
-        onUpdateSignal: (id, payload) => void handleUpdateSignal(id, payload),
-        savingSignalId,
-        onReevaluateSignals: () => void handleReevaluateSignals(),
-        reevaluatingSignals: reevaluatingSignals_,
-        detections,
-        loadingDetections,
-        savingDetectionId,
-        onUpdateDetection: (id, payload) => void handleUpdateDetection(id, payload),
-        onDeleteDetection: (id) => void handleDeleteDetection(id),
         findings,
         loadingFindings,
         savingFindingId,
         onCreateFinding: (payload) => void handleCreateFinding(payload),
         onUpdateFinding: (id, payload) => void handleUpdateFinding(id, payload),
         onDeleteFinding: (id) => void handleDeleteFinding(id),
-        referrals,
-        loadingReferrals,
-        savingReferralId,
-        onCreateReferral: (payload) => void handleCreateReferral(payload),
-        onUpdateReferral: (id, payload) => void handleUpdateReferral(id, payload),
-        onDeleteReferral: (id) => void handleDeleteReferral(id),
+        onReevaluateFindings: () => void handleReevaluateFindings(),
+        reevaluatingFindings: reevaluatingFindings_,
         pushToast,
     };
 
@@ -516,13 +345,8 @@ export function CaseDetailView() {
                         {tab.path === "documents" && (caseDetail?.documents.length ?? 0) > 0 && (
                             <span className={styles.tabCount}>{caseDetail?.documents.length}</span>
                         )}
-                        {tab.path === "pipeline" && (signals.length + detections.length + findings.length) > 0 && (
-                            <span className={styles.tabCount}>
-                                {signals.length + detections.length + findings.length}
-                            </span>
-                        )}
-                        {tab.path === "referrals" && referrals.length > 0 && (
-                            <span className={styles.tabCount}>{referrals.length}</span>
+                        {tab.path === "pipeline" && findings.length > 0 && (
+                            <span className={styles.tabCount}>{findings.length}</span>
                         )}
                     </NavLink>
                 ))}
@@ -530,7 +354,7 @@ export function CaseDetailView() {
 
             {/* Tab content */}
             {loading ? (
-                <StateBlock title="Loading case details..." detail="Pulling documents, signals, and metadata." />
+                <StateBlock title="Loading case details..." detail="Pulling documents, findings, and metadata." />
             ) : (
                 <div className={styles.caseTabContent}>
                     <Outlet context={context} />

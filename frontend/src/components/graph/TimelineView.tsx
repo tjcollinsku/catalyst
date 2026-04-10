@@ -15,9 +15,9 @@ interface LayerConfig {
 
 const LAYERS: LayerConfig[] = [
     { key: "document",    label: "Documents",    icon: "\uD83D\uDCC4", color: "--graph-node-person",    shape: "circle"   },
-    { key: "signal",      label: "Signals",      icon: "\u26A1",       color: "--graph-edge-signal",    shape: "triangle" },
+    { key: "finding",     label: "Findings",     icon: "\u26A1",       color: "--graph-edge-signal",    shape: "triangle" },
     { key: "financial",   label: "Financial",     icon: "\uD83D\uDCB0", color: "--graph-node-org",       shape: "diamond"  },
-    { key: "transaction", label: "Transactions",  icon: "\uD83C\uDFE0", color: "--graph-node-property",  shape: "square"   },
+    { key: "transaction",  label: "Transactions",  icon: "\uD83D\uDC64", color: "--graph-node-property",  shape: "square"   },
 ];
 
 /* Severity → opacity for signal markers */
@@ -218,7 +218,7 @@ export function TimelineView({
                 return cfg ? resolveColor(cfg.color) : "#888";
             })
             .attr("opacity", (d) => {
-                if (d.layer === "signal") {
+                if (d.layer === "finding") {
                     return SEVERITY_OPACITY[d.metadata.severity ?? "MEDIUM"] ?? 0.7;
                 }
                 return 0.8;
@@ -377,7 +377,7 @@ export function TimelineView({
                     <p className={styles.tooltipDate}>
                         {formatDate(new Date(tooltip.event.date))}
                     </p>
-                    {tooltip.event.layer === "signal" && tooltip.event.metadata.severity && (
+                    {tooltip.event.layer === "finding" && tooltip.event.metadata.severity && (
                         <p className={styles.tooltipMeta}>
                             Severity: {tooltip.event.metadata.severity}
                         </p>

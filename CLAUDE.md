@@ -1,5 +1,5 @@
 # CLAUDE.md — Catalyst System Map
-**Last updated:** 2026-04-07 (Session 32)
+**Last updated:** 2026-04-10 (Session 33)
 **Owner:** Tyler Collins (tjcollinsku@gmail.com)
 **Purpose:** This is the single source of truth for the entire Catalyst system. Read this FIRST before doing any work.
 
@@ -119,14 +119,14 @@ This is the #1 problem. We have 6 data source connectors. Here is their actual s
 
 ---
 
-## DATA MODELS (27 Models — see Session 32 for planned consolidation)
+## DATA MODELS (22 Models — consolidated in Session 33)
 
 ### Core Investigation Models
 - **Case** — name, status (ACTIVE/PAUSED/REFERRED/CLOSED), notes, referral_ref
 - **Document** — filename, sha256_hash, doc_type, ocr_status, extraction_status, is_generated
-- **Signal** — rule_id (SR-001..SR-029), severity, status (OPEN/UNDER_REVIEW/CONFIRMED/DISMISSED/ESCALATED)
-- **Detection** — confirmed anomaly with evidence_snapshot, confidence_score
-- **Finding** — investigator narrative with severity, legal_refs[], status (DRAFT→INCLUDED_IN_MEMO)
+- **Finding** — consolidated model (replaces old Signal → Detection → Finding pipeline). Two dimensions: `status` (NEW/NEEDS_EVIDENCE/DISMISSED/CONFIRMED) and `evidence_weight` (SPECULATIVE/DIRECTIONAL/DOCUMENTED/TRACED). Also has: rule_id, title, description, narrative, severity, source (AUTO/MANUAL), legal_refs[], evidence_snapshot, trigger_doc FK
+- **FindingEntity** — links a Finding to an entity (person, org, property)
+- **FindingDocument** — links a Finding to a source document with page reference
 
 ### Entity Models
 - **Person** — name, aliases[], date_of_birth, date_of_death, role_tags[]
@@ -134,7 +134,7 @@ This is the #1 problem. We have 6 data source connectors. Here is their actual s
 - **Property** — parcel_number, address, county, assessed_value, purchase_price, valuation_delta (generated)
 - **FinancialInstrument** — instrument_type, filing_number, amount, anomaly_flags[]
 - **FinancialSnapshot** — org FK, tax_year, revenue, expenses, net_assets (from 990)
-- **Address** — normalized street/city/state/zip for ADDRESS_NEXUS detection
+- **Address** — normalized street/city/state/zip
 
 ### Relationship Models
 - **PersonDocument**, **OrgDocument** — entity-to-document links
@@ -142,52 +142,39 @@ This is the #1 problem. We have 6 data source connectors. Here is their actual s
 - **PropertyTransaction** — grantor/grantee with polymorphic entity link
 - **Relationship** — person-to-person (FAMILY/BUSINESS/SOCIAL)
 - **TransactionChain** + **TransactionChainLink** — grouped property deals
-- **SocialMediaConnection** — platform + connection_strength
 
 ### Operational Models
-- **GovernmentReferral** — agency, submission_id, status, immutable filing_date
-- **InvestigatorNote** — polymorphic target (any entity/signal/detection)
+- **InvestigatorNote** — polymorphic target (any entity/finding)
 - **AuditLog** — append-only forensic log (NEVER UPDATE OR DELETE)
 
 ---
 
-## SIGNAL RULES (29 Rules)
+## SIGNAL RULES (14 Rules — cut from 29 in Session 32)
 
-| Rule | Severity | What It Detects |
-|------|----------|----------------|
-| SR-001 | CRITICAL | SHELL_ENTITY — Org with no people, address, or financials |
-| SR-002 | HIGH | PHANTOM_OFFICER — Named in 990 but missing from SOS |
-| SR-003 | MEDIUM | NAME_CONFLICT — Same entity, different names across sources |
-| SR-004 | HIGH | TIMELINE_COMPRESSION — Entity formed + major transaction within 30 days |
-| SR-005 | MEDIUM | CHARTER_CONFLICT — Actions inconsistent with stated mission |
-| SR-006 | MEDIUM | ADDRESS_NEXUS — 5+ unrelated entities at same address |
-| SR-007 | HIGH | REVENUE_ANOMALY — Revenue changes >50% year-over-year |
-| SR-008 | MEDIUM | EXPENSE_ANOMALY — Expenses change >40% year-over-year |
-| SR-009 | HIGH | EXCESSIVE_COMPENSATION — Officer salary >60% of revenue |
-| SR-010 | MEDIUM | GRANT_DIVERSION — Funds to entity instead of beneficiary |
-| SR-011 | MEDIUM | INSIDER_SWAP — Officer buys property then org donates |
-| SR-012 | MEDIUM | CIRCULAR_TRANSFER — Funds loop through multiple entities |
-| SR-013 | HIGH | RELATED_PARTY_TRANSACTION — Officer is also vendor |
-| SR-014 | MEDIUM | DUPLICATE_GRANTS — Same recipient across multiple years |
-| SR-015 | MEDIUM | BLACKOUT_PERIOD — Document during regulatory action |
-| SR-016 | LOW | UNVERIFIED_EIN — Invalid EIN format |
-| SR-017 | MEDIUM | FILING_GAP — 990 filing >18 months late |
-| SR-018 | HIGH | PHANTOM_BENEFICIARY — Beneficiary has no contact info |
-| SR-019 | MEDIUM | CASH_HEAVY — >60% of assets in cash |
-| SR-020 | MEDIUM | RAPID_DISSOLUTION — Dissolved <1 year after major transaction |
-| SR-021 | HIGH | CONFLICTED_ADVISOR — Advisor on multiple boards |
-| SR-022 | MEDIUM | REAL_ESTATE_FLIP — Property bought and sold within 2 years |
-| SR-023 | MEDIUM | DORMANT_ORG — No transactions >6 months |
-| SR-024 | MEDIUM | ASSET_SHIFT — Assets transferred before referral |
-| SR-025 | HIGH | PASS_THROUGH_ORG — Receives grant, immediately passes 95%+ out |
-| SR-026 | MEDIUM | OFFICER_CONCENTRATION — Single officer controls >2 orgs |
-| SR-027 | LOW | COMPLIANCE_GAP — Missing required 990 Schedule |
-| SR-028 | HIGH | FRAUD_PATTERN_MATCH — Matches known fraud type |
-| SR-029 | MEDIUM | TEMPORAL_ANOMALY — Multiple events on same date |
+Every rule below is grounded in a real pattern from the founding investigation.
+Speculative rules were cut. New rules can be added in later versions as new
+patterns emerge from real cases.
+
+| Rule | Severity | What It Detects | Anomaly Source |
+|------|----------|----------------|----------------|
+| SR-003 | HIGH | VALUATION_ANOMALY — Purchase price deviates >50% from assessed value | Overpayment on property |
+| SR-004 | HIGH | UCC_BURST — 3+ UCC amendments to same filing within 24 hours | Debt restructuring |
+| SR-005 | HIGH | ZERO_CONSIDERATION — Zero-consideration transfer between related parties | Land swaps w/o equal value |
+| SR-006 | HIGH | SCHEDULE_L_MISSING — 990 Part IV Line 28 Yes but no Schedule L | Missing 990 schedules |
+| SR-010 | MEDIUM | MISSING_990 — Tax-exempt org has no Form 990 on file | Missing 990 schedules |
+| SR-012 | HIGH | NO_COI_POLICY — No conflict of interest policy despite material revenue | Missing 990 schedules |
+| SR-013 | HIGH | ZERO_OFFICER_PAY — $0 officer compensation at high-revenue org | Self-dealing (hidden comp) |
+| SR-015 | CRITICAL | INSIDER_SWAP — Related party on both sides of property transaction | Self-dealing |
+| SR-017 | HIGH | BLANKET_LIEN — UCC blanket lien on charity-connected entity | Debt restructuring |
+| SR-021 | HIGH | REVENUE_SPIKE — Year-over-year revenue increase exceeds 100% | Rapid asset growth |
+| SR-024 | HIGH | CHARITY_CONDUIT — Charity buys from family, transfers to insider | Self-dealing |
+| SR-025 | CRITICAL | FALSE_DISCLOSURE — 990 denies related-party tx, evidence contradicts | Self-dealing |
+| SR-026 | HIGH | CONTRACTOR_DENIAL — 990 denies contractors, permits show otherwise | Missing 990 schedules |
+| SR-029 | HIGH | LOW_PROGRAM_RATIO — <50% of expenses go to program services | Charity funds for personal growth |
 
 ---
 
-## API ENDPOINTS (47 Total)
+## API ENDPOINTS (43 Total — updated Session 33)
 
 ### Case Management
 ```
@@ -207,6 +194,7 @@ POST   /api/cases/<uuid>/documents/process-pending/ → Batch OCR
 GET    /api/cases/<uuid>/documents/<uuid>/      → Document detail
 DELETE /api/cases/<uuid>/documents/<uuid>/      → Delete document
 POST   /api/cases/<uuid>/referral-memo/         → AI-powered referral memo generation
+POST   /api/cases/<uuid>/referral-pdf/          → Deterministic referral package PDF export (NEW Session 33)
 ```
 
 ### Signals & Detections
@@ -229,13 +217,10 @@ PATCH  /api/cases/<uuid>/findings/<uuid>/       → Update finding
 DELETE /api/cases/<uuid>/findings/<uuid>/       → Delete finding
 ```
 
-### Referrals
+### Referrals (removed in Session 33)
 ```
-GET    /api/cases/<uuid>/referrals/             → Case referrals
-POST   /api/cases/<uuid>/referrals/             → Create referral
-PATCH  /api/cases/<uuid>/referrals/<uuid>/      → Update referral
-DELETE /api/cases/<uuid>/referrals/<uuid>/      → Delete referral
-GET    /api/referrals/                          → Cross-case referrals
+# GovernmentReferral CRUD endpoints removed — referral concept replaced
+# by deterministic PDF exporter at POST /api/cases/<uuid>/referral-pdf/
 ```
 
 ### Financials & Entities
@@ -586,6 +571,8 @@ Located in `docs/team/`:
   - **Feature track (Claude Code on other machine):** IRS connector completely rewritten — IRS TEOS XML pipeline replaces bulk CSV (8ec7826). Frontend "Fetch 990 Data" button added (1fe58b8). AI-powered referral memo generator replaces placeholder (fab0d3e). IRS streaming fix for OOM (8c2151c). Ohio SOS rewritten for local CSV approach with admin upload endpoints (8feeccb). Ruff/null-byte cleanup (d2fb504). Commits: 8ec7826, 1fe58b8, fab0d3e, e03b929, 8c2151c, d2fb504, 8feeccb.
   - **Result:** 4 of 6 connectors now working (IRS, SOS, AOS, Recorder). Only ODNR broken. ProPublica superseded.
 - Session 32: **The reframe session.** Tyler walked through raw narrative of the founding investigation (Ohio nonprofit, $XK → $X.XM, Karen Example, UCC filings, Example Construction, ExampleVendor, AOS dormant entities, the property transaction, ExampleBoardMember board overlap). Key reframe landed: **Catalyst is referral packaging software for citizen investigators handing to professionals with subpoena power — not investigation software.** The customer of the output is the AG/IRS/FBI investigator, not Tyler. Quality bar: "heavy confidence that it was going to go somewhere." Major scope decisions: collapse Signal/Detection/Finding into one Finding with status + evidence_weight fields; cut signal rule set from 29 to ~5-7 grounded rules; kill AI-generated narrative memo and replace with deterministic template-driven referral package exporter; cut SocialMediaConnection and GovernmentReferral models; build Example Charity as preloaded demo case. Committed to 14-day shipping window (5-7 hrs/day). **New constraint mid-session:** Tyler has job applications already out — repo must look presentable to recruiters TODAY, not at end of rebuild. Day 1 reshaped: README refactor (product-first hook + "Why it exists" story + GitHub/email/LinkedIn contact block), STATUS.md creation with Working/In Active Refactor/Planned columns, surface cleanup (stale CURRENT_STATE.md, wrong model count in CLAUDE.md, pytest cache in repo). Drafts written for README and STATUS.md; awaiting Tyler's LinkedIn URL and referral-case-number decision before committing to disk. "One project, two pitches" framing established: universal pitch for general recruiters, niche pitch for fraud/forensic firms.
+
+- Session 33: **The execution session.** Shipped every major item from the Session 32 scope decisions. Backend: collapsed Signal/Detection/Finding into single Finding model with migration-ready code; cut signal rules from 29 to 14; built deterministic referral package PDF exporter (reportlab, 794 lines — cover page, findings with [Doc-N] citations, financial tables, document index with SHA-256 hashes); built demo case management command (`seed_demo.py`, 965 lines — "Bright Future Foundation" fictional scenario with 4 persons, 2 orgs, 2 properties, 7 documents, 6 years of financials, 9 findings across 9 signal rules); removed SocialMediaConnection model + all references; removed GovernmentReferral model + all references (serializers, 3 endpoints, 3 URL patterns, frontend types, API functions, cross-case view). Frontend: rewrote types.ts (FindingItem replaces SignalItem/DetectionItem), rewrote api.ts, rewrote PipelineTab (single Finding workflow), rewrote CaseDetailView/TriageView/DashboardView, updated EntityGraph/EntityProfilePanel/TimelineView to use finding_count, added evidence weight CSS, added "Generate Referral Package (PDF)" button to ReferralsTab, deleted 13 stale component files, simplified ReferralsView. All builds pass (tsc, vite, ruff, Python syntax). Model count: 24 → 22. JS bundle shrunk 9KB from dead code removal. Tyler learned agent orchestration pattern (parallel task decomposition). Updated resume-talking-points.md with Interview Beat #6 on AI productivity.
 
 ---
 

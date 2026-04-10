@@ -1,6 +1,6 @@
 # Catalyst — Resume & Interview Talking Points
 
-**Last updated:** 2026-04-07 (Session 32)
+**Last updated:** 2026-04-10 (Session 33)
 **Purpose:** A standalone file for iterating on resume bullets, cover-letter
 language, LinkedIn headlines, and interview answers without polluting
 CLAUDE.md. Tailor per application. Keep claims accurate — if you change
@@ -146,6 +146,46 @@ out of that: AI is great at scaffmain, but if you don't own the
 code after, you're just a user of a tool, not a developer. The
 discipline is making sure the human stays in the loop on the code,
 not just the output."
+
+### 6. "How do you use AI to be more productive?" — The agent orchestration story
+
+"One of the things I learned is how to decompose work so AI agents can
+run in parallel. For example, when I needed to build a PDF exporter AND
+a demo data seeder at the same time, I split the work along file
+boundaries — the exporter touches views.py and a new referral_export.py
+file, the seeder lives in a management command in a completely different
+directory. Because they don't share any files, I could run both agents
+simultaneously and cut the wall-clock time in half.
+
+The skill isn't 'knowing how to press the button.' It's knowing how to
+break a problem into independent pieces that won't step on each other.
+That's the same skill you need when assigning work to a team of people —
+you identify the dependency graph, find the tasks that can run in
+parallel, and only serialize the ones that truly depend on each other.
+AI just makes the feedback loop faster."
+
+**When to use this answer:** Any role that values AI-assisted development,
+especially if the interviewer asks about workflow or productivity. This
+shows you understand *task decomposition* (a senior engineering concept)
+even as a junior developer. The mental model:
+
+```
+Independent tasks?  → Run agents in parallel (different files)
+Sequential tasks?   → Chain them (output of A feeds into B)
+Shared-file tasks?  → One agent at a time, or split the file first
+```
+
+**Key vocabulary to use naturally:**
+- "Task decomposition" — breaking a big job into independent pieces
+- "Dependency graph" — which tasks depend on which other tasks finishing
+- "Parallel execution" — running independent work simultaneously
+- "File-boundary isolation" — splitting work so agents touch different files
+- "Review and integrate" — the human step where you verify agent output
+
+**What NOT to say:** Don't say "I just told the AI to do it." The story is
+about YOUR judgment — you decided what could run in parallel, you briefed
+each agent with the right context, and you reviewed the output before it
+shipped. The AI did the typing; you did the thinking.
 
 ---
 

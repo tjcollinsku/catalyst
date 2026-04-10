@@ -15,6 +15,8 @@ dj-database-url>=2.1,<3.0
 django-cors-headers>=4.3,<5.0
 # Anthropic Claude API for AI-powered entity extraction
 anthropic>=0.39,<1.0
+# PDF generation (deterministic referral packages)
+reportlab>=4.0,<5.0
 # Static file serving in production
 whitenoise>=6.5,<7.0
 # Parse DATABASE_URL connection strings (Railway, Render, etc.)

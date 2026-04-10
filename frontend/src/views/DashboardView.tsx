@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchCases, fetchSignalSummary, SignalSummaryItem, fetchActivityFeed, isAbortError } from "../api";
+import { fetchCases, fetchFindingSummary, FindingSummaryItem, fetchActivityFeed, isAbortError } from "../api";
 import { ActivityEntry, CaseSummary } from "../types";
 import { formatDate } from "../utils/format";
 import styles from "./DashboardView.module.css";
@@ -22,8 +22,7 @@ const ACTION_LABELS: Record<string, string> = {
 const TABLE_LABELS: Record<string, string> = {
     cases: "Case",
     documents: "Document",
-    signals: "Signal",
-    detections: "Detection",
+    findings: "Finding",
     government_referrals: "Referral",
     persons: "Person",
     organizations: "Organization",
@@ -34,7 +33,7 @@ const TABLE_LABELS: Record<string, string> = {
 export function DashboardView() {
     const navigate = useNavigate();
     const [cases, setCases] = useState<CaseSummary[]>([]);
-    const [signalSummary, setSignalSummary] = useState<SignalSummaryItem[]>([]);
+    const [findingSummary, setFindingSummary] = useState<FindingSummaryItem[]>([]);
     const [activity, setActivity] = useState<ActivityEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const mounted = useRef(true);
@@ -44,12 +43,12 @@ export function DashboardView() {
         try {
             const [casesRes, summaryRes, activityRes] = await Promise.all([
                 fetchCases(100, 0, { signal }),
-                fetchSignalSummary({ signal }),
+                fetchFindingSummary({ signal }),
                 fetchActivityFeed(15, { signal }),
             ]);
             if (!signal.aborted) {
                 setCases(casesRes.results);
-                setSignalSummary(summaryRes.results);
+                setFindingSummary(summaryRes.results);
                 setActivity(activityRes.results);
             }
         } catch (err) {
@@ -72,10 +71,10 @@ export function DashboardView() {
     /* ── Computed KPIs ──────────────────────────── */
     const totalCases = cases.length;
     const activeCases = cases.filter((c) => c.status === "ACTIVE").length;
-    const totalOpenSignals = signalSummary.reduce((sum, s) => sum + s.open_count, 0);
+    const totalOpenFindings = findingSummary.reduce((sum, s) => sum + s.open_count, 0);
 
     const sevCounts: Record<string, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
-    for (const s of signalSummary) {
+    for (const s of findingSummary) {
         if (s.highest_severity in sevCounts) sevCounts[s.highest_severity]++;
     }
 
@@ -100,9 +99,9 @@ export function DashboardView() {
                     <span className={styles.kpiSub}>{activeCases} active</span>
                 </button>
                 <button className={`${styles.kpiCard} ${styles.kpiSignals}`} onClick={() => navigate("/triage")}>
-                    <span className={styles.kpiValue}>{totalOpenSignals}</span>
-                    <span className={styles.kpiLabel}>Open Signals</span>
-                    <span className={styles.kpiSub}>across {signalSummary.filter((s) => s.open_count > 0).length} cases</span>
+                    <span className={styles.kpiValue}>{totalOpenFindings}</span>
+                    <span className={styles.kpiLabel}>Open Findings</span>
+                    <span className={styles.kpiSub}>across {findingSummary.filter((s) => s.open_count > 0).length} cases</span>
                 </button>
                 <button className={styles.kpiCard} onClick={() => navigate("/entities")}>
                     <span className={styles.kpiValue}>{"\u{1F464}"}</span>
@@ -119,7 +118,7 @@ export function DashboardView() {
             <div className={styles.dashboardGrid}>
                 {/* ── Severity breakdown ── */}
                 <section className={styles.dashCard}>
-                    <h3>Signal Severity Breakdown</h3>
+                    <h3>Finding Severity Breakdown</h3>
                     <div className={styles.severityBars}>
                         {(["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const).map((sev) => {
                             const count = sevCounts[sev];

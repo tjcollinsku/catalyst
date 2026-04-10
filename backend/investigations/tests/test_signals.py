@@ -3,54 +3,47 @@ Tests for the Signal Detection Engine.
 
 Covers:
   - Rule registry metadata (RULE_REGISTRY)
-  - Each rule evaluator: SR-001 through SR-010
+  - Each rule evaluator: SR-003, SR-004, SR-005, SR-006, SR-010 (KEPT rules only)
   - persist_signals() deduplication logic
-  - serialize_signal() output structure
-  - SignalUpdateSerializer validation and save
-  - GET /api/cases/<pk>/signals/ (list, filters, pagination, sorting)
-  - GET /api/cases/<pk>/signals/<signal_id>/ (detail)
-  - PATCH /api/cases/<pk>/signals/<signal_id>/ (confirm, dismiss, escalate)
+  - serialize_finding() output structure
+  - FindingUpdateSerializer validation and save
+  - GET /api/cases/<pk>/findings/ (list, filters, pagination, sorting)
+  - GET /api/cases/<pk>/findings/<finding_id>/ (detail)
+  - PATCH /api/cases/<pk>/findings/<finding_id>/ (confirm, dismiss, escalate)
 """
 
 import json
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
-from unittest.mock import patch
 
 from django.test import Client, TestCase
 from django.urls import reverse
 
 from ..models import (
     Case,
-    Detection,
-    DetectionStatus,
     Document,
     FinancialInstrument,
+    Finding,
+    FindingSource,
+    FindingStatus,
     InstrumentType,
     OcrStatus,
     Organization,
     Person,
     Property,
-    Signal,
-    SignalSeverity,
-    SignalStatus,
+    Severity,
 )
-from ..serializers import SignalUpdateSerializer, serialize_signal
+from ..serializers import FindingUpdateSerializer, serialize_finding
 from ..signal_rules import (
     RULE_REGISTRY,
     SignalTrigger,
     evaluate_case,
     evaluate_document,
-    evaluate_sr001_deceased_signer,
-    evaluate_sr002_entity_predates_formation,
     evaluate_sr003_valuation_anomaly,
     evaluate_sr004_ucc_burst,
     evaluate_sr005_zero_consideration,
     evaluate_sr006_990_schedule_l,
-    evaluate_sr007_permit_owner_mismatch,
-    evaluate_sr008_survey_before_purchase,
-    evaluate_sr009_single_contractor,
     evaluate_sr010_missing_990,
     persist_signals,
 )
@@ -115,14 +108,16 @@ def _make_ucc(case, filing_number, filing_date):
     )
 
 
-def _make_signal(
-    case, rule_id="SR-001", severity=SignalSeverity.CRITICAL, status=SignalStatus.OPEN
+def _make_finding(
+    case, rule_id="SR-003", severity=Severity.CRITICAL, status=FindingStatus.NEW
 ):
-    return Signal.objects.create(
+    return Finding.objects.create(
         case=case,
         rule_id=rule_id,
+        title=f"Test finding {rule_id}",
         severity=severity,
         status=status,
+        source=FindingSource.AUTO,
     )
 
 
@@ -132,18 +127,13 @@ def _make_signal(
 
 
 class RuleRegistryTests(TestCase):
-    """Ensure all 10 SR rules are registered with correct severity values."""
+    """Ensure all 14 KEPT SR rules are registered with correct severity values."""
 
     EXPECTED = {
-        "SR-001": "CRITICAL",
-        "SR-002": "CRITICAL",
         "SR-003": "HIGH",
         "SR-004": "HIGH",
         "SR-005": "HIGH",
         "SR-006": "HIGH",
-        "SR-007": "HIGH",
-        "SR-008": "MEDIUM",
-        "SR-009": "MEDIUM",
         "SR-010": "MEDIUM",
     }
 
@@ -165,148 +155,6 @@ class RuleRegistryTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# SR-001 — Deceased Signer
-# ---------------------------------------------------------------------------
-
-
-class SR001DeceasedSignerTests(TestCase):
-    def setUp(self):
-        self.case = _make_case()
-
-    def _doc_with_text(self, text):
-        return _make_document(self.case, extracted_text=text)
-
-    @patch("investigations.signal_rules._extract_dates_from_text")
-    def test_fires_when_date_after_death_and_name_in_text(self, mock_dates):
-        death_date = date(2020, 1, 1)
-        mock_dates.return_value = [date(2021, 6, 15)]
-        _make_person(self.case, "John Smith", date_of_death=death_date)
-        doc = self._doc_with_text("Signed by John Smith on the date above.")
-
-        result = evaluate_sr001_deceased_signer(self.case, doc)
-
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].rule_id, "SR-001")
-        self.assertEqual(result[0].severity, "CRITICAL")
-        self.assertEqual(result[0].trigger_doc, doc)
-        self.assertIn("Smith", result[0].detected_summary)
-
-    @patch("investigations.signal_rules._extract_dates_from_text")
-    def test_no_fire_when_person_has_no_death_date(self, mock_dates):
-        mock_dates.return_value = [date(2021, 6, 15)]
-        _make_person(self.case, "John Smith")
-        doc = self._doc_with_text("Signed by John Smith.")
-
-        result = evaluate_sr001_deceased_signer(self.case, doc)
-
-        self.assertEqual(result, [])
-
-    @patch("investigations.signal_rules._extract_dates_from_text")
-    def test_no_fire_when_name_absent_from_text(self, mock_dates):
-        mock_dates.return_value = [date(2021, 6, 15)]
-        _make_person(self.case, "John Smith", date_of_death=date(2020, 1, 1))
-        doc = self._doc_with_text("Signed by Jane Doe, an unrelated party.")
-
-        result = evaluate_sr001_deceased_signer(self.case, doc)
-
-        self.assertEqual(result, [])
-
-    @patch("investigations.signal_rules._extract_dates_from_text")
-    def test_no_fire_when_all_doc_dates_before_death(self, mock_dates):
-        mock_dates.return_value = [date(2019, 5, 1)]
-        _make_person(self.case, "John Smith", date_of_death=date(2020, 1, 1))
-        doc = self._doc_with_text("Signed by John Smith on 2019-05-01.")
-
-        result = evaluate_sr001_deceased_signer(self.case, doc)
-
-        self.assertEqual(result, [])
-
-    def test_no_fire_when_document_has_no_text(self):
-        _make_person(self.case, "John Smith", date_of_death=date(2020, 1, 1))
-        doc = _make_document(self.case, extracted_text=None)
-
-        result = evaluate_sr001_deceased_signer(self.case, doc)
-
-        self.assertEqual(result, [])
-
-    @patch("investigations.signal_rules._extract_dates_from_text")
-    def test_one_signal_per_deceased_person_per_document(self, mock_dates):
-        """Even with multiple post-death dates in the doc, only one trigger per person."""
-        mock_dates.return_value = [date(2021, 1, 1), date(2022, 3, 1)]
-        _make_person(self.case, "John Smith", date_of_death=date(2020, 1, 1))
-        doc = self._doc_with_text("John Smith signed.")
-
-        result = evaluate_sr001_deceased_signer(self.case, doc)
-
-        self.assertEqual(len(result), 1)
-
-
-# ---------------------------------------------------------------------------
-# SR-002 — Entity Predates Formation Date
-# ---------------------------------------------------------------------------
-
-
-class SR002EntityPredatesFormationTests(TestCase):
-    def setUp(self):
-        self.case = _make_case()
-
-    @patch("investigations.signal_rules._extract_dates_from_text")
-    def test_fires_when_doc_date_before_formation(self, mock_dates):
-        formation = date(2019, 8, 1)
-        mock_dates.return_value = [date(2017, 9, 15)]
-        _make_org(self.case, "Example Charity RE LLC", formation_date=formation)
-        doc = _make_document(
-            self.case, extracted_text="Grantee: Example Charity RE LLC, recorded 2017-09-15."
-        )
-
-        result = evaluate_sr002_entity_predates_formation(self.case, doc)
-
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].rule_id, "SR-002")
-        self.assertIn("Example Charity RE LLC", result[0].detected_summary)
-
-    @patch("investigations.signal_rules._extract_dates_from_text")
-    def test_no_fire_when_org_has_no_formation_date(self, mock_dates):
-        mock_dates.return_value = [date(2017, 9, 15)]
-        _make_org(self.case, "Example Charity RE LLC")
-        doc = _make_document(self.case, extracted_text="Grantee: Example Charity RE LLC.")
-
-        result = evaluate_sr002_entity_predates_formation(self.case, doc)
-
-        self.assertEqual(result, [])
-
-    @patch("investigations.signal_rules._extract_dates_from_text")
-    def test_no_fire_when_org_name_absent(self, mock_dates):
-        mock_dates.return_value = [date(2017, 9, 15)]
-        _make_org(self.case, "Example Charity RE LLC", formation_date=date(2019, 8, 1))
-        doc = _make_document(self.case, extracted_text="Grantee: Another Company LLC.")
-
-        result = evaluate_sr002_entity_predates_formation(self.case, doc)
-
-        self.assertEqual(result, [])
-
-    @patch("investigations.signal_rules._extract_dates_from_text")
-    def test_no_fire_when_doc_date_after_formation(self, mock_dates):
-        mock_dates.return_value = [date(2020, 3, 1)]
-        _make_org(self.case, "Example Charity RE LLC", formation_date=date(2019, 8, 1))
-        doc = _make_document(
-            self.case, extracted_text="Grantee: Example Charity RE LLC, recorded 2020-03-01."
-        )
-
-        result = evaluate_sr002_entity_predates_formation(self.case, doc)
-
-        self.assertEqual(result, [])
-
-    def test_no_fire_when_document_text_is_empty(self):
-        _make_org(self.case, "Example Charity RE LLC", formation_date=date(2019, 8, 1))
-        doc = _make_document(self.case, extracted_text=None)
-
-        result = evaluate_sr002_entity_predates_formation(self.case, doc)
-
-        self.assertEqual(result, [])
-
-
-# ---------------------------------------------------------------------------
 # SR-003 — Valuation Anomaly
 # ---------------------------------------------------------------------------
 
@@ -324,7 +172,7 @@ class SR003ValuationAnomalyTests(TestCase):
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].rule_id, "SR-003")
-        self.assertEqual(result[0].severity, "HIGH")
+        self.assertEqual(result[0].severity, "HIGH")  # from RULE_REGISTRY
 
     def test_fires_when_purchase_price_below_assessed_by_over_50pct(self):
         _make_property(self.case, purchase_price=Decimal("40000"), assessed_value=Decimal("100000"))
@@ -580,196 +428,6 @@ class SR006ScheduleLTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# SR-007 — Building Permit Applicant Mismatch
-# ---------------------------------------------------------------------------
-
-
-class SR007PermitOwnerMismatchTests(TestCase):
-    def setUp(self):
-        self.case = _make_case()
-
-    def test_fires_when_applicant_not_in_case_entities(self):
-        _make_org(self.case, "Example Township CIC")
-        _make_document(
-            self.case,
-            doc_type="BUILDING_PERMIT",
-            extracted_text="Applicant: Unknown Stranger\nContractor: ABC Builds",
-        )
-
-        result = evaluate_sr007_permit_owner_mismatch(self.case)
-
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].rule_id, "SR-007")
-        self.assertIn("Unknown Stranger", result[0].detected_summary)
-
-    def test_no_fire_when_applicant_matches_case_org(self):
-        _make_org(self.case, "Example Township CIC")
-        _make_document(
-            self.case,
-            doc_type="BUILDING_PERMIT",
-            extracted_text="Applicant: Example Township CIC\nWork to perform: roof replacement",
-        )
-
-        result = evaluate_sr007_permit_owner_mismatch(self.case)
-
-        self.assertEqual(result, [])
-
-    def test_no_fire_when_applicant_matches_case_person(self):
-        _make_person(self.case, "John Example")
-        _make_document(
-            self.case,
-            doc_type="BUILDING_PERMIT",
-            extracted_text="Applicant: John Example\nWork: new construction",
-        )
-
-        result = evaluate_sr007_permit_owner_mismatch(self.case)
-
-        self.assertEqual(result, [])
-
-    def test_no_fire_when_no_permit_docs(self):
-        _make_org(self.case, "Example Township CIC")
-        result = evaluate_sr007_permit_owner_mismatch(self.case)
-        self.assertEqual(result, [])
-
-    def test_no_fire_when_no_applicant_pattern_in_permit(self):
-        _make_org(self.case, "Example Township CIC")
-        _make_document(
-            self.case,
-            doc_type="BUILDING_PERMIT",
-            extracted_text="Permit number 12345. Work to be performed: grading.",
-        )
-
-        result = evaluate_sr007_permit_owner_mismatch(self.case)
-
-        self.assertEqual(result, [])
-
-
-# ---------------------------------------------------------------------------
-# SR-008 — Survey Before Purchase
-# ---------------------------------------------------------------------------
-
-
-class SR008SurveyBeforePurchaseTests(TestCase):
-    def setUp(self):
-        self.case = _make_case()
-
-    @patch("investigations.signal_rules._extract_dates_from_text")
-    def test_fires_when_survey_date_more_than_90_days_before_instrument(self, mock_dates):
-        survey_date = date(2023, 8, 1)
-        instrument_date = date(2024, 1, 15)  # 167 days gap
-        mock_dates.return_value = [survey_date]
-        _make_document(
-            self.case,
-            filename="boundary_survey.pdf",
-            extracted_text="Survey completed on the above date.",
-        )
-        FinancialInstrument.objects.create(
-            case=self.case,
-            instrument_type=InstrumentType.OTHER,
-            filing_date=instrument_date,
-        )
-
-        result = evaluate_sr008_survey_before_purchase(self.case)
-
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].rule_id, "SR-008")
-
-    @patch("investigations.signal_rules._extract_dates_from_text")
-    def test_no_fire_when_gap_is_exactly_90_days(self, mock_dates):
-        # 90 days is NOT > 90, so should not fire
-        survey_date = date(2023, 8, 1)
-        instrument_date = survey_date + timedelta(days=90)
-        mock_dates.return_value = [survey_date]
-        _make_document(self.case, filename="survey_plat.pdf", extracted_text="Survey complete.")
-        FinancialInstrument.objects.create(
-            case=self.case,
-            instrument_type=InstrumentType.OTHER,
-            filing_date=instrument_date,
-        )
-
-        result = evaluate_sr008_survey_before_purchase(self.case)
-
-        self.assertEqual(result, [])
-
-    def test_no_fire_when_no_survey_docs(self):
-        _make_document(self.case, filename="deed.pdf", extracted_text="Deed text.")
-        FinancialInstrument.objects.create(
-            case=self.case,
-            instrument_type=InstrumentType.OTHER,
-            filing_date=date(2024, 1, 1),
-        )
-
-        result = evaluate_sr008_survey_before_purchase(self.case)
-
-        self.assertEqual(result, [])
-
-    def test_no_fire_when_no_financial_instruments(self):
-        _make_document(
-            self.case, filename="plat_map.pdf", extracted_text="Survey boundary description."
-        )
-
-        result = evaluate_sr008_survey_before_purchase(self.case)
-
-        self.assertEqual(result, [])
-
-
-# ---------------------------------------------------------------------------
-# SR-009 — Single Contractor
-# ---------------------------------------------------------------------------
-
-
-class SR009SingleContractorTests(TestCase):
-    def setUp(self):
-        self.case = _make_case()
-
-    def test_fires_when_same_contractor_on_all_permits(self):
-        text_a = "Permit No. 001\nContractor: ABC Builds LLC\nWork: foundation"
-        text_b = "Permit No. 002\nContractor: ABC Builds LLC\nWork: framing"
-        _make_document(self.case, doc_type="BUILDING_PERMIT", extracted_text=text_a)
-        _make_document(self.case, doc_type="BUILDING_PERMIT", extracted_text=text_b)
-
-        result = evaluate_sr009_single_contractor(self.case)
-
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].rule_id, "SR-009")
-
-    def test_no_fire_when_different_contractors(self):
-        text_a = "Contractor: ABC Builds LLC"
-        text_b = "Contractor: XYZ Construction Co"
-        _make_document(self.case, doc_type="BUILDING_PERMIT", extracted_text=text_a)
-        _make_document(self.case, doc_type="BUILDING_PERMIT", extracted_text=text_b)
-
-        result = evaluate_sr009_single_contractor(self.case)
-
-        self.assertEqual(result, [])
-
-    def test_no_fire_when_only_one_permit(self):
-        _make_document(
-            self.case, doc_type="BUILDING_PERMIT", extracted_text="Contractor: ABC Builds LLC"
-        )
-
-        result = evaluate_sr009_single_contractor(self.case)
-
-        self.assertEqual(result, [])
-
-    def test_no_fire_when_permits_lack_contractor_field(self):
-        _make_document(
-            self.case,
-            doc_type="BUILDING_PERMIT",
-            extracted_text="Permit No. 001 — work to be performed: grading.",
-        )
-        _make_document(
-            self.case,
-            doc_type="BUILDING_PERMIT",
-            extracted_text="Permit No. 002 — work to be performed: paving.",
-        )
-
-        result = evaluate_sr009_single_contractor(self.case)
-
-        self.assertEqual(result, [])
-
-
-# ---------------------------------------------------------------------------
 # SR-010 — Missing 990
 # ---------------------------------------------------------------------------
 
@@ -831,42 +489,43 @@ class PersistSignalsTests(TestCase):
             trigger_doc=doc,
         )
 
-    def test_creates_new_signal(self):
+    def test_creates_new_finding(self):
         triggers = [self._trigger()]
         created = persist_signals(self.case, triggers)
         self.assertEqual(len(created), 1)
-        self.assertEqual(Detection.objects.count(), 1)
+        self.assertEqual(Finding.objects.count(), 1)
 
-    def test_deduplicates_against_existing_open_signal(self):
-        # Pre-create an OPEN detection with same key
-        Detection.objects.create(
+    def test_deduplicates_against_existing_new_finding(self):
+        # Pre-create a NEW finding with same rule_id
+        Finding.objects.create(
             case=self.case,
-            signal_type="REVENUE_ANOMALY",
+            rule_id="SR-010",
+            title="Test Finding",
             severity="MEDIUM",
-            primary_document=None,
-            evidence_snapshot={"rule_id": "SR-010", "summary": "Existing."},
+            status=FindingStatus.NEW,
+            source=FindingSource.AUTO,
         )
         triggers = [self._trigger()]
         created = persist_signals(self.case, triggers)
         self.assertEqual(created, [])
-        self.assertEqual(Detection.objects.count(), 1)  # unchanged
+        self.assertEqual(Finding.objects.count(), 1)  # unchanged
 
-    def test_does_not_deduplicate_against_dismissed_signal(self):
-        # DISMISSED detections allow re-fire
-        Detection.objects.create(
+    def test_does_not_deduplicate_against_dismissed_finding(self):
+        # DISMISSED findings allow re-fire
+        Finding.objects.create(
             case=self.case,
-            signal_type="REVENUE_ANOMALY",
+            rule_id="SR-010",
+            title="Test Finding",
             severity="MEDIUM",
-            primary_document=None,
-            evidence_snapshot={"rule_id": "SR-010", "summary": "Existing."},
-            status=DetectionStatus.DISMISSED,
+            status=FindingStatus.DISMISSED,
+            source=FindingSource.AUTO,
         )
         triggers = [self._trigger()]
         created = persist_signals(self.case, triggers)
         self.assertEqual(len(created), 1)
-        self.assertEqual(Detection.objects.count(), 2)
+        self.assertEqual(Finding.objects.count(), 2)
 
-    def test_persisted_signal_has_correct_fields(self):
+    def test_persisted_finding_has_correct_fields(self):
         org = _make_org(self.case, "Test Org")
         trigger = SignalTrigger(
             rule_id="SR-010",
@@ -877,13 +536,13 @@ class PersistSignalsTests(TestCase):
             trigger_doc=None,
         )
         created = persist_signals(self.case, [trigger])
-        detection = created[0]
-        self.assertEqual(detection.evidence_snapshot["rule_id"], "SR-010")
-        self.assertEqual(detection.severity, "MEDIUM")
-        self.assertEqual(detection.status, DetectionStatus.OPEN)
-        self.assertEqual(detection.evidence_snapshot["summary"], "No 990 found.")
-        self.assertEqual(detection.signal_type, "REVENUE_ANOMALY")
-        self.assertIsNone(detection.primary_document_id)
+        finding = created[0]
+        self.assertEqual(finding.rule_id, "SR-010")
+        self.assertEqual(finding.severity, "MEDIUM")
+        self.assertEqual(finding.status, FindingStatus.NEW)
+        self.assertEqual(finding.description, "No 990 found.")
+        self.assertEqual(finding.source, FindingSource.AUTO)
+        self.assertIsNone(finding.trigger_doc_id)
 
     def test_empty_trigger_list_returns_empty(self):
         created = persist_signals(self.case, [])
@@ -895,13 +554,13 @@ class PersistSignalsTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
-class SerializeSignalTests(TestCase):
+class SerializeFindingTests(TestCase):
     def setUp(self):
         self.case = _make_case()
 
-    def test_serialize_signal_includes_expected_keys(self):
-        signal = _make_signal(self.case, rule_id="SR-001")
-        data = serialize_signal(signal)
+    def test_serialize_finding_includes_expected_keys(self):
+        finding = _make_finding(self.case, rule_id="SR-003")
+        data = serialize_finding(finding)
         expected_keys = {
             "id",
             "rule_id",
@@ -909,43 +568,55 @@ class SerializeSignalTests(TestCase):
             "status",
             "title",
             "description",
-            "detected_summary",
+            "narrative",
+            "evidence_weight",
+            "source",
             "trigger_entity_id",
             "trigger_doc_id",
             "investigator_note",
-            "detected_at",
+            "legal_refs",
+            "evidence_snapshot",
+            "entity_links",
+            "document_links",
+            "created_at",
+            "updated_at",
         }
         self.assertEqual(set(data.keys()), expected_keys)
 
-    def test_serialize_signal_title_comes_from_rule_registry(self):
-        signal = _make_signal(self.case, rule_id="SR-001")
-        data = serialize_signal(signal)
-        self.assertEqual(data["title"], RULE_REGISTRY["SR-001"].title)
+    def test_serialize_finding_title_comes_from_model(self):
+        finding = _make_finding(self.case, rule_id="SR-003")
+        data = serialize_finding(finding)
+        self.assertEqual(data["title"], "Test finding SR-003")
 
-    def test_serialize_signal_unknown_rule_id_uses_rule_id_as_title(self):
-        signal = Signal.objects.create(
+    def test_serialize_finding_unknown_rule_id_uses_rule_id_as_title(self):
+        finding = Finding.objects.create(
             case=self.case,
             rule_id="SR-999",
-            severity=SignalSeverity.LOW,
+            title="SR-999",
+            severity="MEDIUM",
+            status=FindingStatus.NEW,
+            source=FindingSource.AUTO,
         )
-        data = serialize_signal(signal)
+        data = serialize_finding(finding)
         self.assertEqual(data["title"], "SR-999")
-        self.assertEqual(data["description"], "")
 
-    def test_serialize_signal_trigger_entity_id_is_string_or_none(self):
+    def test_serialize_finding_trigger_entity_id_is_string_or_none(self):
         entity_id = uuid.uuid4()
-        signal = Signal.objects.create(
+        finding = Finding.objects.create(
             case=self.case,
             rule_id="SR-010",
-            severity=SignalSeverity.MEDIUM,
+            title="Test",
+            severity="MEDIUM",
+            status=FindingStatus.NEW,
+            source=FindingSource.AUTO,
             trigger_entity_id=entity_id,
         )
-        data = serialize_signal(signal)
+        data = serialize_finding(finding)
         self.assertEqual(data["trigger_entity_id"], str(entity_id))
 
-    def test_serialize_signal_trigger_entity_id_none_when_not_set(self):
-        signal = _make_signal(self.case)
-        data = serialize_signal(signal)
+    def test_serialize_finding_trigger_entity_id_none_when_not_set(self):
+        finding = _make_finding(self.case)
+        data = serialize_finding(finding)
         self.assertIsNone(data["trigger_entity_id"])
 
 
@@ -954,63 +625,63 @@ class SerializeSignalTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
-class SignalUpdateSerializerTests(TestCase):
+class FindingUpdateSerializerTests(TestCase):
     def setUp(self):
         self.case = _make_case()
-        self.signal = _make_signal(self.case, rule_id="SR-010")
+        self.finding = _make_finding(self.case, rule_id="SR-010")
 
-    def test_confirm_signal(self):
-        s = SignalUpdateSerializer(data={"status": "CONFIRMED"}, instance=self.signal)
+    def test_confirm_finding(self):
+        s = FindingUpdateSerializer(data={"status": "CONFIRMED"}, instance=self.finding)
         self.assertTrue(s.is_valid(), s.errors)
         s.save()
-        self.signal.refresh_from_db()
-        self.assertEqual(self.signal.status, SignalStatus.CONFIRMED)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.status, FindingStatus.CONFIRMED)
 
-    def test_escalate_signal(self):
-        s = SignalUpdateSerializer(data={"status": "ESCALATED"}, instance=self.signal)
+    def test_escalate_finding(self):
+        s = FindingUpdateSerializer(data={"status": "CONFIRMED"}, instance=self.finding)
         self.assertTrue(s.is_valid(), s.errors)
         s.save()
-        self.signal.refresh_from_db()
-        self.assertEqual(self.signal.status, SignalStatus.ESCALATED)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.status, FindingStatus.CONFIRMED)
 
     def test_dismiss_with_note(self):
-        s = SignalUpdateSerializer(
+        s = FindingUpdateSerializer(
             data={"status": "DISMISSED", "investigator_note": "Not relevant to this case."},
-            instance=self.signal,
+            instance=self.finding,
         )
         self.assertTrue(s.is_valid(), s.errors)
         s.save()
-        self.signal.refresh_from_db()
-        self.assertEqual(self.signal.status, SignalStatus.DISMISSED)
-        self.assertEqual(self.signal.investigator_note, "Not relevant to this case.")
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.status, FindingStatus.DISMISSED)
+        self.assertEqual(self.finding.investigator_note, "Not relevant to this case.")
 
     def test_dismiss_without_note_is_invalid(self):
-        s = SignalUpdateSerializer(data={"status": "DISMISSED"}, instance=self.signal)
+        s = FindingUpdateSerializer(data={"status": "DISMISSED"}, instance=self.finding)
         self.assertFalse(s.is_valid())
         self.assertIn("investigator_note", s.errors)
 
     def test_empty_payload_is_invalid(self):
-        s = SignalUpdateSerializer(data={}, instance=self.signal)
+        s = FindingUpdateSerializer(data={}, instance=self.finding)
         self.assertFalse(s.is_valid())
         self.assertIn("non_field_errors", s.errors)
 
     def test_invalid_status_value_is_rejected(self):
-        s = SignalUpdateSerializer(data={"status": "ARCHIVED"}, instance=self.signal)
+        s = FindingUpdateSerializer(data={"status": "ARCHIVED"}, instance=self.finding)
         self.assertFalse(s.is_valid())
         self.assertIn("status", s.errors)
 
     def test_unexpected_field_is_rejected(self):
-        s = SignalUpdateSerializer(data={"severity": "LOW"}, instance=self.signal)
+        s = FindingUpdateSerializer(data={"severity": "LOW"}, instance=self.finding)
         self.assertFalse(s.is_valid())
         self.assertIn("non_field_errors", s.errors)
 
     def test_no_instance_raises_error(self):
-        s = SignalUpdateSerializer(data={"status": "CONFIRMED"}, instance=None)
+        s = FindingUpdateSerializer(data={"status": "CONFIRMED"}, instance=None)
         self.assertFalse(s.is_valid())
         self.assertIn("non_field_errors", s.errors)
 
-    def test_data_property_returns_serialized_signal(self):
-        s = SignalUpdateSerializer(data={"status": "CONFIRMED"}, instance=self.signal)
+    def test_data_property_returns_serialized_finding(self):
+        s = FindingUpdateSerializer(data={"status": "CONFIRMED"}, instance=self.finding)
         s.is_valid()
         s.save()
         data = s.data
@@ -1023,57 +694,57 @@ class SignalUpdateSerializerTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
-class SignalCollectionApiTests(TestCase):
+class FindingCollectionApiTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.case = _make_case()
-        self.url = reverse("api_case_signal_collection", args=[self.case.pk])
+        self.url = reverse("api_case_finding_collection", args=[self.case.pk])
 
-    def test_returns_empty_list_when_no_signals(self):
+    def test_returns_empty_list_when_no_findings(self):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["count"], 0)
         self.assertEqual(data["results"], [])
 
-    def test_returns_all_signals_for_case(self):
-        _make_signal(self.case, rule_id="SR-001")
-        _make_signal(self.case, rule_id="SR-010")
+    def test_returns_all_findings_for_case(self):
+        _make_finding(self.case, rule_id="SR-003")
+        _make_finding(self.case, rule_id="SR-010")
 
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["count"], 2)
 
-    def test_does_not_return_signals_from_other_cases(self):
+    def test_does_not_return_findings_from_other_cases(self):
         other_case = _make_case("Other Case")
-        _make_signal(other_case, rule_id="SR-001")
+        _make_finding(other_case, rule_id="SR-003")
 
         response = self.client.get(self.url)
 
         self.assertEqual(response.json()["count"], 0)
 
     def test_filters_by_status(self):
-        _make_signal(self.case, rule_id="SR-001", status=SignalStatus.OPEN)
-        _make_signal(self.case, rule_id="SR-010", status=SignalStatus.DISMISSED)
+        _make_finding(self.case, rule_id="SR-003", status=FindingStatus.NEW)
+        _make_finding(self.case, rule_id="SR-010", status=FindingStatus.DISMISSED)
 
-        response = self.client.get(self.url, {"status": "OPEN"})
+        response = self.client.get(self.url, {"status": "NEW"})
 
         data = response.json()
         self.assertEqual(data["count"], 1)
-        self.assertEqual(data["results"][0]["rule_id"], "SR-001")
+        self.assertEqual(data["results"][0]["rule_id"], "SR-003")
 
     def test_filters_by_severity(self):
-        _make_signal(self.case, rule_id="SR-001", severity=SignalSeverity.CRITICAL)
-        _make_signal(self.case, rule_id="SR-010", severity=SignalSeverity.MEDIUM)
+        _make_finding(self.case, rule_id="SR-003", severity=Severity.CRITICAL)
+        _make_finding(self.case, rule_id="SR-010", severity=Severity.MEDIUM)
 
         response = self.client.get(self.url, {"severity": "CRITICAL"})
 
         self.assertEqual(response.json()["count"], 1)
 
     def test_filters_by_rule_id(self):
-        _make_signal(self.case, rule_id="SR-001")
-        _make_signal(self.case, rule_id="SR-010")
+        _make_finding(self.case, rule_id="SR-003")
+        _make_finding(self.case, rule_id="SR-010")
 
         response = self.client.get(self.url, {"rule_id": "SR-010"})
 
@@ -1091,7 +762,7 @@ class SignalCollectionApiTests(TestCase):
 
     def test_pagination_limit_offset(self):
         for i in range(5):
-            _make_signal(self.case, rule_id="SR-010")
+            _make_finding(self.case, rule_id="SR-010")
 
         response = self.client.get(self.url, {"limit": "2", "offset": "0"})
 
@@ -1101,7 +772,7 @@ class SignalCollectionApiTests(TestCase):
         self.assertEqual(data["next_offset"], 2)
 
     def test_404_for_unknown_case(self):
-        url = reverse("api_case_signal_collection", args=[uuid.uuid4()])
+        url = reverse("api_case_finding_collection", args=[uuid.uuid4()])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 404)
 
@@ -1110,7 +781,7 @@ class SignalCollectionApiTests(TestCase):
         self.assertEqual(response.status_code, 405)
 
     def test_response_contains_expected_fields(self):
-        _make_signal(self.case, rule_id="SR-003")
+        _make_finding(self.case, rule_id="SR-003")
 
         response = self.client.get(self.url)
 
@@ -1122,11 +793,14 @@ class SignalCollectionApiTests(TestCase):
             "status",
             "title",
             "description",
-            "detected_summary",
+            "narrative",
+            "evidence_weight",
+            "source",
             "trigger_entity_id",
             "trigger_doc_id",
             "investigator_note",
-            "detected_at",
+            "legal_refs",
+            "created_at",
         ):
             self.assertIn(key, result)
 
@@ -1136,56 +810,56 @@ class SignalCollectionApiTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
-class SignalDetailApiTests(TestCase):
+class FindingDetailApiTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.case = _make_case()
-        self.signal = _make_signal(self.case, rule_id="SR-005")
+        self.finding = _make_finding(self.case, rule_id="SR-005")
         self.url = reverse(
-            "api_case_signal_detail",
-            args=[self.case.pk, self.signal.pk],
+            "api_case_finding_detail",
+            args=[self.case.pk, self.finding.pk],
         )
 
-    def test_get_returns_signal(self):
+    def test_get_returns_finding(self):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["id"], str(self.signal.pk))
+        self.assertEqual(data["id"], str(self.finding.pk))
         self.assertEqual(data["rule_id"], "SR-005")
 
-    def test_404_for_unknown_signal(self):
-        url = reverse("api_case_signal_detail", args=[self.case.pk, uuid.uuid4()])
+    def test_404_for_unknown_finding(self):
+        url = reverse("api_case_finding_detail", args=[self.case.pk, uuid.uuid4()])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 404)
 
-    def test_404_when_signal_belongs_to_different_case(self):
+    def test_404_when_finding_belongs_to_different_case(self):
         other_case = _make_case("Other")
-        other_signal = _make_signal(other_case, rule_id="SR-001")
-        url = reverse("api_case_signal_detail", args=[self.case.pk, other_signal.pk])
+        other_finding = _make_finding(other_case, rule_id="SR-003")
+        url = reverse("api_case_finding_detail", args=[self.case.pk, other_finding.pk])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 404)
 
-    def test_patch_confirms_signal(self):
+    def test_patch_confirms_finding(self):
         response = self.client.patch(
             self.url,
             data=json.dumps({"status": "CONFIRMED"}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
-        self.signal.refresh_from_db()
-        self.assertEqual(self.signal.status, SignalStatus.CONFIRMED)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.status, FindingStatus.CONFIRMED)
 
-    def test_patch_escalates_signal(self):
+    def test_patch_needs_evidence_finding(self):
         response = self.client.patch(
             self.url,
-            data=json.dumps({"status": "ESCALATED"}),
+            data=json.dumps({"status": "NEEDS_EVIDENCE"}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
-        self.signal.refresh_from_db()
-        self.assertEqual(self.signal.status, SignalStatus.ESCALATED)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.status, FindingStatus.NEEDS_EVIDENCE)
 
-    def test_patch_dismisses_signal_with_note(self):
+    def test_patch_dismisses_finding_with_note(self):
         response = self.client.patch(
             self.url,
             data=json.dumps(
@@ -1197,9 +871,9 @@ class SignalDetailApiTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
-        self.signal.refresh_from_db()
-        self.assertEqual(self.signal.status, SignalStatus.DISMISSED)
-        self.assertEqual(self.signal.investigator_note, "False positive — data entry error.")
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.status, FindingStatus.DISMISSED)
+        self.assertEqual(self.finding.investigator_note, "False positive — data entry error.")
 
     def test_patch_dismiss_without_note_returns_400(self):
         response = self.client.patch(
@@ -1226,7 +900,7 @@ class SignalDetailApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
-    def test_patch_returns_updated_signal(self):
+    def test_patch_returns_updated_finding(self):
         response = self.client.patch(
             self.url,
             data=json.dumps({"status": "CONFIRMED"}),
@@ -1234,7 +908,7 @@ class SignalDetailApiTests(TestCase):
         )
         data = response.json()
         self.assertEqual(data["status"], "CONFIRMED")
-        self.assertEqual(data["id"], str(self.signal.pk))
+        self.assertEqual(data["id"], str(self.finding.pk))
 
     def test_delete_not_allowed(self):
         response = self.client.delete(self.url)

@@ -1,10 +1,8 @@
 import uuid
 
 from django.contrib.postgres.fields import ArrayField
-from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import F, Value
-from django.db.models.functions import Now
+from django.db.models import F
 from django.utils import timezone
 
 
@@ -114,78 +112,23 @@ class PersonRole(models.TextChoices):
     WITNESS = "WITNESS", "Witness"
 
 
-class FindingSeverity(models.TextChoices):
-    CRITICAL = "CRITICAL", "Critical"
-    HIGH = "HIGH", "High"
-    MEDIUM = "MEDIUM", "Medium"
-    LOW = "LOW", "Low"
-    INFORMATIONAL = "INFORMATIONAL", "Informational"
-
-
-class FindingConfidence(models.TextChoices):
-    CONFIRMED = "CONFIRMED", "Confirmed"
-    PROBABLE = "PROBABLE", "Probable"
-    POSSIBLE = "POSSIBLE", "Possible"
-
-
 class FindingStatus(models.TextChoices):
-    DRAFT = "DRAFT", "Draft"
-    REVIEWED = "REVIEWED", "Reviewed"
-    INCLUDED_IN_MEMO = "INCLUDED_IN_MEMO", "Included in memo"
-    EXCLUDED = "EXCLUDED", "Excluded"
-    REFERRED = "REFERRED", "Referred"
+    NEW = "NEW", "New — auto-detected, not yet reviewed"
+    NEEDS_EVIDENCE = "NEEDS_EVIDENCE", "Needs evidence"
+    DISMISSED = "DISMISSED", "Dismissed — false positive"
+    CONFIRMED = "CONFIRMED", "Confirmed — included in referral"
 
 
-class SignalSeverity(models.TextChoices):
-    CRITICAL = "CRITICAL", "Critical"
-    HIGH = "HIGH", "High"
-    MEDIUM = "MEDIUM", "Medium"
-    LOW = "LOW", "Low"
+class EvidenceWeight(models.TextChoices):
+    SPECULATIVE = "SPECULATIVE", "Speculative — pattern matched only"
+    DIRECTIONAL = "DIRECTIONAL", "Directional — suggestive but unproven"
+    DOCUMENTED = "DOCUMENTED", "Documented — supporting docs on file"
+    TRACED = "TRACED", "Traced — full citation chain to source"
 
 
-class SignalStatus(models.TextChoices):
-    OPEN = "OPEN", "Open"
-    UNDER_REVIEW = "UNDER_REVIEW", "Under review"
-    CONFIRMED = "CONFIRMED", "Confirmed"
-    DISMISSED = "DISMISSED", "Dismissed"
-    ESCALATED = "ESCALATED", "Escalated"
-
-
-class SignalType(models.TextChoices):
-    # --- Document integrity ---
-    DECEASED_SIGNER = "DECEASED_SIGNER", "Deceased signer"
-    DATE_IMPOSSIBILITY = "DATE_IMPOSSIBILITY", "Date impossibility"
-    MISSING_REQUIRED_FIELDS = "MISSING_REQUIRED_FIELDS", "Missing required fields"
-    METADATA_MISMATCH = "METADATA_MISMATCH", "Metadata mismatch"
-    HASH_CHANGE = "HASH_CHANGE", "Hash change on re-intake"
-
-    # --- Property & valuation ---
-    VALUATION_DELTA = "VALUATION_DELTA", "Property valuation delta"
-    MULTI_COUNTY_CLUSTER = "MULTI_COUNTY_CLUSTER", "Properties across multiple counties"
-
-    # --- Insider / self-dealing ---
-    SELF_DEALING = "SELF_DEALING", "Self-dealing indicator"
-    INSIDER_SWAP = "INSIDER_SWAP", "Insider swap pattern"
-    RELATED_PARTY_TRANSACTION = "RELATED_PARTY_TX", "Related-party transaction"
-
-    # --- Financial / UCC ---
-    UCC_LOOP = "UCC_LOOP", "UCC lien loop"
-    UCC_BLANKET_LIEN = "UCC_BLANKET_LIEN", "UCC blanket lien"
-    UCC_AMENDMENT_CHAIN = "UCC_AMENDMENT_CHAIN", "Suspicious UCC amendment chain"
-    PROCUREMENT_BYPASS = "PROCUREMENT_BYPASS", "Procurement bypass"
-    REVENUE_ANOMALY = "REVENUE_ANOMALY", "990 revenue anomaly"
-    EXPENSE_RATIO_ANOMALY = "EXPENSE_RATIO", "Abnormal expense ratio"
-    ASSET_DISCREPANCY = "ASSET_DISCREPANCY", "990 vs deed asset discrepancy"
-
-    # --- Entity / person anomalies ---
-    PHANTOM_OFFICER = "PHANTOM_OFFICER", "Phantom officer"
-    NAME_RECONCILIATION = "NAME_RECONCILIATION", "Name reconciliation"
-    TIMELINE_COMPRESSION = "TIMELINE_COMPRESSION", "Timeline compression"
-    CHARTER_CONFLICT = "CHARTER_CONFLICT", "Charter status conflict"
-    ADDRESS_NEXUS = "ADDRESS_NEXUS", "Address nexus"
-    ENTITY_PROLIFERATION = "ENTITY_PROLIFERATION", "Rapid entity proliferation"
-    FAMILY_NETWORK_DENSITY = "FAMILY_NETWORK", "Dense family network in governance"
-    SOCIAL_CONNECTION_CLUSTER = "SOCIAL_CLUSTER", "Social media connection cluster"
+class FindingSource(models.TextChoices):
+    AUTO = "AUTO", "Auto-detected by signal rules"
+    MANUAL = "MANUAL", "Manually created by investigator"
 
 
 class Severity(models.TextChoices):
@@ -194,19 +137,6 @@ class Severity(models.TextChoices):
     MEDIUM = "MEDIUM", "Medium"
     LOW = "LOW", "Low"
     INFORMATIONAL = "INFORMATIONAL", "Informational"
-
-
-class DetectionStatus(models.TextChoices):
-    OPEN = "OPEN", "Open"
-    REVIEWED = "REVIEWED", "Reviewed"
-    CONFIRMED = "CONFIRMED", "Confirmed — valid signal"
-    DISMISSED = "DISMISSED", "Dismissed — false positive"
-    ESCALATED = "ESCALATED", "Escalated to finding"
-
-
-class DetectionMethod(models.TextChoices):
-    SYSTEM_AUTO = "SYSTEM_AUTO", "Detected automatically by system"
-    INVESTIGATOR_MANUAL = "INVESTIGATOR_MANUAL", "Flagged manually by investigator"
 
 
 class Case(UUIDPrimaryKeyModel):
@@ -899,13 +829,13 @@ class TransactionChain(UUIDPrimaryKeyModel):
         null=True,
         help_text="Days between first and last transaction in chain.",
     )
-    signal = models.ForeignKey(
-        "Signal",
+    finding = models.ForeignKey(
+        "Finding",
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
         related_name="transaction_chains",
-        help_text="The Signal record that triggered creation of this chain.",
+        help_text="The Finding record that triggered creation of this chain.",
     )
     notes = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(default=timezone.now)
@@ -951,80 +881,6 @@ class TransactionChainLink(UUIDPrimaryKeyModel):
             ),
         ]
         ordering = ["sequence_number"]
-
-
-# ──────────────────────────────────────────────────────────────────────
-# NEW: SocialMediaConnection — tracks Facebook/social connections
-# ──────────────────────────────────────────────────────────────────────
-#
-# WHY: In the Example Charity case, Facebook friend lists revealed 14 direct
-# obituary matches between Jay Example's friends and people named in
-# documents. This model stores those connections so the signal engine
-# can detect SOCIAL_CONNECTION_CLUSTER patterns — when too many people
-# in a nonprofit's orbit are socially connected, it suggests a
-# patronage network rather than arm's-length governance.
-# ──────────────────────────────────────────────────────────────────────
-
-
-class SocialPlatform(models.TextChoices):
-    FACEBOOK = "FACEBOOK", "Facebook"
-    LINKEDIN = "LINKEDIN", "LinkedIn"
-    TWITTER = "TWITTER", "Twitter / X"
-    INSTAGRAM = "INSTAGRAM", "Instagram"
-    OTHER = "OTHER", "Other"
-
-
-class SocialConnectionType(models.TextChoices):
-    FRIEND = "FRIEND", "Friend / connection"
-    FOLLOWER = "FOLLOWER", "Follower"
-    GROUP_MEMBER = "GROUP_MEMBER", "Same group member"
-    TAGGED = "TAGGED", "Tagged in post"
-    OTHER = "OTHER", "Other"
-
-
-class SocialMediaConnection(UUIDPrimaryKeyModel):
-    """
-    Records a social media connection between a case person and another
-    profile. The other party might also be a Person in the case, or
-    might just be a name (external_name) not yet linked.
-    """
-
-    case = models.ForeignKey(Case, on_delete=models.RESTRICT, related_name="social_connections")
-    person = models.ForeignKey(
-        Person,
-        on_delete=models.CASCADE,
-        related_name="social_connections",
-        help_text="The case person whose social profile was examined.",
-    )
-    connected_person = models.ForeignKey(
-        Person,
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        related_name="social_connected_by",
-        help_text="If the connected party is already a Person in this case.",
-    )
-    external_name = models.CharField(
-        max_length=255,
-        blank=True,
-        default="",
-        help_text="Name as it appears on the social platform (before linking to a Person).",
-    )
-    platform = models.CharField(max_length=20, choices=SocialPlatform.choices)
-    connection_type = models.CharField(
-        max_length=20, choices=SocialConnectionType.choices, default=SocialConnectionType.FRIEND
-    )
-    profile_url = models.URLField(blank=True, default="")
-    discovered_at = models.DateTimeField(default=timezone.now)
-    notes = models.TextField(blank=True, default="")
-
-    class Meta:
-        db_table = "social_media_connections"
-        indexes = [
-            models.Index(fields=["case"], name="idx_social_conn_case"),
-            models.Index(fields=["person"], name="idx_social_conn_person"),
-            models.Index(fields=["platform"], name="idx_social_conn_platform"),
-        ]
 
 
 class FinancialSnapshot(UUIDPrimaryKeyModel):
@@ -1110,78 +966,66 @@ class FinancialSnapshot(UUIDPrimaryKeyModel):
         return f"990 {self.tax_year} — {self.ein or 'no EIN'}"
 
 
-class Signal(UUIDPrimaryKeyModel):
-    case = models.ForeignKey(Case, on_delete=models.RESTRICT, related_name="signals")
-    rule_id = models.CharField(max_length=10)
-    severity = models.CharField(
-        max_length=20, choices=SignalSeverity.choices, default=SignalSeverity.MEDIUM
-    )
-    trigger_entity_id = models.UUIDField(blank=True, null=True)
-    trigger_doc = models.ForeignKey(
-        Document, on_delete=models.SET_NULL, blank=True, null=True, related_name="signals"
-    )
-    status = models.CharField(
-        max_length=20, choices=SignalStatus.choices, default=SignalStatus.OPEN
-    )
-    investigator_note = models.TextField(
-        blank=True,
-        null=True,
-        help_text="Required when dismissed — rationale for dismissal.",
-    )
-    detected_summary = models.TextField(
-        blank=True,
-        default="",
-        help_text="Machine-generated explanation of what triggered this signal.",
-    )
-    detected_at = models.DateTimeField(default=timezone.now)
-
-    class Meta:
-        db_table = "signals"
-        indexes = [
-            models.Index(fields=["case"], name="idx_signals_case_id"),
-            models.Index(fields=["rule_id"], name="idx_signals_rule_id"),
-            models.Index(fields=["status"], name="idx_signals_status"),
-        ]
-
-    def __str__(self) -> str:
-        return f"{self.rule_id} [{self.severity}] — {self.status}"
-
-
 class Finding(UUIDPrimaryKeyModel):
-    case = models.ForeignKey(Case, on_delete=models.RESTRICT, related_name="findings")
-    detection = models.ForeignKey(
-        "Detection",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="findings",
-        help_text="The detection that was escalated to produce this finding, if any.",
+    """
+    Consolidated finding model — replaces the old Signal → Detection → Finding
+    three-table pipeline with a single table that has two dimensions:
+      - status: where is this in the review process?
+      - evidence_weight: how strong is the supporting evidence?
+
+    Auto-generated findings start as NEW + SPECULATIVE. The investigator
+    triages them by updating status and evidence_weight independently.
+    """
+
+    case = models.ForeignKey(
+        Case, on_delete=models.RESTRICT, related_name="findings"
     )
-    title = models.CharField(max_length=500)
-    narrative = models.TextField()
-    severity = models.CharField(
-        max_length=20, choices=FindingSeverity.choices, default=FindingSeverity.MEDIUM
-    )
-    confidence = models.CharField(
-        max_length=20, choices=FindingConfidence.choices, default=FindingConfidence.POSSIBLE
-    )
-    status = models.CharField(
-        max_length=20, choices=FindingStatus.choices, default=FindingStatus.DRAFT
-    )
-    signal_type = models.CharField(
-        max_length=50,
-        blank=True,
-        default="",
-        help_text=(
-            "Category of anomaly: VALUATION_ANOMALY, DATE_ANOMALY, "
-            "DISCLOSURE_OMISSION, CONCENTRATION_FLAG, IDENTITY_FRAUD, etc."
-        ),
-    )
-    signal_rule_id = models.CharField(
+    rule_id = models.CharField(
         max_length=10,
         blank=True,
         default="",
-        help_text="Originating signal rule (e.g. SR-001) if applicable.",
+        help_text=(
+            "Signal rule that generated this (e.g. SR-003). "
+            "Blank for manual findings."
+        ),
+    )
+    title = models.CharField(max_length=500)
+    description = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Machine-generated explanation of what triggered this finding."
+        ),
+    )
+    narrative = models.TextField(
+        blank=True,
+        default="",
+        help_text="Investigator-written narrative for the referral package.",
+    )
+    severity = models.CharField(
+        max_length=20,
+        choices=Severity.choices,
+        default=Severity.MEDIUM,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=FindingStatus.choices,
+        default=FindingStatus.NEW,
+    )
+    evidence_weight = models.CharField(
+        max_length=20,
+        choices=EvidenceWeight.choices,
+        default=EvidenceWeight.SPECULATIVE,
+    )
+    source = models.CharField(
+        max_length=20,
+        choices=FindingSource.choices,
+        default=FindingSource.AUTO,
+    )
+    investigator_note = models.TextField(
+        blank=True,
+        default="",
+        help_text="Investigator notes — required when dismissing.",
     )
     legal_refs = ArrayField(
         models.CharField(max_length=200),
@@ -1189,54 +1033,90 @@ class Finding(UUIDPrimaryKeyModel):
         default=list,
         help_text="ORC sections and federal statutes (e.g. '18 U.S.C. § 1343').",
     )
+    evidence_snapshot = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Structured evidence data captured at detection time.",
+    )
+    trigger_doc = models.ForeignKey(
+        "Document",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="findings_triggered",
+    )
+    trigger_entity_id = models.UUIDField(
+        blank=True,
+        null=True,
+        help_text="UUID of the entity this finding is primarily about.",
+    )
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         db_table = "findings"
-        indexes = [models.Index(fields=["case"], name="idx_findings_case_id")]
+        indexes = [
+            models.Index(fields=["case"], name="idx_findings_case_id"),
+            models.Index(fields=["rule_id"], name="idx_findings_rule_id"),
+            models.Index(fields=["status"], name="idx_findings_status"),
+            models.Index(
+                fields=["case", "status"],
+                name="idx_findings_case_status",
+            ),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.rule_id or 'MANUAL'} [{self.severity}] — {self.status}"
+        )
 
 
 class FindingEntity(UUIDPrimaryKeyModel):
-    finding = models.ForeignKey(Finding, on_delete=models.CASCADE, related_name="entity_links")
+    finding = models.ForeignKey(
+        Finding, on_delete=models.CASCADE, related_name="entity_links"
+    )
     entity_id = models.UUIDField()
     entity_type = models.CharField(max_length=50)
-    context_note = models.TextField(blank=True, null=True)
+    context_note = models.TextField(blank=True, default="")
 
     class Meta:
         db_table = "finding_entity"
-        indexes = [models.Index(fields=["finding"], name="idx_finding_entity_finding")]
+        indexes = [
+            models.Index(
+                fields=["finding"], name="idx_finding_entity_finding"
+            ),
+        ]
 
 
 class FindingDocument(UUIDPrimaryKeyModel):
-    finding = models.ForeignKey(Finding, on_delete=models.CASCADE, related_name="document_links")
-    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="finding_links")
-    page_reference = models.CharField(max_length=100, blank=True, null=True)
-    context_note = models.TextField(blank=True, null=True)
+    finding = models.ForeignKey(
+        Finding, on_delete=models.CASCADE, related_name="document_links"
+    )
+    document = models.ForeignKey(
+        "Document",
+        on_delete=models.CASCADE,
+        related_name="finding_links",
+    )
+    page_reference = models.CharField(
+        max_length=100, blank=True, default=""
+    )
+    context_note = models.TextField(blank=True, default="")
 
     class Meta:
         db_table = "finding_document"
         constraints = [
             models.UniqueConstraint(
-                fields=["finding", "document"], name="uniq_finding_document_pair"
+                fields=["finding", "document"],
+                name="uniq_finding_document_pair",
             ),
         ]
-        indexes = [models.Index(fields=["document"], name="idx_finding_document_doc")]
-
-
-class EntitySignal(UUIDPrimaryKeyModel):
-    signal = models.ForeignKey(Signal, on_delete=models.CASCADE, related_name="entity_links")
-    entity_id = models.UUIDField()
-    entity_type = models.CharField(max_length=50)
-
-    class Meta:
-        db_table = "entity_signal"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["signal", "entity_id", "entity_type"], name="uniq_entity_signal"
+        indexes = [
+            models.Index(
+                fields=["document"],
+                name="idx_finding_document_doc",
             ),
         ]
-        indexes = [models.Index(fields=["signal"], name="idx_entity_signal_signal")]
 
 
 class AuditAction(models.TextChoices):
@@ -1382,139 +1262,10 @@ class AuditLog(UUIDPrimaryKeyModel):
         )
 
 
-class ReferralStatus(models.TextChoices):
-    DRAFT = "DRAFT", "Draft"
-    SUBMITTED = "SUBMITTED", "Submitted"
-    ACKNOWLEDGED = "ACKNOWLEDGED", "Acknowledged"
-    CLOSED = "CLOSED", "Closed"
-
-
-class GovernmentReferral(models.Model):
-    referral_id = models.AutoField(primary_key=True)
-    case = models.ForeignKey(
-        "Case",
-        on_delete=models.CASCADE,
-        related_name="referrals",
-        null=True,
-        blank=True,
-    )
-    agency_name = models.CharField(max_length=100, blank=True, null=True)
-    submission_id = models.CharField(max_length=255, blank=True, null=True)
-    filing_date = models.DateTimeField(default=timezone.now, db_default=Now())
-    contact_alias = models.CharField(max_length=100, blank=True, null=True)
-    status = models.CharField(
-        max_length=50,
-        choices=ReferralStatus.choices,
-        default=ReferralStatus.DRAFT,
-        db_default=Value(ReferralStatus.DRAFT),
-    )
-    notes = models.TextField(blank=True, default="")
-
-    class Meta:
-        db_table = "government_referrals"
-
-    def save(self, *args, **kwargs):
-        if self.pk:
-            original = (
-                GovernmentReferral.objects.filter(pk=self.pk)
-                .values_list("filing_date", flat=True)
-                .first()
-            )
-            if original is not None and self.filing_date != original:
-                raise ValidationError("filing_date is immutable after creation.")
-        super().save(*args, **kwargs)
-
-    def __str__(self) -> str:
-        return f"{self.agency_name or 'Unknown Agency'} ({self.status})"
-
-
-class Detection(models.Model):
-    """
-    A detected signal instance tied to a specific case, document, and/or entity.
-
-    Restored from migration 0011 — the original model definition was truncated.
-    See SEC-006 in SECURITY_AUDIT.md.
-    """
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    case = models.ForeignKey("Case", on_delete=models.CASCADE, related_name="detections")
-    signal_type = models.CharField(max_length=50, choices=SignalType.choices)
-    severity = models.CharField(max_length=20, choices=Severity.choices)
-    status = models.CharField(
-        max_length=20, choices=DetectionStatus.choices, default=DetectionStatus.OPEN
-    )
-    detection_method = models.CharField(
-        max_length=30,
-        choices=DetectionMethod.choices,
-        default=DetectionMethod.SYSTEM_AUTO,
-    )
-    evidence_snapshot = models.JSONField(default=dict)
-    confidence_score = models.FloatField(default=1.0)
-    investigator_note = models.TextField(blank=True)
-    detected_at = models.DateTimeField(auto_now_add=True)
-    reviewed_at = models.DateTimeField(blank=True, null=True)
-    reviewed_by = models.CharField(max_length=255, blank=True)
-
-    # Entity links — which entity/document triggered this detection
-    primary_document = models.ForeignKey(
-        "Document",
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        related_name="detections_as_primary",
-    )
-    secondary_document = models.ForeignKey(
-        "Document",
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        related_name="detections_as_secondary",
-    )
-    person = models.ForeignKey(
-        "Person",
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        related_name="detections",
-    )
-    organization = models.ForeignKey(
-        "Organization",
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        related_name="detections",
-    )
-    property_record = models.ForeignKey(
-        "Property",
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        related_name="detections",
-    )
-    financial_instrument = models.ForeignKey(
-        "FinancialInstrument",
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        related_name="detections",
-    )
-
-    class Meta:
-        ordering = ["-detected_at"]
-        indexes = [
-            models.Index(fields=["case", "status"]),
-            models.Index(fields=["case", "severity"]),
-            models.Index(fields=["signal_type"]),
-        ]
-
-    def __str__(self) -> str:
-        return f"{self.signal_type} [{self.severity}] — {self.status}"
-
-
 class InvestigatorNote(models.Model):
     """
-    Free-form note attached to any entity in a case (case, document, signal,
-    detection, person, organization, property, financial instrument).
+    Free-form note attached to any entity in a case (case, document, finding,
+    person, organization, property, financial instrument).
 
     Restored from migration 0013 — was missing from models.py due to truncation.
     """
@@ -1525,7 +1276,7 @@ class InvestigatorNote(models.Model):
         max_length=50,
         help_text=(
             "The type of entity this note is attached to: case, document, "
-            "signal, detection, person, organization, property, financial_instrument."
+            "finding, person, organization, property, financial_instrument."
         ),
     )
     target_id = models.UUIDField(

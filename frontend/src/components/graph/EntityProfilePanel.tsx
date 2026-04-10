@@ -89,14 +89,9 @@ export function EntityProfilePanel({
 
             {/* ── Stat pills ────────────────────────────────────── */}
             <div className={styles.statRow}>
-                {metadata.signal_count > 0 && (
+                {metadata.finding_count > 0 && (
                     <span className={`${styles.statPill} ${styles.statPillDanger}`}>
-                        {metadata.signal_count} signal{metadata.signal_count > 1 ? "s" : ""}
-                    </span>
-                )}
-                {metadata.detection_count > 0 && (
-                    <span className={`${styles.statPill} ${styles.statPillWarn}`}>
-                        {metadata.detection_count} detection{metadata.detection_count > 1 ? "s" : ""}
+                        {metadata.finding_count} finding{metadata.finding_count > 1 ? "s" : ""}
                     </span>
                 )}
                 {metadata.doc_count > 0 && (

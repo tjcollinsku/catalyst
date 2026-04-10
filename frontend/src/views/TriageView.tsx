@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchCrossCaseSignals, isAbortError, updateSignal, CrossCaseSignalFilters } from "../api";
-import { CrossCaseSignal } from "../types";
+import { fetchCrossCaseFindings, isAbortError, updateFinding, CrossCaseFindingFilters } from "../api";
+import { CrossCaseFinding, FindingUpdatePayload } from "../types";
 import { Button } from "../components/ui/Button";
 import { FormSelect } from "../components/ui/FormSelect";
 import { FormTextarea } from "../components/ui/FormTextarea";
@@ -10,7 +10,7 @@ import { ToastItem, ToastStack } from "../components/ui/ToastStack";
 import { formatDate } from "../utils/format";
 import styles from "./TriageView.module.css";
 
-const QUICK_STATUSES = ["OPEN", "CONFIRMED", "DISMISSED", "ESCALATED"];
+const QUICK_STATUSES = ["NEW", "NEEDS_EVIDENCE", "CONFIRMED", "DISMISSED"];
 const SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
 
 interface TriageDraft {
@@ -20,9 +20,9 @@ interface TriageDraft {
 
 export function TriageView() {
     const navigate = useNavigate();
-    const [signals, setSignals] = useState<CrossCaseSignal[]>([]);
+    const [findings, setFindings] = useState<CrossCaseFinding[]>([]);
     const [loading, setLoading] = useState(true);
-    const [statusFilter, setStatusFilter] = useState("OPEN");
+    const [statusFilter, setStatusFilter] = useState("NEW");
     const [severityFilter, setSeverityFilter] = useState("all");
     const [activeId, setActiveId] = useState<string | null>(null);
     const [drafts, setDrafts] = useState<Record<string, TriageDraft>>({});
@@ -37,12 +37,12 @@ export function TriageView() {
         setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3400);
     }, []);
 
-    /* Load signals */
-    const load = useCallback(async (signal: AbortSignal, filters: CrossCaseSignalFilters) => {
+    /* Load findings */
+    const load = useCallback(async (signal: AbortSignal, filters: CrossCaseFindingFilters) => {
         setLoading(true);
         try {
-            const res = await fetchCrossCaseSignals(filters, 200, 0, { signal });
-            if (!signal.aborted) setSignals(res.results);
+            const res = await fetchCrossCaseFindings(filters, 200, 0, { signal });
+            if (!signal.aborted) setFindings(res.results);
         } catch (err) {
             if (!isAbortError(err)) pushToast("error", (err as Error).message);
         } finally {
@@ -52,7 +52,7 @@ export function TriageView() {
 
     useEffect(() => {
         const controller = new AbortController();
-        const filters: CrossCaseSignalFilters = {};
+        const filters: CrossCaseFindingFilters = {};
         if (statusFilter !== "all") filters.status = statusFilter;
         if (severityFilter !== "all") filters.severity = severityFilter;
         void load(controller.signal, filters);
@@ -60,30 +60,31 @@ export function TriageView() {
     }, [load, statusFilter, severityFilter]);
 
     /* Derived */
-    const openCount = useMemo(() => signals.filter((s) => s.status === "OPEN").length, [signals]);
+    const newCount = useMemo(() => findings.filter((f) => f.status === "NEW").length, [findings]);
 
-    function getDraft(signal: CrossCaseSignal): TriageDraft {
-        return drafts[signal.id] ?? { status: signal.status, note: signal.investigator_note };
+    function getDraft(finding: CrossCaseFinding): TriageDraft {
+        return drafts[finding.id] ?? { status: finding.status, note: finding.investigator_note };
     }
 
-    function setDraft(signalId: string, draft: TriageDraft) {
-        setDrafts((prev) => ({ ...prev, [signalId]: draft }));
+    function setDraft(findingId: string, draft: TriageDraft) {
+        setDrafts((prev) => ({ ...prev, [findingId]: draft }));
     }
 
-    async function handleSave(signal: CrossCaseSignal) {
-        const caseId = signal.case_id;
+    async function handleSave(finding: CrossCaseFinding) {
+        const caseId = finding.case_id;
         if (!caseId) return;
-        const draft = getDraft(signal);
-        setSavingId(signal.id);
+        const draft = getDraft(finding);
+        setSavingId(finding.id);
         try {
-            const updated = await updateSignal(caseId, signal.id, {
-                status: draft.status,
+            const payload: FindingUpdatePayload = {
+                status: draft.status as FindingUpdatePayload["status"],
                 investigator_note: draft.note,
-            });
-            setSignals((prev) =>
-                prev.map((s) => (s.id === signal.id ? { ...s, ...updated } : s)),
+            };
+            const updated = await updateFinding(caseId, finding.id, payload);
+            setFindings((prev) =>
+                prev.map((f) => (f.id === finding.id ? { ...f, ...updated } : f)),
             );
-            pushToast("success", "Signal updated");
+            pushToast("success", "Finding updated");
         } catch (err) {
             pushToast("error", (err as Error).message);
         } finally {
@@ -94,8 +95,8 @@ export function TriageView() {
     return (
         <>
             <div className={styles.triageHeader}>
-                <h2>Signal Triage Queue</h2>
-                <span className={styles.triageOpenBadge}>{openCount} open</span>
+                <h2>Finding Triage Queue</h2>
+                <span className={styles.triageOpenBadge}>{newCount} new</span>
             </div>
 
             <div className={styles.triageFilters}>
@@ -122,50 +123,50 @@ export function TriageView() {
             </div>
 
             {loading ? (
-                <p className={styles.loadingHint}>Loading signals...</p>
-            ) : signals.length === 0 ? (
+                <p className={styles.loadingHint}>Loading findings...</p>
+            ) : findings.length === 0 ? (
                 <EmptyState
-                    title="No signals match the current filters."
-                    detail="Try broadening filters or wait for new signals to be detected."
+                    title="No findings match the current filters."
+                    detail="Try broadening filters or wait for new findings to be detected."
                 />
             ) : (
                 <ul className={`${styles.triageList}`}>
-                    {signals.map((signal) => {
-                        const draft = getDraft(signal);
-                        const isActive = signal.id === activeId;
+                    {findings.map((finding) => {
+                        const draft = getDraft(finding);
+                        const isActive = finding.id === activeId;
                         return (
-                            <li key={signal.id} className={styles.triageItem}>
+                            <li key={finding.id} className={styles.triageItem}>
                                 <div
                                     className={isActive ? `${styles.signalCard} ${styles.activeSignal}` : styles.signalCard}
                                     role="button"
                                     tabIndex={0}
-                                    onClick={() => setActiveId(isActive ? null : signal.id)}
+                                    onClick={() => setActiveId(isActive ? null : finding.id)}
                                     onKeyDown={(e) => {
                                         if (e.key === "Enter" || e.key === " ") {
                                             e.preventDefault();
-                                            setActiveId(isActive ? null : signal.id);
+                                            setActiveId(isActive ? null : finding.id);
                                         }
                                     }}
                                 >
                                     <div className={styles.triageCardHeader}>
-                                        <strong>{signal.title}</strong>
+                                        <strong>{finding.title}</strong>
                                         <button
                                             className={styles.triageCaseLink}
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                if (signal.case_id) navigate(`/cases/${signal.case_id}/signals`);
+                                                if (finding.case_id) navigate(`/cases/${finding.case_id}/pipeline`);
                                             }}
                                         >
-                                            {signal.case_name}
+                                            {finding.case_name}
                                         </button>
                                     </div>
-                                    <p className={styles.signalSubhead}>{signal.rule_id}</p>
-                                    <p>{signal.description}</p>
-                                    <p className={styles.signalSubhead}>Detected: {formatDate(signal.detected_at)}</p>
+                                    <p className={styles.signalSubhead}>{finding.rule_id || "MANUAL"}</p>
+                                    <p>{finding.description}</p>
+                                    <p className={styles.signalSubhead}>Created: {formatDate(finding.created_at)}</p>
                                 </div>
                                 <div className={styles.signalBadges}>
-                                    <span className={`${styles.tag} ${styles[`tag${signal.severity.charAt(0).toUpperCase() + signal.severity.slice(1).toLowerCase()}`]}`}>{signal.severity}</span>
-                                    <span className={`${styles.tag} ${styles.tagNeutral}`}>{signal.status}</span>
+                                    <span className={`${styles.tag} ${styles[`tag${finding.severity.charAt(0).toUpperCase() + finding.severity.slice(1).toLowerCase()}`]}`}>{finding.severity}</span>
+                                    <span className={`${styles.tag} ${styles.tagNeutral}`}>{finding.status}</span>
 
                                     {isActive && (
                                         <>
@@ -175,7 +176,7 @@ export function TriageView() {
                                                         key={qs}
                                                         className={`${styles.triageChip} ${draft.status === qs ? styles.triageChipActive : ""}`}
                                                         variant="secondary"
-                                                        onClick={() => setDraft(signal.id, { ...draft, status: qs })}
+                                                        onClick={() => setDraft(finding.id, { ...draft, status: qs })}
                                                     >
                                                         {qs}
                                                     </Button>
@@ -185,15 +186,15 @@ export function TriageView() {
                                                 className={styles.triageNote}
                                                 placeholder="Investigator note"
                                                 value={draft.note}
-                                                onChange={(e) => setDraft(signal.id, { ...draft, note: e.target.value })}
+                                                onChange={(e) => setDraft(finding.id, { ...draft, note: e.target.value })}
                                                 rows={2}
                                             />
                                             <Button
                                                 className={styles.triageSave}
-                                                onClick={() => void handleSave(signal)}
-                                                disabled={savingId === signal.id}
+                                                onClick={() => void handleSave(finding)}
+                                                disabled={savingId === finding.id}
                                             >
-                                                {savingId === signal.id ? "Saving..." : "Save"}
+                                                {savingId === finding.id ? "Saving..." : "Save"}
                                             </Button>
                                         </>
                                     )}

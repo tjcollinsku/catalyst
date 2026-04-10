@@ -196,9 +196,9 @@ export function EntityGraph({
             .attr("d", (d) => {
                 const r = NODE_RADIUS[d.type] || 16;
                 const area = Math.PI * r * r;
-                // Scale up based on signal + detection count
+                // Scale up based on finding count
                 const boost = Math.min(
-                    (d.metadata.signal_count + d.metadata.detection_count) * 15,
+                    d.metadata.finding_count * 15,
                     120
                 );
                 return d3.symbol().type(NODE_SHAPE[d.type]).size(area + boost)() || "";
@@ -215,9 +215,9 @@ export function EntityGraph({
             .attr("stroke", edgeHighlight)
             .attr("stroke-width", 3);
 
-        // Signal count indicator (red dot top-right)
+        // Finding count indicator (red dot top-right)
         nodeGroup
-            .filter((d) => d.metadata.signal_count > 0)
+            .filter((d) => d.metadata.finding_count > 0)
             .append("circle")
             .attr("r", 5)
             .attr("cx", (d) => (NODE_RADIUS[d.type] || 16) * 0.7)
@@ -453,13 +453,8 @@ export function EntityGraph({
                     <p className={styles.tooltipLabel}>{tooltip.node.label}</p>
                     <p className={styles.tooltipType}>{tooltip.node.type.replace("_", " ")}</p>
                     <p className={styles.tooltipMeta}>
-                        {tooltip.node.metadata.signal_count > 0 &&
-                            `${tooltip.node.metadata.signal_count} signal${tooltip.node.metadata.signal_count > 1 ? "s" : ""}`}
-                        {tooltip.node.metadata.signal_count > 0 &&
-                            tooltip.node.metadata.detection_count > 0 &&
-                            " · "}
-                        {tooltip.node.metadata.detection_count > 0 &&
-                            `${tooltip.node.metadata.detection_count} detection${tooltip.node.metadata.detection_count > 1 ? "s" : ""}`}
+                        {tooltip.node.metadata.finding_count > 0 &&
+                            `${tooltip.node.metadata.finding_count} finding${tooltip.node.metadata.finding_count > 1 ? "s" : ""}`}
                         {tooltip.node.metadata.doc_count > 0 &&
                             ` · ${tooltip.node.metadata.doc_count} doc${tooltip.node.metadata.doc_count > 1 ? "s" : ""}`}
                     </p>

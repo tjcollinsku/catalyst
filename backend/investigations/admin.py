@@ -3,11 +3,9 @@ from django.contrib import admin
 from .models import (
     AuditLog,
     Case,
-    Detection,
     Document,
     FinancialInstrument,
     Finding,
-    GovernmentReferral,
     Organization,
     OrgDocument,
     Person,
@@ -16,24 +14,6 @@ from .models import (
     Property,
     PropertyTransaction,
 )
-
-
-@admin.register(GovernmentReferral)
-class GovernmentReferralAdmin(admin.ModelAdmin):
-    list_display = (
-        "referral_id",
-        "case",
-        "agency_name",
-        "submission_id",
-        "contact_alias",
-        "status",
-        "filing_date",
-    )
-    list_filter = ("status", "agency_name")
-    search_fields = ("agency_name", "submission_id", "contact_alias")
-    readonly_fields = ("filing_date",)
-    ordering = ("-filing_date",)
-    autocomplete_fields = ("case",)
 
 
 @admin.register(Case)
@@ -68,9 +48,9 @@ class OrganizationAdmin(admin.ModelAdmin):
 
 @admin.register(Finding)
 class FindingAdmin(admin.ModelAdmin):
-    list_display = ("title", "case", "severity", "confidence", "status", "created_at")
-    list_filter = ("severity", "confidence", "status")
-    search_fields = ("title", "narrative", "signal_type", "signal_rule_id")
+    list_display = ("title", "case", "severity", "status", "evidence_weight", "created_at")
+    list_filter = ("severity", "status", "evidence_weight", "source")
+    search_fields = ("title", "description", "narrative", "rule_id", "investigator_note")
     ordering = ("-created_at",)
 
 
@@ -155,11 +135,3 @@ class PropertyTransactionAdmin(admin.ModelAdmin):
     search_fields = ("property__address", "property__parcel_number")
     ordering = ("-transaction_date",)
 
-
-@admin.register(Detection)
-class DetectionAdmin(admin.ModelAdmin):
-    list_display = ("signal_type", "severity", "status", "case", "detected_at")
-    list_filter = ("signal_type", "severity", "status", "detection_method")
-    search_fields = ("case__name", "investigator_note")
-    ordering = ("-detected_at",)
-    readonly_fields = ("detected_at",)

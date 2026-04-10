@@ -3,23 +3,39 @@ import { useOutletContext, useParams } from "react-router-dom";
 import { CaseDetailContext } from "../../views/CaseDetailView";
 import { ReferralsPanel } from "../ReferralsPanel";
 import { Button } from "../ui/Button";
-import { formatDate } from "../../utils/format";
-import { exportCaseReport } from "../../api";
+import { exportCaseReport, generateReferralPdf } from "../../api";
 import styles from "./ReferralsTab.module.css";
 
 export function ReferralsTab() {
     const { caseId } = useParams<{ caseId: string }>();
-    const {
-        referrals,
-        loadingReferrals,
-        savingReferralId,
-        onCreateReferral,
-        onUpdateReferral,
-        onDeleteReferral,
-        pushToast,
-    } = useOutletContext<CaseDetailContext>();
+    const { pushToast } = useOutletContext<CaseDetailContext>();
 
     const [exporting, setExporting] = useState<string | null>(null);
+    const [generatingPdf, setGeneratingPdf] = useState(false);
+
+    async function handleGenerateReferralPdf() {
+        if (!caseId) return;
+        setGeneratingPdf(true);
+        try {
+            const blob = await generateReferralPdf(caseId, {});
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `referral-package-${caseId}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            pushToast("success", "Referral package PDF generated and downloaded");
+        } catch (err) {
+            pushToast(
+                "error",
+                `PDF generation failed: ${err instanceof Error ? err.message : "Unknown error"}`
+            );
+        } finally {
+            setGeneratingPdf(false);
+        }
+    }
 
     async function handleExport(format: "json" | "csv") {
         if (!caseId) return;
@@ -41,14 +57,31 @@ export function ReferralsTab() {
     return (
         <>
             <ReferralsPanel
-                referrals={referrals}
-                loadingReferrals={loadingReferrals}
-                savingReferralId={savingReferralId}
-                onCreateReferral={onCreateReferral}
-                onUpdateReferral={onUpdateReferral}
-                onDeleteReferral={onDeleteReferral}
-                formatDate={formatDate}
+                caseId={caseId ?? ""}
+                onGeneratePdf={handleGenerateReferralPdf}
+                generatingPdf={generatingPdf}
             />
+
+            {/* Generate referral package PDF */}
+            <article className="info-card">
+                <div className="card-toolbar">
+                    <h3>{"📋"} Generate Referral Package (PDF)</h3>
+                </div>
+                <p className={styles.memoHint}>
+                    Generate a deterministic, citation-bearing referral package PDF for
+                    submission to government agencies. All findings and evidence traces are
+                    included in the output.
+                </p>
+                <div className={styles.exportButtons}>
+                    <Button
+                        variant="primary"
+                        disabled={generatingPdf}
+                        onClick={handleGenerateReferralPdf}
+                    >
+                        {generatingPdf ? "Generating..." : "Generate Referral Package"}
+                    </Button>
+                </div>
+            </article>
 
             {/* Report generation / export */}
             <article className="info-card">
