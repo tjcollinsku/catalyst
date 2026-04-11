@@ -19,14 +19,15 @@ from .models import (
     AuditAction,
     AuditLog,
     Case,
+    Detection,
     Document,
     DocumentType,
-    ExtractionStatus,
+    EntitySignal,
     FinancialInstrument,
     FinancialSnapshot,
     Finding,
     FindingEntity,
-    FindingStatus,
+    GovernmentReferral,
     InvestigatorNote,
     OcrStatus,
     Organization,
@@ -37,20 +38,28 @@ from .models import (
     Property,
     PropertyTransaction,
     Relationship,
-    Severity,
+    Signal,
+    SignalSeverity,
+    SocialMediaConnection,
 )
 from .serializers import (
     CaseIntakeSerializer,
     CaseUpdateSerializer,
+    DetectionIntakeSerializer,
+    DetectionUpdateSerializer,
     DocumentIntakeSerializer,
     DocumentUpdateSerializer,
     FindingIntakeSerializer,
     FindingUpdateSerializer,
     NoteIntakeSerializer,
     NoteUpdateSerializer,
+    ReferralIntakeSerializer,
+    ReferralUpdateSerializer,
+    SignalUpdateSerializer,
     serialize_audit_log,
     serialize_case,
     serialize_case_detail,
+    serialize_detection,
     serialize_document,
     serialize_financial_instrument,
     serialize_finding,
@@ -58,19 +67,14 @@ from .serializers import (
     serialize_organization,
     serialize_person,
     serialize_property,
+    serialize_referral,
+    serialize_signal,
 )
 
 DEFAULT_PAGE_LIMIT = 25
+MAX_BULK_FILES = 50
 
 
-# Compatibility aliases while legacy signal/detection views are being
-# removed from this module. These keep import-time checks from failing.
-Signal = Finding
-Detection = Finding
-EntitySignal = FindingEntity
-SignalSeverity = Severity
-serialize_signal = serialize_finding
-serialize_detection = serialize_finding
 def _save_financial_snapshot(document, case, financials, meta):
     """Persist extracted 990 financial data to FinancialSnapshot model."""
     from .models import Organization
@@ -1729,7 +1733,7 @@ def api_case_financials(request, pk):
 # Signal API endpoints
 # ---------------------------------------------------------------------------
 
-SIGNAL_SORT_FIELDS = {"detected_at", "severity", "status", "rule_id", "id"}
+SIGNAL_SORT_FIELDS = {"created_at", "severity", "status", "rule_id", "id"}
 
 
 @require_http_methods(["GET"])
@@ -1743,7 +1747,7 @@ def api_case_signal_collection(request, pk):
     order_by, direction, sort_error = _parse_sort_params(
         request,
         allowed_fields=SIGNAL_SORT_FIELDS,
-        default_field="detected_at",
+        default_field="created_at",
     )
     if sort_error is not None:
         return sort_error
@@ -2046,7 +2050,7 @@ def api_search(request):
 
     # --- Signals ---
     if raw_type in (None, "signal"):
-        vector = SearchVector("detected_summary", weight="A")
+        vector = SearchVector("description", weight="A")
         sig_qs = (
             Signal.objects.select_related("case")
             .annotate(rank=SearchRank(vector, search_query))
@@ -2062,7 +2066,7 @@ def api_search(request):
                     "id": str(s.pk),
                     "title": f"{s.rule_id} — {s.severity}",
                     "subtitle": f"Signal — {s.status}",
-                    "snippet": s.detected_summary[:200] if s.detected_summary else "",
+                    "snippet": s.description[:200] if s.description else "",
                     "relevance": round(float(s.rank), 4),
                     "case_id": str(s.case_id),
                     "case_name": s.case.name,
@@ -2220,9 +2224,10 @@ def api_case_export(request, pk):
 
     # Gather all related data
     documents = list(case.documents.order_by("-uploaded_at"))
-    signals = list(case.signals.order_by("-detected_at"))
-    detections = list(case.detections.order_by("-detected_at"))
+    signals = list(case.findings.order_by("-created_at"))
+    detections = []
     findings = list(Finding.objects.filter(case=case).order_by("-created_at"))
+    referrals = list(case.referrals.order_by("-filing_date"))
     persons = list(case.persons.order_by("full_name"))
     organizations = list(case.organizations.order_by("name"))
     properties = list(case.properties.order_by("-created_at"))
@@ -2258,6 +2263,7 @@ def api_case_export(request, pk):
                 }
                 for f in findings
             ],
+            "referrals": [serialize_referral(r) for r in referrals],
             "persons": [serialize_person(p) for p in persons],
             "organizations": [serialize_organization(o) for o in organizations],
             "properties": [serialize_property(p) for p in properties],
@@ -2329,8 +2335,8 @@ def api_case_export(request, pk):
                 s.rule_id,
                 s.severity,
                 s.status,
-                s.detected_summary or "",
-                s.detected_at.isoformat() if s.detected_at else "",
+                s.description or "",
+                s.created_at.isoformat() if s.created_at else "",
             ]
         )
     writer.writerow([])
@@ -2400,6 +2406,23 @@ def api_case_export(request, pk):
                 "; ".join(fi.anomaly_flags),
             ]
         )
+    writer.writerow([])
+
+    # Referrals
+    writer.writerow(["=== REFERRALS ==="])
+    writer.writerow(["ID", "Agency", "Status", "Submission ID", "Filing Date", "Notes"])
+    for r in referrals:
+        writer.writerow(
+            [
+                r.referral_id,
+                r.agency_name or "",
+                r.status,
+                r.submission_id or "",
+                r.filing_date.isoformat() if r.filing_date else "",
+                r.notes or "",
+            ]
+        )
+
     filename = f"catalyst_case_{case.pk}.csv"
     filepath = os.path.join(exports_dir, filename)
     with open(filepath, "w") as fh:
@@ -2413,146 +2436,6 @@ def api_case_export(request, pk):
             "download_url": download_url,
         }
     )
-
-
-# ---------------------------------------------------------------------------
-# Referral PDF generation (deterministic, citation-bearing)
-# ---------------------------------------------------------------------------
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def api_case_referral_pdf(request, pk):
-    """Generate a deterministic, citation-bearing referral PDF.
-
-    This is the core deliverable of Catalyst. The PDF is professional,
-    ready for government investigators (AG, IRS, FBI), and every claim
-    traces back to a document, finding, or data point.
-
-    POST body (optional):
-        include_confirmed_only: bool (default: true)
-        min_evidence_weight: str (SPECULATIVE|DIRECTIONAL|DOCUMENTED|TRACED)
-
-    Returns: application/pdf file download
-    """
-    case = get_object_or_404(Case, pk=pk)
-
-    # Parse request body for filtering options
-    include_confirmed_only = True
-    min_evidence_weight = None
-    try:
-        if request.body:
-            data = json.loads(request.body)
-            include_confirmed_only = data.get(
-                "include_confirmed_only",
-                True,
-            )
-            min_evidence_weight = data.get("min_evidence_weight")
-    except json.JSONDecodeError:
-        pass
-
-    # Query findings to include in the referral
-    findings_qs = Finding.objects.filter(case=case)
-
-    if include_confirmed_only:
-        findings_qs = findings_qs.filter(
-            status=FindingStatus.CONFIRMED
-        )
-
-    # Filter by evidence weight (exclude SPECULATIVE by default)
-    evidence_weight_order = [
-        "SPECULATIVE",
-        "DIRECTIONAL",
-        "DOCUMENTED",
-        "TRACED",
-    ]
-    if min_evidence_weight:
-        try:
-            min_idx = evidence_weight_order.index(
-                min_evidence_weight
-            )
-            allowed_weights = evidence_weight_order[min_idx:]
-            findings_qs = findings_qs.filter(
-                evidence_weight__in=allowed_weights
-            )
-        except ValueError:
-            pass
-
-    # Gather related data
-    findings = findings_qs.order_by("-severity", "-created_at")
-    persons = case.persons.order_by("full_name")
-    organizations = case.organizations.order_by("name")
-    documents = case.documents.order_by("-uploaded_at")
-    financials = (
-        FinancialSnapshot.objects.filter(
-            organization__case=case
-        ).order_by("organization__name", "-tax_year")
-    )
-
-    # Generate PDF
-    from .referral_export import ReferralPDFGenerator
-
-    generator = ReferralPDFGenerator()
-    pdf_buffer = generator.generate(
-        case,
-        findings,
-        {
-            "persons": persons,
-            "organizations": organizations,
-        },
-        documents,
-        financials,
-    )
-
-    # Create a Document record for the generated PDF
-    import hashlib
-    import os
-
-    from django.conf import settings
-
-    pdf_bytes = pdf_buffer.getvalue()
-    pdf_hash = hashlib.sha256(pdf_bytes).hexdigest()
-
-    # Save to filesystem (media uploads)
-    exports_dir = os.path.join(settings.MEDIA_ROOT, "referrals")
-    os.makedirs(exports_dir, exist_ok=True)
-
-    filename = (
-        f"referral_package_{case.pk}_"
-        f"{timezone.now().timestamp()}.pdf"
-    )
-    filepath = os.path.join(exports_dir, filename)
-
-    with open(filepath, "wb") as fh:
-        fh.write(pdf_bytes)
-
-    # Create a Document record for audit trail
-    Document.objects.create(
-        case=case,
-        filename=filename,
-        file_path=filepath,
-        sha256_hash=pdf_hash,
-        file_size=len(pdf_bytes),
-        doc_type=DocumentType.REFERRAL_MEMO,
-        is_generated=True,
-        ocr_status=OcrStatus.NOT_NEEDED,
-        extraction_status=ExtractionStatus.SKIPPED,
-        display_name=(
-            f"Referral Package — {case.name} — "
-            f"{timezone.now().strftime('%Y-%m-%d')}"
-        ),
-    )
-
-    # Return as file download
-    response = HttpResponse(
-        pdf_bytes,
-        content_type="application/pdf",
-    )
-    response["Content-Disposition"] = (
-        f'attachment; filename="{filename}"'
-    )
-
-    return response
 
 
 # ---------------------------------------------------------------------------
@@ -2615,8 +2498,9 @@ def api_entity_detail(request, entity_type, entity_id):
     # --- Related Signals (via EntitySignal) ---
     entity_signal_links = EntitySignal.objects.filter(
         entity_id=entity_id, entity_type=entity_type
-    ).select_related("signal")
-    data["related_signals"] = [serialize_signal(es.signal) for es in entity_signal_links]
+    ).select_related("finding")
+    data["related_signals"] = [serialize_signal(es.finding) for es in
+                                entity_signal_links]
 
     # --- Related Findings (via FindingEntity) ---
     finding_links = FindingEntity.objects.filter(
@@ -2945,7 +2829,7 @@ def api_case_note_detail(request, pk, note_id):
 # Cross-case signals list
 # ---------------------------------------------------------------------------
 
-SIGNAL_SORT_FIELDS = {"detected_at", "severity", "status", "rule_id", "id"}
+SIGNAL_SORT_FIELDS = {"created_at", "severity", "status", "rule_id", "id"}
 
 
 @require_http_methods(["GET"])
@@ -2963,7 +2847,7 @@ def api_signal_collection(request):
     order_by, direction, sort_error = _parse_sort_params(
         request,
         allowed_fields=SIGNAL_SORT_FIELDS,
-        default_field="detected_at",
+        default_field="created_at",
     )
     if sort_error is not None:
         return sort_error
@@ -3012,6 +2896,58 @@ def api_signal_collection(request):
 
 
 # ---------------------------------------------------------------------------
+# Cross-case referrals list
+# ---------------------------------------------------------------------------
+
+
+@require_http_methods(["GET"])
+def api_referral_collection(request):
+    """Cross-case referral list with filters.
+
+    TODO(SEC-010): When user-level auth is added, scope this queryset to
+    cases the authenticated user has access to.
+    """
+    limit, offset, pagination_error = _parse_limit_offset(request)
+    if pagination_error is not None:
+        return pagination_error
+
+    qs = GovernmentReferral.objects.select_related("case").order_by("-filing_date")
+
+    raw_status = request.GET.get("status")
+    if raw_status is not None:
+        qs = qs.filter(status=raw_status)
+
+    raw_agency = request.GET.get("agency")
+    if raw_agency is not None:
+        qs = qs.filter(agency_name__icontains=raw_agency)
+
+    raw_case_id = request.GET.get("case_id")
+    if raw_case_id is not None:
+        qs = qs.filter(case_id=raw_case_id)
+
+    total_count = qs.count()
+    paged = qs[offset : offset + limit]
+    next_offset = offset + limit if (offset + limit) < total_count else None
+    previous_offset = max(offset - limit, 0) if offset > 0 else None
+
+    results = []
+    for referral in paged:
+        data = serialize_referral(referral)
+        data["case_name"] = referral.case.name if referral.case else ""
+        results.append(data)
+
+    return JsonResponse(
+        {
+            "count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "next_offset": next_offset,
+            "previous_offset": previous_offset,
+            "results": results,
+        }
+    )
+
+
 # ---------------------------------------------------------------------------
 # Case entity-relationship graph (Phase 2A)
 # ---------------------------------------------------------------------------
@@ -3033,7 +2969,7 @@ def api_case_graph(request, pk):
 
     Nodes are derived from Person, Organization, Property, FinancialInstrument.
     Edges are derived from PersonOrganization, PersonDocument, OrgDocument,
-    PropertyTransaction, and Relationship junction tables.
+    PropertyTransaction, Relationship, and SocialMediaConnection junction tables.
     """
     case = get_object_or_404(Case, pk=pk)
 
@@ -3047,7 +2983,8 @@ def api_case_graph(request, pk):
     # by entity_id to get how many signals reference each entity.
     entity_signal_counts = {}
     for row in (
-        EntitySignal.objects.filter(signal__case=case).values("entity_id").annotate(cnt=Count("id"))
+        EntitySignal.objects.filter(finding__case=case).values(
+            "entity_id").annotate(cnt=Count("id"))
     ):
         entity_signal_counts[str(row["entity_id"])] = row["cnt"]
 
@@ -3340,6 +3277,26 @@ def api_case_graph(request, pk):
                 }
             )
 
+    # SocialMediaConnection → SOCIAL_CONNECTION edges
+    for sc in SocialMediaConnection.objects.filter(case=case).select_related("person"):
+        src = str(sc.person_id)
+        if sc.connected_person_id:
+            tgt = str(sc.connected_person_id)
+            if src in node_ids and tgt in node_ids:
+                edges.append(
+                    {
+                        "source": src,
+                        "target": tgt,
+                        "relationship": "SOCIAL_CONNECTION",
+                        "label": f"{sc.platform} {sc.connection_type}".strip(),
+                        "weight": 1,
+                        "metadata": {
+                            "platform": sc.platform,
+                            "connection_type": sc.connection_type,
+                        },
+                    }
+                )
+
     # ── 3. Collect timeline events ────────────────────────────────────
 
     timeline_events = []
@@ -3359,17 +3316,18 @@ def api_case_graph(request, pk):
                 }
             )
 
-    # Signals layer — detected_at
+    # Signals layer — created_at
     for sig in Signal.objects.filter(case=case).only(
-        "pk", "rule_id", "severity", "detected_at", "detected_summary", "trigger_entity_id"
+        "pk", "rule_id", "severity", "created_at", "description",
+        "trigger_entity_id"
     ):
-        if sig.detected_at:
+        if sig.created_at:
             timeline_events.append(
                 {
                     "id": str(sig.pk),
                     "layer": "signal",
-                    "date": sig.detected_at.isoformat(),
-                    "label": f"{sig.rule_id}: {(sig.detected_summary or '')[:60]}",
+                    "date": sig.created_at.isoformat(),
+                    "label": f"{sig.rule_id}: {(sig.description or '')[:60]}",
                     "metadata": {
                         "severity": sig.severity,
                         "rule_id": sig.rule_id,
@@ -3966,7 +3924,7 @@ def api_research_parcels(request, pk):
 
     POST body (JSON):
         {
-            "query": "EXAMPLE",                          # required: owner name
+            "query": "HOMAN",                          # required: owner name
             "search_type": "owner" | "parcel",         # optional: defaults to "owner"
             "county": "DARKE"                          # optional: county name (uppercase)
         }
@@ -4113,7 +4071,7 @@ def api_research_ohio_sos(request, pk):
 
     POST body (JSON):
         {
-            "query": "Example Charity Ministries",             # required: entity name
+            "query": "Do Good Ministries",             # required: entity name
             "fuzzy": false                             # optional: enable fuzzy matching
         }
 
@@ -4255,7 +4213,7 @@ def api_research_ohio_aos(request, pk):
 
     POST body (JSON):
         {
-            "query": "Example Township"                          # required: entity name
+            "query": "Osgood"                          # required: entity name
         }
 
     Returns:
@@ -4387,7 +4345,7 @@ def api_research_irs(request, pk):
         {
             "query": "12-3456789"          # EIN (with or without dash)
             OR
-            "query": "Example Charity Ministries"  # Organization name search
+            "query": "Do Good Ministries"  # Organization name search
 
             // Optional:
             "fetch_xml": false             # If true, also fetch + parse the XML
@@ -4557,7 +4515,7 @@ def api_research_recorder(request, pk):
     POST body (JSON):
         {
             "county": "DARKE",                         # required: Ohio county
-            "name": "EXAMPLE"                            # optional: name to search for
+            "name": "HOMAN"                            # optional: name to search for
         }
 
     Returns:
@@ -4693,12 +4651,101 @@ def api_research_recorder(request, pk):
 # ---------------------------------------------------------------------------
 
 
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def api_case_referral_collection(request, pk):
+    case = get_object_or_404(Case, pk=pk)
+
+    if request.method == "GET":
+        referrals = case.referrals.order_by("-filing_date")
+        return JsonResponse({"results": [serialize_referral(r) for r in referrals]})
+
+    payload, error_response = _parse_json_body(request)
+    if error_response is not None:
+        return error_response
+
+    serializer = ReferralIntakeSerializer(data=payload, case=case)
+    if not serializer.is_valid():
+        return JsonResponse({"errors": serializer.errors}, status=400)
+
+    referral = serializer.save()
+    AuditLog.log(
+        action=AuditAction.REFERRAL_CREATED,
+        table_name="government_referrals",
+        record_id=None,  # AutoField PK, not UUID
+        case_id=case.pk,
+        after_state={"agency_name": referral.agency_name, "status": referral.status},
+        performed_by=getattr(request, "api_token", None),
+        notes=f"referral_id={referral.referral_id}",
+    )
+    return JsonResponse(serializer.data, status=201)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "PATCH", "DELETE"])
+def api_case_referral_detail(request, pk, referral_id):
+    """Retrieve, update, or delete a single government referral.
+
+    Restored from truncation — see SEC-006 in SECURITY_AUDIT.md.
+    """
+    case = get_object_or_404(Case, pk=pk)
+    referral = get_object_or_404(GovernmentReferral, referral_id=referral_id, case=case)
+
+    if request.method == "PATCH":
+        payload, error_response = _parse_json_body(request)
+        if error_response is not None:
+            return error_response
+
+        before = {"status": referral.status, "notes": referral.notes}
+        serializer = ReferralUpdateSerializer(data=payload, instance=referral)
+        if not serializer.is_valid():
+            return JsonResponse({"errors": serializer.errors}, status=400)
+
+        serializer.save()
+
+        # Use specific audit action if status changed
+        new_status = serializer.validated_data.get("status", referral.status)
+        if new_status == "SUBMITTED" and before["status"] != "SUBMITTED":
+            audit_action = AuditAction.REFERRAL_SUBMITTED
+        elif new_status != before["status"]:
+            audit_action = AuditAction.REFERRAL_STATUS_CHANGED
+        else:
+            audit_action = AuditAction.RECORD_UPDATED
+
+        AuditLog.log(
+            action=audit_action,
+            table_name="government_referrals",
+            case_id=case.pk,
+            before_state=before,
+            after_state=serializer.validated_data,
+            performed_by=getattr(request, "api_token", None),
+            notes=f"referral_id={referral.referral_id}",
+        )
+        return JsonResponse(serializer.data)
+
+    if request.method == "DELETE":
+        ref_id = referral.referral_id
+        agency = referral.agency_name
+        referral.delete()
+        AuditLog.log(
+            action=AuditAction.RECORD_DELETED,
+            table_name="government_referrals",
+            case_id=case.pk,
+            before_state={"agency_name": agency},
+            performed_by=getattr(request, "api_token", None),
+            notes=f"referral_id={ref_id}",
+        )
+        return HttpResponse(status=204)
+
+    return JsonResponse(serialize_referral(referral))
+
+
 # ---------------------------------------------------------------------------
 # Detection collection + detail  (Milestone 2)
 # ---------------------------------------------------------------------------
 
 DETECTION_SORT_FIELDS = {
-    "detected_at",
+    "created_at",
     "severity",
     "status",
     "signal_type",
@@ -4741,7 +4788,7 @@ def api_case_detection_collection(request, pk):
     order_by, direction, sort_error = _parse_sort_params(
         request,
         allowed_fields=DETECTION_SORT_FIELDS,
-        default_field="detected_at",
+        default_field="created_at",
     )
     if sort_error is not None:
         return sort_error
@@ -4993,10 +5040,12 @@ def api_case_dashboard(request, pk):
 
     # Top triggered rules
     rule_counts = (
-        signals.values("rule_id", "detected_summary").annotate(n=Count("id")).order_by("-n")[:10]
+        signals.values("rule_id", "description").annotate(
+            n=Count("id")).order_by("-n")[:10]
     )
     top_rules = [
-        {"rule_id": r["rule_id"], "summary": r["detected_summary"], "count": r["n"]}
+        {"rule_id": r["rule_id"], "summary": r["description"],
+            "count": r["n"]}
         for r in rule_counts
     ]
 
@@ -5166,7 +5215,7 @@ def api_case_coverage(request, pk):
 
 
 def _generate_memo_fallback(
-    case, findings, signals, detections, persons, orgs, properties, financial_snapshots
+    case, findings, signals, detections, persons, orgs, properties, financial_snapshots, referrals
 ):
     """Generate a structured memo template when AI fails.
 
@@ -5236,9 +5285,10 @@ def _generate_memo_fallback(
         lines.append("FRAUD INDICATORS")
         lines.append("-" * 70)
         for s in signals[:20]:
-            summary = s.detected_summary or "(no summary)"
+            summary = s.description or "(no summary)"
             lines.append(
-                f"[{s.severity}] {s.rule_id}\n  Status: {s.status}\n  Summary: {summary[:200]}\n"
+                f"[{s.severity}] {s.rule_id}\n  Status: {s.status}\n"
+                f"  Summary: {summary[:200]}\n"
             )
         lines.append("")
 
@@ -5296,6 +5346,10 @@ def _generate_memo_fallback(
             "Recommend further investigation by appropriate agency or referral to law enforcement."
         )
 
+    if referrals.exists():
+        lines.append("")
+        lines.append(f"Status: {referrals.count()} referral(s) pending.")
+
     lines.append("")
     lines.append("---")
     lines.append("This memo was automatically generated from case evidence.")
@@ -5325,6 +5379,7 @@ def api_case_referral_memo(request, pk):
         .select_related("organization")
         .order_by("-tax_year")
     )
+    referrals = GovernmentReferral.objects.filter(case=case)
 
     # Entities (persons, orgs, properties)
     persons = Person.objects.filter(case=case)
@@ -5350,8 +5405,9 @@ def api_case_referral_memo(request, pk):
     if signals.exists():
         context_parts.append("CONFIRMED/ESCALATED SIGNALS:")
         for s in signals[:15]:
-            summary = s.detected_summary or ""
-            context_parts.append(f"  - [{s.severity}] {s.rule_id}: {summary[:150]}")
+            summary = s.description or ""
+            context_parts.append(
+                f"  - [{s.severity}] {s.rule_id}: {summary[:150]}")
         context_parts.append("")
 
     # Detections
@@ -5454,6 +5510,7 @@ def api_case_referral_memo(request, pk):
             orgs,
             properties,
             financial_snapshots,
+            referrals,
         )
 
     # Create memo document
@@ -6019,57 +6076,6 @@ def api_research_add_to_case(request, pk):
             {"error": f"Failed to add to case: {str(e)}"},
             status=500,
         )
-
-
-# Compatibility route shims
-# These keep URL imports stable while legacy referral endpoints are being
-# removed from the backend model layer.
-
-
-@require_http_methods(["GET"])
-def api_referral_collection(request):
-    return JsonResponse({"results": []})
-
-
-@csrf_exempt
-@require_http_methods(["GET", "POST"])
-def api_case_referral_collection(request, pk):
-    case = get_object_or_404(Case, pk=pk)
-    if request.method == "GET":
-        return JsonResponse({"results": []})
-    return JsonResponse(
-        {
-            "error": (
-                "Referral creation endpoint is deprecated. "
-                "Use referral-pdf export instead."
-            )
-        },
-        status=410,
-    )
-
-
-@csrf_exempt
-@require_http_methods(["GET", "PATCH", "DELETE"])
-def api_case_referral_detail(request, pk, referral_id):
-    get_object_or_404(Case, pk=pk)
-    return JsonResponse(
-        {
-            "error": (
-                "Referral detail endpoint is deprecated. "
-                "Use referral-pdf export instead."
-            )
-        },
-        status=410,
-    )
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def api_case_reevaluate_findings(request, pk):
-    # Back-compat wrapper for the old function name still present in this file.
-    if "api_case_reevaluate_signals" in globals():
-        return api_case_reevaluate_signals(request, pk)
-    return JsonResponse({"error": "Reevaluation endpoint unavailable."}, status=501)
 
 
 # ───────────────────────────────────────────────────

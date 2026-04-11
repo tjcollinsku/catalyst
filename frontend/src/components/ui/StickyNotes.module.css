@@ -1,0 +1,277 @@
+/* ────────────────────────────────────────────────────────────
+   StickyNotes Component Styles
+   Uses CSS variables for theme compatibility (dark/light mode)
+   ──────────────────────────────────────────────────────────── */
+
+:root {
+    --sticky-note-bg: #FFF9C4;
+    --sticky-note-shadow: rgba(0, 0, 0, 0.12);
+    --sticky-note-border: rgba(0, 0, 0, 0.08);
+    --sticky-note-text: #2c2c2c;
+    --sticky-note-timestamp: #666;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --sticky-note-bg: #4a4a3a;
+        --sticky-note-shadow: rgba(0, 0, 0, 0.3);
+        --sticky-note-border: rgba(255, 255, 255, 0.1);
+        --sticky-note-text: #e8e8e0;
+        --sticky-note-timestamp: #aaa;
+    }
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 12px;
+    background: var(--sticky-note-shadow);
+    border-radius: 8px;
+    border: 1px solid var(--sticky-note-border);
+    position: relative;
+}
+
+.collapseButton {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: transparent;
+    border: none;
+    color: var(--sticky-note-timestamp);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+.collapseButton:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.notesList {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 60px;
+}
+
+.note {
+    background: var(--sticky-note-bg);
+    border-radius: 6px;
+    padding: 12px;
+    box-shadow: 0 2px 8px var(--sticky-note-shadow);
+    border: 1px solid var(--sticky-note-border);
+    position: relative;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transform: rotate(-1deg);
+}
+
+.note:nth-child(even) {
+    transform: rotate(1deg);
+}
+
+.note:hover {
+    box-shadow: 0 4px 12px var(--sticky-note-shadow);
+}
+
+.noteContent {
+    margin: 0 0 8px 0;
+    padding: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--sticky-note-text);
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+
+.noteFooter {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.noteTimestamp {
+    font-size: 11px;
+    color: var(--sticky-note-timestamp);
+    font-weight: 500;
+}
+
+.deleteButton {
+    background: transparent;
+    border: none;
+    color: var(--sticky-note-timestamp);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    transition: color 0.2s ease, background-color 0.2s ease;
+    opacity: 0;
+}
+
+.note:hover .deleteButton {
+    opacity: 1;
+}
+
+.deleteButton:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+    color: #d32f2f;
+}
+
+.deleteButton:active {
+    transform: scale(0.95);
+}
+
+.loadingState,
+.errorState,
+.emptyState {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60px;
+    font-size: 13px;
+    color: var(--sticky-note-timestamp);
+    text-align: center;
+    padding: 12px;
+}
+
+.errorState {
+    color: #d32f2f;
+    font-weight: 500;
+}
+
+.addNoteArea {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--sticky-note-border);
+}
+
+.noteTextarea {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 10px;
+    border: 1px solid var(--sticky-note-border);
+    border-radius: 4px;
+    resize: vertical;
+    min-height: 70px;
+    max-height: 150px;
+    background: var(--sticky-note-bg);
+    color: var(--sticky-note-text);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.noteTextarea:focus {
+    outline: none;
+    border-color: #1976d2;
+    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1);
+}
+
+.noteTextarea:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.saveButton {
+    background: #1976d2;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+
+.saveButton:hover:not(:disabled) {
+    background: #1565c0;
+}
+
+.saveButton:active:not(:disabled) {
+    transform: scale(0.98);
+}
+
+.saveButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Compact Mode: Sticky Note Count Pill
+   ──────────────────────────────────────────────────────────── */
+
+.compactPill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--sticky-note-bg);
+    border: 1px solid var(--sticky-note-border);
+    border-radius: 20px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px var(--sticky-note-shadow);
+    color: var(--sticky-note-text);
+    font-weight: 600;
+}
+
+.compactPill:hover {
+    box-shadow: 0 2px 6px var(--sticky-note-shadow);
+    transform: translateY(-1px);
+}
+
+.compactPill:active {
+    transform: translateY(0);
+}
+
+.noteIcon {
+    font-size: 14px;
+}
+
+.noteCount {
+    display: inline-block;
+    min-width: 18px;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    padding: 2px 6px;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Scrollbar styling (for notes list)
+   ──────────────────────────────────────────────────────────── */
+
+.container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.container::-webkit-scrollbar-thumb {
+    background: var(--sticky-note-timestamp);
+    border-radius: 3px;
+    opacity: 0.3;
+}
+
+.container::-webkit-scrollbar-thumb:hover {
+    opacity: 0.5;
+}

@@ -29,6 +29,10 @@ running on Railway.
 | Fraud signal detection engine | 14 pattern rules (cut from 29) grounded in real investigation patterns — valuation anomalies, insider swaps, false disclosures, revenue spikes | Each rule tied to a real anomaly source |
 | Demo case ("Bright Future Foundation") | Pre-loaded investigation with 4 persons, 2 orgs, 2 properties, 6 years of financials, 7 documents, and 9 confirmed findings | `python manage.py seed_demo` — shows the full pipeline working |
 | AI assistant panel | Claude-powered case summary, relationship analysis, free-text Q&A | Triage tool only — not part of the final deliverable |
+| Document workspace | Open any document and see its text, extracted entities, linked findings, and sticky notes in one panel | Entities are clickable — navigate to entity detail |
+| Sticky notes | Attach notes to any document, entity, or finding — like Post-Its on a case file | Full CRUD via existing notes API |
+| Financial anomaly highlighting | YOY table flags revenue spikes, zero officer comp, low program ratio, asset/revenue mismatch | Anomaly summary strip at top of Financials tab |
+| Entity → document quick-view | Entity detail page shows related documents, related findings, and sticky notes | Uses the detail API endpoint instead of list filtering |
 | Audit log | Append-only log on every mutation | Never updated or deleted |
 | Backend test suite | 555+ backend tests covering connectors, API endpoints, and signal rules | CI runs ruff + tsc + vite on every push |
 
@@ -43,12 +47,18 @@ the right answer when something is mid-refactor is to say so.
 |-----------|---------------------------|
 | Repo presentation | This file. `README.md`. `CLAUDE.md`. Keeping surface-level docs in sync with the rebuild as it lands. |
 
-**Recently completed (Session 33):**
+**Recently completed (Session 33–34):**
 - ~~Signal / Detection / Finding three-table pipeline~~ → Collapsed to single `Finding` model with `status` + `evidence_weight` dimensions. Frontend fully updated.
 - ~~Signal rule set~~ → Cut from 29 to 14 rules, all grounded in real investigation patterns.
 - ~~Referral package exporter~~ → Shipped. Deterministic PDF with citations, financial tables, and document index.
 - ~~`SocialMediaConnection` model~~ → Removed. Use `Document` + `Relationship` instead.
 - ~~`GovernmentReferral` model~~ → Removed. The system produces the package; tracking what happens afterward is out of scope.
+- ~~Inline notes on entities~~ → Shipped. Sticky notes on documents, entities, and findings via reusable StickyNotes component.
+- ~~Finding → Document linking~~ → Findings now show source document filename (not truncated UUID). Pipeline tab shows clickable document names.
+- ~~Financial anomaly highlighting~~ → Financials tab flags revenue spikes, zero officer comp, low program ratios, asset/revenue mismatch.
+- ~~Document workspace~~ → Document viewer now has 6 tabs: Document, Entities, Notes, Findings, Financials, Info.
+- ~~Entity → Documents quick-view~~ → Entity detail page shows related documents, findings, and sticky notes.
+- ~~22 stale field references in views.py~~ → Fixed `detected_summary` → `description`, `detected_at` → `created_at`, `signal__case` → `finding__case` across dashboard, graph, search, export, and AI endpoints.
 
 ---
 
@@ -59,9 +69,9 @@ In rough priority order. Subject to change as the rebuild progresses.
 1. ~~**Deterministic referral package exporter**~~ — **DONE.** PDF with cover page, executive summary, findings with citations, financial tables, and document index with SHA-256 hashes.
 2. ~~**Pre-loaded demo case**~~ — **DONE.** "Bright Future Foundation" — fictional scenario with 9 findings across 6 signal rules, exercising the full pipeline.
 3. **Short demo video + README screenshots** — paired with the demo case.
-4. **Inline notes on entities** — currently only findings support investigator notes.
+4. ~~**Inline notes on entities**~~ — **DONE.** Sticky notes on documents, entities, and findings.
 5. **Saved searches** — recurring queries on the entity browser.
-6. **Document annotation** — highlight and comment on PDFs in-app.
+6. ~~**Document annotation**~~ — **Partially addressed.** Document workspace with sticky notes replaces the need for in-app PDF annotation for now.
 7. **ODNR parcel API recovery** — external API has been unreachable from Railway for weeks; monitoring for upstream fix.
 
 ---

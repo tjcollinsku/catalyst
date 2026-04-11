@@ -1,11 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { fetchEntities, isAbortError } from "../api";
+import { fetchEntityDetail, isAbortError } from "../api";
 import { EntityItem, EntityType } from "../types";
 import { EmptyState } from "../components/ui/EmptyState";
+import { StickyNotes } from "../components/ui/StickyNotes";
 import { formatDate } from "../utils/format";
 import { loadLaunchers, buildSearchUrl } from "../data/externalSearchLaunchers";
 import styles from "./EntityDetailView.module.css";
+
+interface RelatedDocument {
+    id: string;
+    filename: string;
+    doc_type: string;
+    page_reference?: string;
+    context_note?: string;
+}
+
+interface RelatedFinding {
+    id: string;
+    title: string;
+    severity: string;
+    status: string;
+    context_note: string | undefined;
+}
 
 const ENTITY_TYPE_LABELS: Record<EntityType, string> = {
     person: "Person",
@@ -25,17 +42,38 @@ export function EntityDetailView() {
     const { entityType, entityId } = useParams<{ entityType: string; entityId: string }>();
     const navigate = useNavigate();
     const [entity, setEntity] = useState<EntityItem | null>(null);
+    const [relatedDocuments, setRelatedDocuments] = useState<RelatedDocument[]>([]);
+    const [relatedFindings, setRelatedFindings] = useState<RelatedFinding[]>([]);
     const [loading, setLoading] = useState(true);
 
     const load = useCallback(async (signal: AbortSignal) => {
         if (!entityType || !entityId) return;
         setLoading(true);
         try {
-            // Fetch entities of this type and find the matching one
-            const res = await fetchEntities({ type: entityType }, 200, 0, { signal });
+            const data = await fetchEntityDetail(entityType, entityId, { signal });
             if (!signal.aborted) {
-                const match = res.results.find((e) => e.id === entityId) ?? null;
-                setEntity(match);
+                // Map the response to EntityItem (ensure required fields exist)
+                const entityData: EntityItem = {
+                    id: String(data.id),
+                    entity_type: (data.entity_type || entityType) as EntityType,
+                    name: String(data.name || ""),
+                    case_id: String(data.case_id || ""),
+                    case_name: String(data.case_name || ""),
+                    notes: String(data.notes || ""),
+                    created_at: String(data.created_at || ""),
+                    updated_at: String(data.updated_at || ""),
+                    // Spread any other fields that exist
+                    ...data,
+                };
+                setEntity(entityData);
+
+                // Extract related documents if available
+                const docs = (data.related_documents as RelatedDocument[] | undefined) || [];
+                setRelatedDocuments(docs);
+
+                // Extract related findings if available
+                const findings = (data.related_findings as RelatedFinding[] | undefined) || [];
+                setRelatedFindings(findings);
             }
         } catch (err) {
             if (!isAbortError(err)) console.error(err);
@@ -199,6 +237,76 @@ export function EntityDetailView() {
                         <p>{entity.notes}</p>
                     </section>
                 )}
+
+                {/* Related Documents */}
+                {relatedDocuments.length > 0 && (
+                    <section className={styles.infoCard}>
+                        <h3>{"\uD83D\uDCC4"} Related Documents ({relatedDocuments.length})</h3>
+                        <div className={styles.documentList}>
+                            {relatedDocuments.map((doc) => (
+                                <div key={doc.id} className={styles.documentItem}>
+                                    <button
+                                        className={styles.documentLink}
+                                        onClick={() => navigate(`/cases/${entity.case_id}`)}
+                                        title="Navigate to case Documents tab"
+                                    >
+                                        <span className={styles.documentIcon}>{"\uD83D\uDCC4"}</span>
+                                        <span className={styles.documentName}>{doc.filename}</span>
+                                    </button>
+                                    <span className={styles.documentType}>{doc.doc_type}</span>
+                                    {doc.page_reference && (
+                                        <span className={styles.pageRef}>{doc.page_reference}</span>
+                                    )}
+                                    {doc.context_note && (
+                                        <p className={styles.contextNote}>{doc.context_note}</p>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+                )}
+
+                {/* Related Findings */}
+                {relatedFindings.length > 0 && (
+                    <section className={styles.infoCard}>
+                        <h3>{"\u26A0\uFE0F"} Related Findings ({relatedFindings.length})</h3>
+                        <div className={styles.findingsList}>
+                            {relatedFindings.map((finding) => (
+                                <button
+                                    key={finding.id}
+                                    className={styles.findingCard}
+                                    onClick={() => navigate(`/cases/${entity.case_id}`)}
+                                    title="Navigate to case Pipeline tab"
+                                >
+                                    <div className={styles.findingHeader}>
+                                        <span className={styles.findingTitle}>{finding.title}</span>
+                                        <span className={`${styles.severityBadge} ${styles[`severity${finding.severity}`]}`}>
+                                            {finding.severity}
+                                        </span>
+                                    </div>
+                                    <div className={styles.findingFooter}>
+                                        <span className={styles.statusBadge}>{finding.status}</span>
+                                        {finding.context_note && (
+                                            <span className={styles.findingContext}>{finding.context_note}</span>
+                                        )}
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </section>
+                )}
+
+                {/* Sticky Notes */}
+                <section className={styles.infoCard}>
+                    <h3>{"\uD83D\uDCDD"} Notes</h3>
+                    {entityType && entityId && (
+                        <StickyNotes
+                            caseId={entity.case_id}
+                            targetType={entityType}
+                            targetId={entityId}
+                        />
+                    )}
+                </section>
 
                 {/* External search launchers */}
                 <section className={styles.infoCard}>

@@ -166,6 +166,105 @@
     padding: 16px;
 }
 
+.entityList {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0 1rem;
+}
+
+.entityItem {
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-sm, 6px);
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+    margin-bottom: 0.4rem;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.entityItem:hover {
+    background: rgba(69, 137, 255, 0.08);
+    border-color: rgba(69, 137, 255, 0.2);
+}
+
+.roleTags {
+    font-size: 0.78rem;
+    color: var(--text-soft);
+}
+
+.ein {
+    font-size: 0.78rem;
+    color: var(--text-soft);
+    font-family: "SF Mono", "Fira Code", monospace;
+}
+
+.contextNote {
+    font-size: 0.78rem;
+    color: var(--text-soft);
+    margin: 0.25rem 0 0;
+    font-style: italic;
+}
+
+/* Notes tab */
+.notesTab {
+    padding: 16px;
+}
+
+/* Findings tab */
+.findingsTab {
+    padding: 16px;
+}
+
+.findingsList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.findingCard {
+    padding: 0.6rem 0.75rem;
+    border-radius: var(--radius-sm, 6px);
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+    margin-bottom: 0.5rem;
+    background: var(--surface-1, rgba(255, 255, 255, 0.03));
+}
+
+.findingHeader {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.3rem;
+    font-size: 0.75rem;
+}
+
+.findingSev {
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.65rem;
+    letter-spacing: 0.03em;
+}
+
+.findingRule {
+    font-family: "SF Mono", "Fira Code", monospace;
+    color: var(--text-soft);
+    font-size: 0.72rem;
+}
+
+.findingStatus {
+    margin-left: auto;
+    padding: 0.1rem 0.4rem;
+    border-radius: var(--radius-sm, 4px);
+    background: rgba(69, 137, 255, 0.1);
+    color: var(--accent);
+    font-size: 0.65rem;
+    font-weight: 500;
+}
+
+.findingDesc {
+    font-size: 0.78rem;
+    color: var(--text-soft);
+    margin: 0.3rem 0 0;
+    line-height: 1.4;
+}
+
 /* Financials section */
 .financials {
     padding: 16px;

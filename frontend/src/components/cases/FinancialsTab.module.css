@@ -114,3 +114,54 @@
     padding: 3px 8px;
     border-radius: 4px;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Anomaly Detection & Highlighting
+   ══════════════════════════════════════════════════════════════ */
+
+.anomalySummary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    margin-bottom: 16px;
+    padding: 8px;
+    background: var(--surface-subtle, rgba(0, 0, 0, 0.02));
+    border-radius: 6px;
+    border-left: 3px solid var(--accent-warn, #f59e0b);
+}
+
+.anomalyChip {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 6px 10px;
+    border-radius: 12px;
+    white-space: nowrap;
+    user-select: text;
+}
+
+.anomalyChip.severityError {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--text-error, #dc2626);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.anomalyChip.severityWarning {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--text-warn, #d97706);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* Cell-level anomaly highlighting */
+.cellError {
+    background: rgba(239, 68, 68, 0.12);
+    color: var(--text-error, #dc2626);
+    font-weight: 500;
+}
+
+.cellWarning {
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--text-warn, #d97706);
+    font-weight: 500;
+}

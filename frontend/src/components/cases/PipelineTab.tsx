@@ -210,6 +210,27 @@ export function PipelineTab() {
                     </div>
                 )}
 
+                {/* Trigger document link */}
+                {(finding.trigger_doc_filename || finding.document_links.length > 0) && (
+                    <div style={{
+                        fontSize: "var(--text-xs)",
+                        color: "var(--accent)",
+                        marginTop: "0.25rem",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.25rem",
+                    }}>
+                        📄 {finding.trigger_doc_filename
+                            ?? finding.document_links[0]?.document_filename
+                            ?? "Linked document"}
+                        {finding.document_links.length > 1 && (
+                            <span style={{ color: "var(--text-soft)" }}>
+                                {` +${finding.document_links.length - 1} more`}
+                            </span>
+                        )}
+                    </div>
+                )}
+
                 {/* Source badge */}
                 {finding.source === "MANUAL" && (
                     <span style={{
@@ -539,25 +560,101 @@ function FindingDetailPanel({
                 </div>
             </SlidePanelSection>
 
-            {/* Linked entities + documents */}
-            {(finding.entity_links.length > 0 || finding.document_links.length > 0) && (
+            {/* Linked documents */}
+            <SlidePanelSection
+                title="Source Documents"
+                defaultOpen
+                count={finding.document_links.length + (finding.trigger_doc_id && !finding.document_links.some(dl => dl.document_id === finding.trigger_doc_id) ? 1 : 0)}
+            >
+                {/* Show trigger doc if not already in document_links */}
+                {finding.trigger_doc_id && finding.trigger_doc_filename && !finding.document_links.some(dl => dl.document_id === finding.trigger_doc_id) && (
+                    <div style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.4rem",
+                        padding: "0.35rem 0.5rem",
+                        margin: "0.2rem 0",
+                        borderRadius: "var(--radius-sm)",
+                        background: "rgba(69, 137, 255, 0.08)",
+                        fontSize: "var(--text-xs)",
+                    }}>
+                        <span>📄</span>
+                        <span style={{ color: "var(--accent)", fontWeight: 500 }}>
+                            {finding.trigger_doc_filename}
+                        </span>
+                        <span style={{ color: "var(--text-soft)", marginLeft: "auto" }}>
+                            Trigger
+                        </span>
+                    </div>
+                )}
+                {finding.document_links.map((dl, i) => (
+                    <div
+                        key={i}
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.4rem",
+                            padding: "0.35rem 0.5rem",
+                            margin: "0.2rem 0",
+                            borderRadius: "var(--radius-sm)",
+                            background: "rgba(69, 137, 255, 0.08)",
+                            fontSize: "var(--text-xs)",
+                        }}
+                    >
+                        <span>📄</span>
+                        <span style={{ color: "var(--accent)", fontWeight: 500 }}>
+                            {dl.document_filename || `Doc ${dl.document_id.slice(0, 8)}`}
+                        </span>
+                        {dl.page_reference && (
+                            <span style={{ color: "var(--text-soft)" }}>
+                                p. {dl.page_reference}
+                            </span>
+                        )}
+                        {dl.context_note && (
+                            <span style={{ color: "var(--text-soft)", marginLeft: "auto" }}>
+                                {dl.context_note}
+                            </span>
+                        )}
+                    </div>
+                ))}
+                {finding.document_links.length === 0 && !finding.trigger_doc_id && (
+                    <p style={{ fontSize: "var(--text-xs)", color: "var(--text-soft)", margin: "0.2rem 0", fontStyle: "italic" }}>
+                        No documents linked yet. Upload documents and re-evaluate findings.
+                    </p>
+                )}
+            </SlidePanelSection>
+
+            {/* Linked entities */}
+            {finding.entity_links.length > 0 && (
                 <SlidePanelSection
-                    title="Linked Evidence"
+                    title="Linked Entities"
                     defaultOpen
-                    count={finding.entity_links.length + finding.document_links.length}
+                    count={finding.entity_links.length}
                 >
                     {finding.entity_links.map((el, i) => (
-                        <p key={i} style={{ fontSize: "var(--text-xs)", color: "var(--text-soft)", margin: "0.2rem 0" }}>
-                            {el.entity_type}: {el.entity_id.slice(0, 8)}
-                            {el.context_note && ` — ${el.context_note}`}
-                        </p>
-                    ))}
-                    {finding.document_links.map((dl, i) => (
-                        <p key={i} style={{ fontSize: "var(--text-xs)", color: "var(--text-soft)", margin: "0.2rem 0" }}>
-                            Doc: {dl.document_id.slice(0, 8)}
-                            {dl.page_reference && ` (p. ${dl.page_reference})`}
-                            {dl.context_note && ` — ${dl.context_note}`}
-                        </p>
+                        <div
+                            key={i}
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "0.4rem",
+                                padding: "0.35rem 0.5rem",
+                                margin: "0.2rem 0",
+                                borderRadius: "var(--radius-sm)",
+                                background: "rgba(69, 137, 255, 0.08)",
+                                fontSize: "var(--text-xs)",
+                            }}
+                        >
+                            <span>{el.entity_type === "person" ? "👤" : el.entity_type === "organization" ? "🏢" : "📍"}</span>
+                            <span style={{ color: "var(--text-main)" }}>
+                                {el.entity_type}: {el.entity_id.slice(0, 8)}
+                            </span>
+                            {el.context_note && (
+                                <span style={{ color: "var(--text-soft)", marginLeft: "auto" }}>
+                                    {el.context_note}
+                                </span>
+                            )}
+                        </div>
                     ))}
                 </SlidePanelSection>
             )}

@@ -15,6 +15,7 @@ import {
     FinancialSnapshotItem,
     FindingItem,
     FindingUpdatePayload,
+    InvestigatorNote,
     NewCasePayload,
     NewFindingPayload,
     PaginatedResponse,
@@ -421,6 +422,16 @@ export async function fetchEntities(
     );
 }
 
+export async function fetchEntityDetail(
+    entityType: string,
+    entityId: string,
+    options?: ApiRequestOptions
+): Promise<Record<string, unknown>> {
+    return request<Record<string, unknown>>(
+        `/api/entities/${entityType}/${entityId}/`, {}, options,
+    );
+}
+
 export async function fetchActivityFeed(
     limit = 20,
     options?: ApiRequestOptions
@@ -754,5 +765,58 @@ export async function addResearchToCase(
     return request<AddToCaseResult>(`/api/cases/${caseId}/research/add-to-case/`, {
         method: "POST",
         body: JSON.stringify({ source, data }),
+    }, options);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Investigator notes (sticky notes)
+   ═══════════════════════════════════════════════════════════════ */
+
+export interface FetchNotesResult {
+    count: number;
+    results: InvestigatorNote[];
+}
+
+export async function fetchNotes(
+    caseId: string,
+    targetType?: string,
+    targetId?: string,
+    options?: ApiRequestOptions
+): Promise<FetchNotesResult> {
+    const params = new URLSearchParams();
+    if (targetType) params.set("target_type", targetType);
+    if (targetId) params.set("target_id", targetId);
+    const query = params.toString() ? `?${params}` : "";
+    return request<FetchNotesResult>(
+        `/api/cases/${caseId}/notes/${query}`,
+        {},
+        options
+    );
+}
+
+export async function createNote(
+    caseId: string,
+    targetType: string,
+    targetId: string,
+    content: string,
+    options?: ApiRequestOptions
+): Promise<InvestigatorNote> {
+    return request<InvestigatorNote>(`/api/cases/${caseId}/notes/`, {
+        method: "POST",
+        body: JSON.stringify({
+            target_type: targetType,
+            target_id: targetId,
+            content,
+        }),
+    }, options);
+}
+
+export async function deleteNote(
+    caseId: string,
+    noteId: string,
+    options?: ApiRequestOptions
+): Promise<void> {
+    return request<void>(`/api/cases/${caseId}/notes/${noteId}/`, {
+        method: "DELETE",
     }, options);
 }

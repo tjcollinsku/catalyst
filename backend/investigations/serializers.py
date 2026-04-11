@@ -697,7 +697,13 @@ def serialize_finding(finding) -> dict:
         "legal_refs": finding.legal_refs,
         "evidence_snapshot": finding.evidence_snapshot,
         "trigger_doc_id": (
-            str(finding.trigger_doc_id) if finding.trigger_doc_id else None
+            str(finding.trigger_doc_id)
+            if finding.trigger_doc_id else None
+        ),
+        "trigger_doc_filename": (
+            finding.trigger_doc.filename
+            if finding.trigger_doc_id and finding.trigger_doc
+            else None
         ),
         "trigger_entity_id": (
             str(finding.trigger_entity_id)
@@ -716,10 +722,16 @@ def serialize_finding(finding) -> dict:
         "document_links": [
             {
                 "document_id": str(link.document_id),
+                "document_filename": (
+                    link.document.filename
+                    if link.document else ""
+                ),
                 "page_reference": link.page_reference,
                 "context_note": link.context_note,
             }
-            for link in finding.document_links.all()
+            for link in finding.document_links.select_related(
+                "document"
+            )
         ],
     }
 

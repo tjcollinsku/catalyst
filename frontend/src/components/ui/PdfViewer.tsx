@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { DocumentItem, DocumentDetail } from "../../types";
-import { fetchDocumentDetail } from "../../api";
+import { useNavigate } from "react-router-dom";
+import { DocumentItem, DocumentDetail, FindingItem } from "../../types";
+import { fetchDocumentDetail, fetchCaseFindings } from "../../api";
 import { StateBlock } from "./StateBlock";
 import { EmptyState } from "./EmptyState";
+import { StickyNotes } from "./StickyNotes";
 import styles from "./PdfViewer.module.css";
 
 interface PdfViewerProps {
@@ -20,12 +22,16 @@ function formatMoney(val: number | null | undefined): string {
  * Slide-over document viewer with PDF preview + data tabs.
  * Shows entities, financials, and metadata extracted from the document.
  */
+type TabKey = "pdf" | "entities" | "financials" | "notes" | "findings" | "info";
+
 export function PdfViewer({ document: doc, caseId, onClose }: PdfViewerProps) {
     const panelRef = useRef<HTMLDivElement>(null);
+    const navigate = useNavigate();
     const [isOpen, setIsOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState<"pdf" | "entities" | "financials" | "info">("pdf");
+    const [activeTab, setActiveTab] = useState<TabKey>("pdf");
     const [detail, setDetail] = useState<DocumentDetail | null>(null);
     const [loading, setLoading] = useState(false);
+    const [docFindings, setDocFindings] = useState<FindingItem[]>([]);
 
     // Animate in on mount
     useEffect(() => {
@@ -42,6 +48,21 @@ export function PdfViewer({ document: doc, caseId, onClose }: PdfViewerProps) {
             .finally(() => setLoading(false));
     }, [caseId, doc.id]);
 
+    // Fetch findings linked to this document
+    useEffect(() => {
+        if (!caseId) return;
+        fetchCaseFindings(caseId)
+            .then((r) => {
+                const linked = (r.results || []).filter(
+                    (f: FindingItem) =>
+                        f.trigger_doc_id === doc.id ||
+                        f.document_links.some((dl) => dl.document_id === doc.id)
+                );
+                setDocFindings(linked);
+            })
+            .catch(() => {});
+    }, [caseId, doc.id]);
+
     // Close on Escape
     useEffect(() => {
         function handleKey(e: KeyboardEvent) {
@@ -52,15 +73,28 @@ export function PdfViewer({ document: doc, caseId, onClose }: PdfViewerProps) {
     }, [onClose]);
 
     const is990 = doc.doc_type === "IRS_990" || doc.doc_type === "IRS_990T";
+    const entityCount = detail
+        ? (detail.persons?.length || 0) + (detail.organizations?.length || 0)
+        : 0;
 
     function handleClose() {
         setIsOpen(false);
         setTimeout(onClose, 200);
     }
 
-    const tabs: { key: typeof activeTab; label: string; show: boolean }[] = [
+    const SEV_COLORS: Record<string, string> = {
+        CRITICAL: "#dc2626",
+        HIGH: "#ea580c",
+        MEDIUM: "#ca8a04",
+        LOW: "#16a34a",
+        INFORMATIONAL: "#6b7280",
+    };
+
+    const tabs: { key: TabKey; label: string; show: boolean }[] = [
         { key: "pdf", label: "Document", show: true },
-        { key: "entities", label: `Entities${detail ? ` (${(detail.persons?.length || 0) + (detail.organizations?.length || 0)})` : ""}`, show: true },
+        { key: "entities", label: `Entities${entityCount ? ` (${entityCount})` : ""}`, show: true },
+        { key: "notes", label: "Notes", show: true },
+        { key: "findings", label: `Findings${docFindings.length ? ` (${docFindings.length})` : ""}`, show: true },
         { key: "financials", label: "Financials", show: is990 },
         { key: "info", label: "Info", show: true },
     ];
@@ -116,15 +150,20 @@ export function PdfViewer({ document: doc, caseId, onClose }: PdfViewerProps) {
                         <div className={styles.entities}>
                             {(detail.persons?.length ?? 0) > 0 && (
                                 <section>
-                                    <h4>Persons ({detail.persons!.length})</h4>
-                                    <ul className="entity-list">
+                                    <h4>{"\uD83D\uDC64"} Persons ({detail.persons!.length})</h4>
+                                    <ul className={styles.entityList}>
                                         {detail.persons!.map(p => (
-                                            <li key={p.id}>
+                                            <li
+                                                key={p.id}
+                                                className={styles.entityItem}
+                                                onClick={() => navigate(`/entities/person/${p.id}`)}
+                                                style={{ cursor: "pointer" }}
+                                            >
                                                 <strong>{p.full_name}</strong>
                                                 {p.role_tags.length > 0 && (
-                                                    <span className="role-tags"> — {p.role_tags.join(", ")}</span>
+                                                    <span className={styles.roleTags}> — {p.role_tags.join(", ")}</span>
                                                 )}
-                                                {p.context_note && <p className="context-note">{p.context_note}</p>}
+                                                {p.context_note && <p className={styles.contextNote}>{p.context_note}</p>}
                                             </li>
                                         ))}
                                     </ul>
@@ -132,20 +171,67 @@ export function PdfViewer({ document: doc, caseId, onClose }: PdfViewerProps) {
                             )}
                             {(detail.organizations?.length ?? 0) > 0 && (
                                 <section>
-                                    <h4>Organizations ({detail.organizations!.length})</h4>
-                                    <ul className="entity-list">
+                                    <h4>{"\uD83C\uDFE2"} Organizations ({detail.organizations!.length})</h4>
+                                    <ul className={styles.entityList}>
                                         {detail.organizations!.map(o => (
-                                            <li key={o.id}>
+                                            <li
+                                                key={o.id}
+                                                className={styles.entityItem}
+                                                onClick={() => navigate(`/entities/organization/${o.id}`)}
+                                                style={{ cursor: "pointer" }}
+                                            >
                                                 <strong>{o.name}</strong>
-                                                {o.ein && <span className="ein"> (EIN: {o.ein})</span>}
-                                                {o.context_note && <p className="context-note">{o.context_note}</p>}
+                                                {o.ein && <span className={styles.ein}> (EIN: {o.ein})</span>}
+                                                {o.context_note && <p className={styles.contextNote}>{o.context_note}</p>}
                                             </li>
                                         ))}
                                     </ul>
                                 </section>
                             )}
-                            {(detail.persons?.length ?? 0) === 0 && (detail.organizations?.length ?? 0) === 0 && (
+                            {entityCount === 0 && (
                                 <EmptyState title="No entities" detail="No entities linked to this document." />
+                            )}
+                        </div>
+                    )}
+
+                    {activeTab === "notes" && (
+                        <div className={styles.notesTab}>
+                            <StickyNotes caseId={caseId} targetType="document" targetId={doc.id} />
+                        </div>
+                    )}
+
+                    {activeTab === "findings" && (
+                        <div className={styles.findingsTab}>
+                            {docFindings.length > 0 ? (
+                                <ul className={styles.findingsList}>
+                                    {docFindings.map(f => (
+                                        <li key={f.id} className={styles.findingCard}>
+                                            <div className={styles.findingHeader}>
+                                                <span
+                                                    className={styles.findingSev}
+                                                    style={{ color: SEV_COLORS[f.severity] ?? "#6b7280" }}
+                                                >
+                                                    {f.severity}
+                                                </span>
+                                                <span className={styles.findingRule}>{f.rule_id || "MANUAL"}</span>
+                                                <span className={styles.findingStatus}>{f.status}</span>
+                                            </div>
+                                            <strong>{f.title}</strong>
+                                            {f.description && (
+                                                <p className={styles.findingDesc}>
+                                                    {f.description.length > 200
+                                                        ? f.description.slice(0, 200) + "..."
+                                                        : f.description}
+                                                </p>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <EmptyState
+                                    title="No findings from this document"
+                                    detail="Run signal analysis to detect findings, or findings may be linked to other documents."
+                                />
                             )}
                         </div>
                     )}

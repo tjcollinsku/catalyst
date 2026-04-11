@@ -38,6 +38,7 @@ export interface FindingEntityLink {
 
 export interface FindingDocumentLink {
     document_id: string;
+    document_filename: string;
     page_reference: string;
     context_note: string;
 }
@@ -56,6 +57,7 @@ export interface FindingItem {
     legal_refs: string[];
     evidence_snapshot: Record<string, unknown>;
     trigger_doc_id: string | null;
+    trigger_doc_filename: string | null;
     trigger_entity_id: string | null;
     created_at: string;
     updated_at: string;
@@ -429,4 +431,16 @@ export interface ResearchResult {
     notes: string[];
     error?: string;
     staleness_warning?: { level: string; message: string };
+}
+
+/* ── Investigator notes (sticky notes) ────────────────────────── */
+export interface InvestigatorNote {
+    id: string;
+    case_id: string;
+    target_type: string;
+    target_id: string;
+    content: string;
+    created_by: string;
+    created_at: string;
+    updated_at: string;
 }

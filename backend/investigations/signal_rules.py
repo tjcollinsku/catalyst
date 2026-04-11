@@ -1449,6 +1449,7 @@ def persist_signals(case, triggers: list[SignalTrigger]) -> list:
     from .models import (
         EvidenceWeight,
         Finding,
+        FindingDocument,
         FindingSource,
         FindingStatus,
     )
@@ -1490,6 +1491,15 @@ def persist_signals(case, triggers: list[SignalTrigger]) -> list:
             trigger_doc=trigger_doc,
             trigger_entity_id=trigger.trigger_entity_id,
         )
+        # Create FindingDocument M2M link so the UI can show
+        # which document triggered this finding.
+        if trigger_doc:
+            FindingDocument.objects.get_or_create(
+                finding=finding,
+                document=trigger_doc,
+                defaults={"context_note": "Trigger document"},
+            )
+
         created.append(finding)
         logger.info(
             "finding_created",

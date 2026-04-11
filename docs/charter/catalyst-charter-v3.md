@@ -15,6 +15,15 @@ Intelligence Triage Platform
 
 *"The most dangerous feature is the one that removes human judgment."*
 
+> **Note (April 2026):** This charter predates the Session 32 product reframe.
+> Key changes since v3 was written: the Signal/Detection/Finding three-table
+> pipeline was collapsed into a single Finding model (22 models, down from 27);
+> signal rules were cut from 29 to 14; AI-generated referral memo (Milestone 3)
+> was replaced by a deterministic, citation-bearing PDF exporter; the
+> GovernmentReferral and SocialMediaConnection models were removed; deployment
+> moved from IBM Cloud to Railway. See [STATUS.md](../../STATUS.md) for the
+> current state of every subsystem.
+
 ## Document Control
 
 | Version | Date | Author | Summary of Changes |
@@ -39,7 +48,7 @@ Catalyst solves the organizational problems exposed by that investigation: a sec
 Charter v3 reflects the project as it actually exists after 21 development sessions, not as originally imagined. Key changes:
 
 - **Architecture locked as monolith.** The microservices aspiration from v2 is removed. The Django monolith with logical module separation is the correct architecture for this project. See AD-001 in design-decisions.md.
-- **Database schema expanded.** 21 models (up from ~13 in v2) including FinancialSnapshot, Detection, InvestigatorNote, and expanded entity fields.
+- **Database schema expanded.** 22 models (consolidated from 27 — Signal, Detection, GovernmentReferral, SocialMediaConnection removed; Finding, FindingEntity, FindingDocument added). See note above.
 - **Connectors complete.** 6 of 7 planned connectors are built and tested (555+ tests). Only Ohio UCC remains.
 - **Security infrastructure added.** CSRF, rate limiting, PDF validation, URL domain allowlists, extraction status tracking — none of this was in v2.
 - **Relationship graph descoped from V1.** The graph (FR-501 through FR-507) is deferred to V2. The data model supports it, but building a graph visualization is a multi-session effort that would delay the demo-ready release.
@@ -81,7 +90,7 @@ All seven FR-5xx requirements are deferred to V2.
 
 ### 3.6 Signal Detection (FR-601 through FR-605)
 
-*Updated from v2.* The signal engine now implements 16 signal types (up from 10 in v2). The additional 6 types were added based on patterns discovered during connector development:
+*Updated from v2, then cut in Session 32.* The signal engine now implements 14 rules (cut from 29 — only rules grounded in the founding investigation were retained). The additional types listed below from v3 were partially merged or cut:
 
 | Rule ID | Severity | Description | Source |
 |---------|----------|-------------|--------|
@@ -98,7 +107,7 @@ FR-605 (extensible rules without redeployment) is partially met — rules are ex
 
 *Updated from v2.* FR-701 through FR-704 are implemented. FR-705 (Patterns linking multiple Findings) is deferred to V2.
 
-**Addition:** The Detection model was added as an intermediate step between Signal and Finding, providing a more granular workflow: Signal (automated) → Detection (confirmed anomaly) → Finding (investigator narrative).
+**Update (Session 32–33):** The Detection model and Signal model were removed. The three-table pipeline (Signal → Detection → Finding) was collapsed into a single Finding model with two dimensions: `status` (NEW / NEEDS_EVIDENCE / DISMISSED / CONFIRMED) and `evidence_weight` (SPECULATIVE / DIRECTIONAL / DOCUMENTED / TRACED).
 
 ### 3.8 Referral Memo Generation (FR-801 through FR-805)
 
@@ -211,19 +220,19 @@ PostgreSQL 16
 
 ## 6. Database Schema
 
-21 Django ORM models across 15 migrations. Full model documentation is in docs/project/architecture.md.
+22 Django ORM models (consolidated from 27 in Session 33). Full model documentation in CLAUDE.md.
 
 ### Core Models
 Case, Document, Person, Organization, Property, FinancialInstrument
 
 ### Analysis Models
-Signal (16 types), Detection, Finding, FinancialSnapshot
+Finding (consolidated — replaces Signal + Detection + old Finding), FinancialSnapshot
 
 ### Linking Models
-PersonDocument, OrgDocument, PersonOrganization, PropertyTransaction, FindingEntity, FindingDocument, EntitySignal
+PersonDocument, OrgDocument, PersonOrganization, PropertyTransaction, FindingEntity, FindingDocument
 
 ### Operational Models
-AuditLog, GovernmentReferral, InvestigatorNote
+AuditLog, InvestigatorNote
 
 ### Key Design Choices
 - UUID primary keys everywhere (except GovernmentReferral — sequential for human readability)
