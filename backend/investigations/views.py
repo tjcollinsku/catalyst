@@ -21,10 +21,12 @@ from .models import (
     Case,
     Document,
     DocumentType,
+    EvidenceWeight,
     FinancialInstrument,
     FinancialSnapshot,
     Finding,
     FindingEntity,
+    FindingStatus,
     InvestigatorNote,
     OcrStatus,
     Organization,
@@ -113,7 +115,8 @@ def _save_financial_snapshot(document, case, financials, meta):
         model_field = _KEY_MAP.get(field_key)
         # Normalize value: extraction uses "value", legacy uses "current_year"
         val = (
-            item.get("current_year") if item.get("current_year") is not None else item.get("value")
+            item.get("current_year") if item.get(
+                "current_year") is not None else item.get("value")
         )
         if model_field and val is not None:
             defaults[model_field] = val
@@ -136,7 +139,8 @@ def _save_financial_snapshot(document, case, financials, meta):
             defaults["organization"] = org
 
     # Calculate confidence based on how many key fields we got
-    key_fields = ["total_revenue", "total_expenses", "total_assets_eoy", "net_assets_eoy"]
+    key_fields = ["total_revenue", "total_expenses",
+                  "total_assets_eoy", "net_assets_eoy"]
     filled = sum(1 for f in key_fields if defaults.get(f) is not None)
     defaults["confidence"] = round(filled / len(key_fields), 2)
 
@@ -195,9 +199,11 @@ def _generate_forensic_filename(
         # --- Date selection ---
         # For parcel records, prefer the SOLD date (most forensically relevant)
         if doc_type == "PARCEL_RECORD":
-            sold_match = _re.search(r"SOLD:\s+(\d{1,2})/(\d{1,2})/(\d{4})", extracted_text)
+            sold_match = _re.search(
+                r"SOLD:\s+(\d{1,2})/(\d{1,2})/(\d{4})", extracted_text)
             if sold_match:
-                m, d, y = sold_match.group(1), sold_match.group(2), sold_match.group(3)
+                m, d, y = sold_match.group(
+                    1), sold_match.group(2), sold_match.group(3)
                 yr = int(y)
                 if yr >= 1950:  # skip placeholder dates like 11/11/1900
                     date_str = f"{yr}-{int(m):02d}-{int(d):02d}"
@@ -213,7 +219,8 @@ def _generate_forensic_filename(
         # For parcel records, get owner directly from the label-value pattern
         # (ALL-CAPS owner names don't match the title-case org regex)
         if doc_type == "PARCEL_RECORD":
-            owner_match = _re.search(r"Owner\s*\n\s*(.+?)$", extracted_text, _re.MULTILINE)
+            owner_match = _re.search(
+                r"Owner\s*\n\s*(.+?)$", extracted_text, _re.MULTILINE)
             if owner_match:
                 entity = owner_match.group(1).strip()
 
@@ -302,7 +309,8 @@ def _extract_property_data(extracted_text, doc_type, document, case):
                 "address": card.address or "",
                 "county": card.county or "DARKE",
                 "assessed_value": (
-                    Decimal(str(card.current_assessed)) if card.current_assessed else None
+                    Decimal(str(card.current_assessed)
+                            ) if card.current_assessed else None
                 ),
                 "purchase_price": (
                     Decimal(str(card.most_recent_sale_price))
@@ -335,7 +343,8 @@ def _extract_property_data(extracted_text, doc_type, document, case):
                 if len(parts) == 3:
                     from datetime import date
 
-                    sale_date = date(int(parts[2]), int(parts[0]), int(parts[1]))
+                    sale_date = date(int(parts[2]), int(
+                        parts[0]), int(parts[1]))
             except (ValueError, IndexError):
                 pass
 
@@ -449,7 +458,8 @@ def _extract_property_data(extracted_text, doc_type, document, case):
                 from datetime import datetime as _dt
 
                 if isinstance(deed.recording_date, str):
-                    recording_date = _dt.strptime(deed.recording_date, "%Y-%m-%d").date()
+                    recording_date = _dt.strptime(
+                        deed.recording_date, "%Y-%m-%d").date()
                 elif isinstance(deed.recording_date, date):
                     recording_date = deed.recording_date
             except (ValueError, TypeError):
@@ -591,7 +601,8 @@ def _process_uploaded_file(
             from .extraction import extract_from_pdf
 
             abs_path = default_storage.path(saved_path)
-            extracted_text, ocr_status = extract_from_pdf(abs_path, file_size=uploaded_file.size)
+            extracted_text, ocr_status = extract_from_pdf(
+                abs_path, file_size=uploaded_file.size)
             processing_route = f"pdf_{ocr_status.lower()}"
         else:
             # Bulk uploads prioritize persistence and responsiveness; heavy extraction runs later.
@@ -618,7 +629,8 @@ def _process_uploaded_file(
                 },
             )
         except Exception:
-            logger.warning("pdf_metadata_extraction_skipped", extra={"doc_filename": safe_name})
+            logger.warning("pdf_metadata_extraction_skipped",
+                           extra={"doc_filename": safe_name})
 
     doc_type = doc_type_hint
     auto_classified = False
@@ -683,7 +695,8 @@ def _process_uploaded_file(
             from .entity_resolution import resolve_all_entities
 
             # --- Stage 1a: Fast regex extraction (always runs) ---
-            extraction_result = extract_entities(extracted_text, doc_type=doc_type)
+            extraction_result = extract_entities(
+                extracted_text, doc_type=doc_type)
 
             # --- Stage 1b: AI-enhanced extraction (best-effort) ---
             # Wraps Claude API call in try/except so regex results are never lost.
@@ -702,7 +715,8 @@ def _process_uploaded_file(
                         extra={
                             "document_id": str(document.pk),
                             "ai_proposals": (
-                                extraction_result.get("meta", {}).get("ai_proposals", 0)
+                                extraction_result.get(
+                                    "meta", {}).get("ai_proposals", 0)
                             ),
                         },
                     )
@@ -737,7 +751,8 @@ def _process_uploaded_file(
                 )
 
             # --- Stage 3: Entity resolution (DB persistence) ---
-            entity_summary = resolve_all_entities(extraction_result, case=case, document=document)
+            entity_summary = resolve_all_entities(
+                extraction_result, case=case, document=document)
             if entity_summary.fuzzy_candidates:
                 logger.info(
                     "entity_extraction_fuzzy_candidates",
@@ -759,7 +774,8 @@ def _process_uploaded_file(
         except Exception:
             logger.exception(
                 "entity_extraction_failed",
-                extra={"document_id": str(document.pk), "case_id": str(case.pk)},
+                extra={"document_id": str(
+                    document.pk), "case_id": str(case.pk)},
             )
             extraction_failures.append("entity_extraction")
 
@@ -781,7 +797,8 @@ def _process_uploaded_file(
         except Exception:
             logger.exception(
                 "financial_extraction_failed",
-                extra={"document_id": str(document.pk), "case_id": str(case.pk)},
+                extra={"document_id": str(
+                    document.pk), "case_id": str(case.pk)},
             )
             extraction_failures.append("financial_extraction")
 
@@ -797,7 +814,8 @@ def _process_uploaded_file(
         except Exception:
             logger.exception(
                 "property_extraction_failed",
-                extra={"document_id": str(document.pk), "case_id": str(case.pk)},
+                extra={"document_id": str(
+                    document.pk), "case_id": str(case.pk)},
             )
             extraction_failures.append("property_extraction")
 
@@ -879,7 +897,8 @@ def _process_uploaded_file(
         except Exception:
             logger.exception(
                 "signal_detection_failed",
-                extra={"document_id": str(document.pk), "case_id": str(case.pk)},
+                extra={"document_id": str(
+                    document.pk), "case_id": str(case.pk)},
             )
             extraction_failures.append("signal_detection")
 
@@ -943,7 +962,8 @@ def _process_existing_document(document: Document, case: Case) -> Document:
         from .extraction import extract_from_pdf
 
         abs_path = default_storage.path(document.file_path)
-        extracted_text, ocr_status = extract_from_pdf(abs_path, file_size=document.file_size)
+        extracted_text, ocr_status = extract_from_pdf(
+            abs_path, file_size=document.file_size)
         processing_route = f"existing_pdf_{ocr_status.lower()}"
 
     if document.doc_type == DocumentType.OTHER and extracted_text:
@@ -954,7 +974,8 @@ def _process_existing_document(document: Document, case: Case) -> Document:
     document.extracted_text = extracted_text or None
     document.ocr_status = ocr_status
     document.updated_at = timezone.now()
-    document.save(update_fields=["doc_type", "extracted_text", "ocr_status", "updated_at"])
+    document.save(update_fields=["doc_type",
+                  "extracted_text", "ocr_status", "updated_at"])
 
     entity_summary = None
     if extracted_text and not document.is_generated:
@@ -962,8 +983,10 @@ def _process_existing_document(document: Document, case: Case) -> Document:
             from .entity_extraction import extract_entities
             from .entity_resolution import resolve_all_entities
 
-            extraction_result = extract_entities(extracted_text, doc_type=document.doc_type)
-            entity_summary = resolve_all_entities(extraction_result, case=case, document=document)
+            extraction_result = extract_entities(
+                extracted_text, doc_type=document.doc_type)
+            entity_summary = resolve_all_entities(
+                extraction_result, case=case, document=document)
             if entity_summary.fuzzy_candidates:
                 logger.info(
                     "entity_extraction_fuzzy_candidates_existing",
@@ -976,7 +999,8 @@ def _process_existing_document(document: Document, case: Case) -> Document:
         except Exception:
             logger.exception(
                 "entity_extraction_failed_existing",
-                extra={"document_id": str(document.pk), "case_id": str(case.pk)},
+                extra={"document_id": str(
+                    document.pk), "case_id": str(case.pk)},
             )
 
     # Property extraction for parcel records and deeds
@@ -991,7 +1015,8 @@ def _process_existing_document(document: Document, case: Case) -> Document:
         except Exception:
             logger.exception(
                 "property_extraction_failed_existing",
-                extra={"document_id": str(document.pk), "case_id": str(case.pk)},
+                extra={"document_id": str(
+                    document.pk), "case_id": str(case.pk)},
             )
 
     # Forensic filename generation for deferred-pipeline documents
@@ -1021,7 +1046,8 @@ def _process_existing_document(document: Document, case: Case) -> Document:
     try:
         from .signal_rules import evaluate_case, evaluate_document, persist_signals
 
-        all_triggers = evaluate_document(case, document) + evaluate_case(case, trigger_doc=document)
+        all_triggers = evaluate_document(
+            case, document) + evaluate_case(case, trigger_doc=document)
         persist_signals(case, all_triggers)
     except Exception:
         logger.exception(
@@ -1048,7 +1074,8 @@ def _process_existing_document(document: Document, case: Case) -> Document:
 MAX_PAGE_LIMIT = 100
 
 CASE_SORT_FIELDS = {"created_at", "name", "status", "id"}
-DOCUMENT_SORT_FIELDS = {"uploaded_at", "filename", "file_size", "doc_type", "ocr_status", "id"}
+DOCUMENT_SORT_FIELDS = {"uploaded_at", "filename",
+                        "file_size", "doc_type", "ocr_status", "id"}
 
 
 logger = logging.getLogger("investigations.upload_pipeline")
@@ -1112,7 +1139,8 @@ def _parse_limit_offset(request):
             None,
             None,
             JsonResponse(
-                {"errors": {"non_field_errors": ["'offset' must be zero or greater."]}},
+                {"errors": {"non_field_errors": [
+                    "'offset' must be zero or greater."]}},
                 status=400,
             ),
         )
@@ -1124,8 +1152,10 @@ def _parse_document_filters(request):
     raw_doc_type = request.GET.get("doc_type")
     raw_ocr_status = request.GET.get("ocr_status")
 
-    valid_doc_types = {choice[0] for choice in Document._meta.get_field("doc_type").choices}
-    valid_ocr_statuses = {choice[0] for choice in Document._meta.get_field("ocr_status").choices}
+    valid_doc_types = {choice[0]
+                       for choice in Document._meta.get_field("doc_type").choices}
+    valid_ocr_statuses = {
+        choice[0] for choice in Document._meta.get_field("ocr_status").choices}
 
     if raw_doc_type and raw_doc_type not in valid_doc_types:
         return (
@@ -1170,7 +1200,8 @@ def _parse_case_filters(request):
     raw_created_from = request.GET.get("created_from")
     raw_created_to = request.GET.get("created_to")
 
-    valid_statuses = {choice[0] for choice in Case._meta.get_field("status").choices}
+    valid_statuses = {choice[0]
+                      for choice in Case._meta.get_field("status").choices}
 
     if raw_status and raw_status not in valid_statuses:
         return (
@@ -1193,11 +1224,13 @@ def _parse_case_filters(request):
     def _parse_datetime_bound(raw_value, field_name, is_end_of_day):
         return _parse_datetime_filter_bound(raw_value, field_name, is_end_of_day)
 
-    created_from, from_error = _parse_datetime_bound(raw_created_from, "created_from", False)
+    created_from, from_error = _parse_datetime_bound(
+        raw_created_from, "created_from", False)
     if from_error is not None:
         return None, None, None, None, from_error
 
-    created_to, to_error = _parse_datetime_bound(raw_created_to, "created_to", True)
+    created_to, to_error = _parse_datetime_bound(
+        raw_created_to, "created_to", True)
     if to_error is not None:
         return None, None, None, None, to_error
 
@@ -1229,7 +1262,8 @@ def _parse_datetime_filter_bound(raw_value, field_name, is_end_of_day):
     parsed_datetime = parse_datetime(raw_value)
     if parsed_datetime is not None:
         if timezone.is_naive(parsed_datetime):
-            parsed_datetime = timezone.make_aware(parsed_datetime, timezone.get_current_timezone())
+            parsed_datetime = timezone.make_aware(
+                parsed_datetime, timezone.get_current_timezone())
         return parsed_datetime, None
 
     parsed_date = parse_date(raw_value)
@@ -1261,7 +1295,8 @@ def _parse_document_date_filters(request):
     if from_error is not None:
         return None, None, from_error
 
-    uploaded_to, to_error = _parse_datetime_filter_bound(raw_uploaded_to, "uploaded_to", True)
+    uploaded_to, to_error = _parse_datetime_filter_bound(
+        raw_uploaded_to, "uploaded_to", True)
     if to_error is not None:
         return None, None, to_error
 
@@ -1310,7 +1345,8 @@ def _parse_sort_params(request, *, allowed_fields, default_field):
             None,
             None,
             JsonResponse(
-                {"errors": {"direction": ["Invalid direction. Expected 'asc' or 'desc'."]}},
+                {"errors": {"direction": [
+                    "Invalid direction. Expected 'asc' or 'desc'."]}},
                 status=400,
             ),
         )
@@ -1382,8 +1418,9 @@ def api_case_collection(request):
             cases = cases.filter(created_at__lte=created_to)
 
         total_count = cases.count()
-        paged_cases = cases[offset : offset + limit]
-        next_offset = offset + limit if (offset + limit) < total_count else None
+        paged_cases = cases[offset: offset + limit]
+        next_offset = offset + \
+            limit if (offset + limit) < total_count else None
         previous_offset = max(offset - limit, 0) if offset > 0 else None
 
         return JsonResponse(
@@ -1427,7 +1464,8 @@ def api_case_detail(request, pk):
         if error_response is not None:
             return error_response
 
-        before = {"status": case.status, "notes": case.notes, "referral_ref": case.referral_ref}
+        before = {"status": case.status, "notes": case.notes,
+                  "referral_ref": case.referral_ref}
         serializer = CaseUpdateSerializer(data=payload, instance=case)
         if not serializer.is_valid():
             return JsonResponse({"errors": serializer.errors}, status=400)
@@ -1485,7 +1523,8 @@ def api_case_document_collection(request, pk):
         if filter_error is not None:
             return filter_error
 
-        uploaded_from, uploaded_to, date_filter_error = _parse_document_date_filters(request)
+        uploaded_from, uploaded_to, date_filter_error = _parse_document_date_filters(
+            request)
         if date_filter_error is not None:
             return date_filter_error
 
@@ -1510,8 +1549,9 @@ def api_case_document_collection(request, pk):
             documents = documents.filter(uploaded_at__lte=uploaded_to)
 
         total_count = documents.count()
-        paged_documents = documents[offset : offset + limit]
-        next_offset = offset + limit if (offset + limit) < total_count else None
+        paged_documents = documents[offset: offset + limit]
+        next_offset = offset + \
+            limit if (offset + limit) < total_count else None
         previous_offset = max(offset - limit, 0) if offset > 0 else None
 
         return JsonResponse(
@@ -1548,7 +1588,8 @@ def api_case_document_detail(request, pk, document_id):
         if error_response is not None:
             return error_response
 
-        before = {"doc_type": document.doc_type, "doc_subtype": document.doc_subtype}
+        before = {"doc_type": document.doc_type,
+                  "doc_subtype": document.doc_subtype}
         serializer = DocumentUpdateSerializer(data=payload, instance=document)
         if not serializer.is_valid():
             return JsonResponse({"errors": serializer.errors}, status=400)
@@ -1590,7 +1631,8 @@ def api_case_document_detail(request, pk, document_id):
     # Linked persons
     from .models import OrgDocument, PersonDocument
 
-    person_links = PersonDocument.objects.filter(document=document).select_related("person")
+    person_links = PersonDocument.objects.filter(
+        document=document).select_related("person")
     data["persons"] = [
         {
             "id": str(pl.person.pk),
@@ -1604,7 +1646,8 @@ def api_case_document_detail(request, pk, document_id):
     ]
 
     # Linked organizations
-    org_links = OrgDocument.objects.filter(document=document).select_related("org")
+    org_links = OrgDocument.objects.filter(
+        document=document).select_related("org")
     data["organizations"] = [
         {
             "id": str(ol.org.pk),
@@ -1620,7 +1663,8 @@ def api_case_document_detail(request, pk, document_id):
 
     # Financial snapshots (for 990s)
 
-    snapshots = FinancialSnapshot.objects.filter(document=document).order_by("tax_year")
+    snapshots = FinancialSnapshot.objects.filter(
+        document=document).order_by("tax_year")
     data["financial_snapshots"] = [
         {
             "id": str(s.pk),
@@ -1745,7 +1789,8 @@ def api_case_signal_collection(request, pk):
     # Optional filters
     raw_status = request.GET.get("status")
     if raw_status is not None:
-        valid_statuses = {c[0] for c in Finding._meta.get_field("status").choices}
+        valid_statuses = {c[0]
+                          for c in Finding._meta.get_field("status").choices}
         if raw_status not in valid_statuses:
             return JsonResponse(
                 {
@@ -1761,7 +1806,8 @@ def api_case_signal_collection(request, pk):
 
     raw_severity = request.GET.get("severity")
     if raw_severity is not None:
-        valid_severities = {c[0] for c in Finding._meta.get_field("severity").choices}
+        valid_severities = {c[0]
+                            for c in Finding._meta.get_field("severity").choices}
         if raw_severity not in valid_severities:
             return JsonResponse(
                 {
@@ -1781,7 +1827,7 @@ def api_case_signal_collection(request, pk):
         signals_qs = signals_qs.filter(rule_id=raw_rule_id)
 
     total_count = signals_qs.count()
-    paged = signals_qs[offset : offset + limit]
+    paged = signals_qs[offset: offset + limit]
     next_offset = offset + limit if (offset + limit) < total_count else None
     previous_offset = max(offset - limit, 0) if offset > 0 else None
 
@@ -1808,7 +1854,8 @@ def api_case_signal_detail(request, pk, signal_id):
         if error_response is not None:
             return error_response
 
-        before = {"status": finding.status, "investigator_note": finding.investigator_note}
+        before = {"status": finding.status,
+                  "investigator_note": finding.investigator_note}
         serializer = FindingUpdateSerializer(data=payload, instance=finding)
         if not serializer.is_valid():
             return JsonResponse({"errors": serializer.errors}, status=400)
@@ -1941,7 +1988,8 @@ def api_search(request):
 
     # --- Cases ---
     if raw_type in (None, "case"):
-        vector = SearchVector("name", weight="A") + SearchVector("notes", weight="B")
+        vector = SearchVector("name", weight="A") + \
+            SearchVector("notes", weight="B")
         case_qs = (
             Case.objects.annotate(rank=SearchRank(vector, search_query))
             .filter(rank__gt=0)
@@ -1966,7 +2014,8 @@ def api_search(request):
 
     # --- Documents ---
     if raw_type in (None, "document"):
-        vector = SearchVector("filename", weight="A") + SearchVector("extracted_text", weight="B")
+        vector = SearchVector("filename", weight="A") + \
+            SearchVector("extracted_text", weight="B")
         doc_qs = (
             Document.objects.select_related("case")
             .annotate(rank=SearchRank(vector, search_query))
@@ -2030,7 +2079,8 @@ def api_search(request):
     # --- Entities (persons, orgs, properties, financial instruments) ---
     if raw_type in (None, "entity"):
         # Persons — search full_name and notes
-        p_vector = SearchVector("full_name", weight="A") + SearchVector("notes", weight="C")
+        p_vector = SearchVector("full_name", weight="A") + \
+            SearchVector("notes", weight="C")
         person_qs = (
             Person.objects.select_related("case")
             .annotate(rank=SearchRank(p_vector, search_query))
@@ -2057,7 +2107,8 @@ def api_search(request):
             )
 
         # Organizations — search name and notes
-        o_vector = SearchVector("name", weight="A") + SearchVector("notes", weight="C")
+        o_vector = SearchVector("name", weight="A") + \
+            SearchVector("notes", weight="C")
         org_qs = (
             Organization.objects.select_related("case")
             .annotate(rank=SearchRank(o_vector, search_query))
@@ -2171,7 +2222,8 @@ def api_case_export(request, pk):
 
     if export_format not in ("json", "csv"):
         return JsonResponse(
-            {"errors": {"format": ["Invalid format. Expected 'json' or 'csv'."]}},
+            {"errors": {"format": [
+                "Invalid format. Expected 'json' or 'csv'."]}},
             status=400,
         )
 
@@ -2182,7 +2234,8 @@ def api_case_export(request, pk):
     persons = list(case.persons.order_by("full_name"))
     organizations = list(case.organizations.order_by("name"))
     properties = list(case.properties.order_by("-created_at"))
-    financial_instruments = list(case.financial_instruments.order_by("-created_at"))
+    financial_instruments = list(
+        case.financial_instruments.order_by("-created_at"))
 
     import json as json_mod
     import os
@@ -2230,7 +2283,8 @@ def api_case_export(request, pk):
 
     # Case summary
     writer.writerow(["=== CASE SUMMARY ==="])
-    writer.writerow(["ID", "Name", "Status", "Notes", "Referral Ref", "Created At"])
+    writer.writerow(["ID", "Name", "Status", "Notes",
+                    "Referral Ref", "Created At"])
     writer.writerow(
         [
             str(case.pk),
@@ -2245,7 +2299,8 @@ def api_case_export(request, pk):
 
     # Documents
     writer.writerow(["=== DOCUMENTS ==="])
-    writer.writerow(["ID", "Filename", "Doc Type", "File Size", "OCR Status", "Uploaded At"])
+    writer.writerow(["ID", "Filename", "Doc Type",
+                    "File Size", "OCR Status", "Uploaded At"])
     for d in documents:
         writer.writerow(
             [
@@ -2261,7 +2316,8 @@ def api_case_export(request, pk):
 
     # Findings
     writer.writerow(["=== FINDINGS ==="])
-    writer.writerow(["ID", "Rule ID", "Severity", "Status", "Title", "Created At"])
+    writer.writerow(["ID", "Rule ID", "Severity",
+                    "Status", "Title", "Created At"])
     for f in findings:
         writer.writerow(
             [
@@ -2277,7 +2333,8 @@ def api_case_export(request, pk):
 
     # Persons
     writer.writerow(["=== PERSONS ==="])
-    writer.writerow(["ID", "Full Name", "Aliases", "Role Tags", "Date of Death", "Notes"])
+    writer.writerow(["ID", "Full Name", "Aliases",
+                    "Role Tags", "Date of Death", "Notes"])
     for p in persons:
         writer.writerow(
             [
@@ -2293,7 +2350,8 @@ def api_case_export(request, pk):
 
     # Organizations
     writer.writerow(["=== ORGANIZATIONS ==="])
-    writer.writerow(["ID", "Name", "Type", "EIN", "State", "Status", "Formation Date"])
+    writer.writerow(["ID", "Name", "Type", "EIN",
+                    "State", "Status", "Formation Date"])
     for o in organizations:
         writer.writerow(
             [
@@ -2311,7 +2369,8 @@ def api_case_export(request, pk):
     # Properties
     writer.writerow(["=== PROPERTIES ==="])
     writer.writerow(
-        ["ID", "Parcel Number", "Address", "County", "Assessed Value", "Purchase Price"]
+        ["ID", "Parcel Number", "Address", "County",
+            "Assessed Value", "Purchase Price"]
     )
     for p in properties:
         writer.writerow(
@@ -2328,7 +2387,8 @@ def api_case_export(request, pk):
 
     # Financial Instruments
     writer.writerow(["=== FINANCIAL INSTRUMENTS ==="])
-    writer.writerow(["ID", "Type", "Filing Number", "Filing Date", "Amount", "Anomaly Flags"])
+    writer.writerow(["ID", "Type", "Filing Number",
+                    "Filing Date", "Amount", "Anomaly Flags"])
     for fi in financial_instruments:
         writer.writerow(
             [
@@ -2344,7 +2404,8 @@ def api_case_export(request, pk):
 
     # Referrals
     writer.writerow(["=== REFERRALS ==="])
-    writer.writerow(["ID", "Agency", "Status", "Submission ID", "Filing Date", "Notes"])
+    writer.writerow(["ID", "Agency", "Status",
+                    "Submission ID", "Filing Date", "Notes"])
     for r in referrals:
         writer.writerow(
             [
@@ -2434,7 +2495,7 @@ def api_entity_detail(request, entity_type, entity_id):
         entity_id=entity_id, entity_type=entity_type
     ).select_related("finding")
     data["related_signals"] = [serialize_finding(es.finding) for es in
-                                entity_signal_links]
+                               entity_signal_links]
 
     # --- Related Findings (via FindingEntity) ---
     finding_links = FindingEntity.objects.filter(
@@ -2453,7 +2514,8 @@ def api_entity_detail(request, entity_type, entity_id):
 
     # --- Type-specific relationships ---
     if entity_type == "person":
-        org_roles = PersonOrganization.objects.filter(person=entity).select_related("org")
+        org_roles = PersonOrganization.objects.filter(
+            person=entity).select_related("org")
         data["organization_roles"] = [
             {
                 "organization_id": str(por.org_id),
@@ -2546,7 +2608,7 @@ def api_case_finding_collection(request, pk):
         if err:
             return err
         total = qs.count()
-        page = qs[offset : offset + limit]
+        page = qs[offset: offset + limit]
 
         return JsonResponse(
             {
@@ -2617,7 +2679,8 @@ def api_case_finding_detail(request, pk, finding_id):
     if err:
         return err
 
-    before = {"title": finding.title, "severity": finding.severity, "status": finding.status}
+    before = {"title": finding.title,
+              "severity": finding.severity, "status": finding.status}
     serializer = FindingUpdateSerializer(data=payload, instance=finding)
     if not serializer.is_valid():
         return JsonResponse({"errors": serializer.errors}, status=400)
@@ -2669,7 +2732,8 @@ def api_case_note_collection(request, pk):
             table_name="investigator_notes",
             record_id=note.pk,
             case_id=case.pk,
-            after_state={"target_type": note.target_type, "target_id": str(note.target_id)},
+            after_state={"target_type": note.target_type,
+                         "target_id": str(note.target_id)},
             performed_by=getattr(request, "api_token", None),
         )
         return JsonResponse(serializer.data, status=201)
@@ -2699,7 +2763,7 @@ def api_case_note_collection(request, pk):
         qs = qs.filter(target_id=raw_target_id)
 
     total_count = qs.count()
-    paged = qs[offset : offset + limit]
+    paged = qs[offset: offset + limit]
     next_offset = offset + limit if (offset + limit) < total_count else None
     previous_offset = max(offset - limit, 0) if offset > 0 else None
 
@@ -2807,7 +2871,7 @@ def api_signal_collection(request):
         qs = qs.filter(rule_id=raw_rule_id)
 
     total_count = qs.count()
-    paged = qs[offset : offset + limit]
+    paged = qs[offset: offset + limit]
     next_offset = offset + limit if (offset + limit) < total_count else None
     previous_offset = max(offset - limit, 0) if offset > 0 else None
 
@@ -2862,7 +2926,8 @@ def api_case_graph(request, pk):
     nodes = []  # list of node dicts
     edges = []  # list of edge dicts
     node_ids = set()  # track which UUIDs are in the graph
-    node_type_counts = {"person": 0, "organization": 0, "property": 0, "financial_instrument": 0}
+    node_type_counts = {"person": 0, "organization": 0,
+                        "property": 0, "financial_instrument": 0}
 
     # ── Helper: build finding count lookup per entity ──────────────────
     # FindingEntity stores (finding_id, entity_id, entity_type) so we group
@@ -3001,7 +3066,7 @@ def api_case_graph(request, pk):
     for doc_id, person_ids in _doc_persons.items():
         # Person ↔ Person (same document)
         for i, pa in enumerate(person_ids):
-            for pb in person_ids[i + 1 :]:
+            for pb in person_ids[i + 1:]:
                 pair = tuple(sorted([pa, pb]))
                 if pair not in _seen_co_appear:
                     _seen_co_appear.add(pair)
@@ -3037,7 +3102,7 @@ def api_case_graph(request, pk):
     # Org ↔ Org (same document)
     for doc_id, org_ids in _doc_orgs.items():
         for i, oa in enumerate(org_ids):
-            for ob in org_ids[i + 1 :]:
+            for ob in org_ids[i + 1:]:
                 pair = tuple(sorted([oa, ob]))
                 if pair not in _seen_co_appear:
                     _seen_co_appear.add(pair)
@@ -3061,7 +3126,8 @@ def api_case_graph(request, pk):
             pair_key = (edge["source"], edge["target"])
             if pair_key in _co_appear_map:
                 existing = _co_appear_map[pair_key]
-                existing["metadata"]["document_ids"].extend(edge["metadata"]["document_ids"])
+                existing["metadata"]["document_ids"].extend(
+                    edge["metadata"]["document_ids"])
                 existing["weight"] += 1
             else:
                 _co_appear_map[pair_key] = edge
@@ -3258,7 +3324,8 @@ def api_entity_collection(request):
                 results.append(data)
 
         elif etype == "organization":
-            qs = Organization.objects.select_related("case").order_by("-created_at")
+            qs = Organization.objects.select_related(
+                "case").order_by("-created_at")
             if raw_query:
                 qs = qs.filter(name__icontains=raw_query)
             if raw_case_id:
@@ -3269,7 +3336,8 @@ def api_entity_collection(request):
                 results.append(data)
 
         elif etype == "property":
-            qs = Property.objects.select_related("case").order_by("-created_at")
+            qs = Property.objects.select_related(
+                "case").order_by("-created_at")
             if raw_query:
                 qs = qs.filter(address__icontains=raw_query)
             if raw_case_id:
@@ -3280,7 +3348,8 @@ def api_entity_collection(request):
                 results.append(data)
 
         elif etype == "financial_instrument":
-            qs = FinancialInstrument.objects.select_related("case").order_by("-created_at")
+            qs = FinancialInstrument.objects.select_related(
+                "case").order_by("-created_at")
             if raw_query:
                 qs = qs.filter(filing_number__icontains=raw_query)
             if raw_case_id:
@@ -3293,7 +3362,7 @@ def api_entity_collection(request):
     # Sort by created_at descending, truncate
     results.sort(key=lambda x: x.get("created_at", ""), reverse=True)
     total = len(results)
-    paged = results[offset : offset + limit]
+    paged = results[offset: offset + limit]
 
     return JsonResponse(
         {
@@ -3348,7 +3417,8 @@ def case_detail(request, pk):
     case = get_object_or_404(Case, pk=pk)
     documents = case.documents.order_by("-uploaded_at")
     return render(
-        request, "investigations/case_detail.html", {"case": case, "documents": documents}
+        request, "investigations/case_detail.html", {
+            "case": case, "documents": documents}
     )
 
 
@@ -3376,7 +3446,8 @@ def document_upload(request):
         initial = {"case": case_pk} if case_pk else {}
         form = DocumentUploadForm(initial=initial)
     return render(
-        request, "investigations/document_upload.html", {"form": form, "title": "Upload Document"}
+        request, "investigations/document_upload.html", {
+            "form": form, "title": "Upload Document"}
     )
 
 
@@ -3409,7 +3480,8 @@ def api_case_document_bulk_upload(request, pk):
 
     if len(files) > MAX_BULK_FILES:
         return JsonResponse(
-            {"errors": {"non_field_errors": [f"Maximum {MAX_BULK_FILES} files per request."]}},
+            {"errors": {"non_field_errors": [
+                f"Maximum {MAX_BULK_FILES} files per request."]}},
             status=400,
         )
 
@@ -3464,7 +3536,8 @@ def api_case_document_process_pending(request, pk):
     case = get_object_or_404(Case, pk=pk)
 
     pending_documents = list(
-        case.documents.filter(ocr_status=OcrStatus.PENDING).order_by("uploaded_at")
+        case.documents.filter(
+            ocr_status=OcrStatus.PENDING).order_by("uploaded_at")
     )
 
     processed = []
@@ -3477,7 +3550,8 @@ def api_case_document_process_pending(request, pk):
         except Exception as exc:
             logger.exception(
                 "process_pending_ocr_failed",
-                extra={"document_id": str(document.pk), "case_id": str(case.pk)},
+                extra={"document_id": str(
+                    document.pk), "case_id": str(case.pk)},
             )
             errors.append(
                 {
@@ -3557,7 +3631,8 @@ def api_case_fetch_990s(request, pk):
 
         # Search the IRS index for this EIN
         search_years = requested_years or irs_connector.INDEX_YEARS[:3]
-        search_result = irs_connector.search_990_by_ein(ein, years=search_years)
+        search_result = irs_connector.search_990_by_ein(
+            ein, years=search_years)
 
         if search_result.total_found == 0:
             return JsonResponse(
@@ -3662,8 +3737,10 @@ def api_case_fetch_990s(request, pk):
                 # Compensation
                 officer_compensation_total=parsed.total_reportable_comp_from_org,
                 num_employees=parsed.num_employees,
-                num_voting_members=(parsed.governance.voting_members_governing_body),
-                num_independent_members=(parsed.governance.independent_voting_members),
+                num_voting_members=(
+                    parsed.governance.voting_members_governing_body),
+                num_independent_members=(
+                    parsed.governance.independent_voting_members),
                 # Metadata
                 source="IRS_TEOS_XML",
                 confidence=parsed.parse_quality,
@@ -3802,7 +3879,8 @@ def api_research_parcels(request, pk):
         county = None
         if county_str:
             try:
-                county = county_auditor_connector.OhioCounty[county_str.upper()]
+                county = county_auditor_connector.OhioCounty[county_str.upper(
+                )]
             except KeyError:
                 return JsonResponse(
                     {"error": f"Invalid county: {county_str}. Must be a valid Ohio county name."},
@@ -3811,9 +3889,11 @@ def api_research_parcels(request, pk):
 
         # Run search based on type
         if search_type == "parcel":
-            result = county_auditor_connector.search_parcels_by_pin(query, county=county)
+            result = county_auditor_connector.search_parcels_by_pin(
+                query, county=county)
         else:
-            result = county_auditor_connector.search_parcels_by_owner(query, county=county)
+            result = county_auditor_connector.search_parcels_by_owner(
+                query, county=county)
 
         # Serialize dataclass records to dicts
         records = []
@@ -4232,7 +4312,8 @@ def api_research_irs(request, pk):
 
         if is_ein:
             # EIN search — check most recent 3 index years
-            result = irs_connector.search_990_by_ein(cleaned, years=irs_connector.INDEX_YEARS[:3])
+            result = irs_connector.search_990_by_ein(
+                cleaned, years=irs_connector.INDEX_YEARS[:3])
             for filing in result.filings:
                 record = irs_connector.filing_to_dict(filing)
 
@@ -4243,10 +4324,12 @@ def api_research_irs(request, pk):
                         parsed = irs_connector.parse_990_xml(
                             xml_text, filing.object_id, filing.xml_batch_id
                         )
-                        record["parsed"] = irs_connector.parsed_990_to_dict(parsed)
+                        record["parsed"] = irs_connector.parsed_990_to_dict(
+                            parsed)
                     except (irs_connector.IRSNetworkError, irs_connector.IRSParseError) as e:
                         record["parsed"] = None
-                        notes.append(f"Could not parse {filing.return_type} {filing.tax_year}: {e}")
+                        notes.append(
+                            f"Could not parse {filing.return_type} {filing.tax_year}: {e}")
 
                 records.append(record)
 
@@ -4392,7 +4475,8 @@ def api_research_recorder(request, pk):
             )
 
         # Get search URL
-        url_result = county_recorder_connector.get_search_url(county, grantor_grantee=name)
+        url_result = county_recorder_connector.get_search_url(
+            county, grantor_grantee=name)
 
         # Get county info
         county_info_obj = county_recorder_connector.get_county_info(county)
@@ -4613,7 +4697,8 @@ def api_case_dashboard(request, pk):
     # ── Documents ──────────────────────────────────────────────
     docs = case.documents.all()
     doc_type_counts = dict(
-        docs.values_list("doc_type").annotate(n=Count("id")).values_list("doc_type", "n")
+        docs.values_list("doc_type").annotate(
+            n=Count("id")).values_list("doc_type", "n")
     )
     ext_status_counts = dict(
         docs.values_list("extraction_status")
@@ -4622,13 +4707,16 @@ def api_case_dashboard(request, pk):
     )
     total_docs = docs.count()
     completed_extractions = ext_status_counts.get("COMPLETED", 0)
-    extraction_rate = round(completed_extractions / total_docs, 2) if total_docs > 0 else 0.0
+    extraction_rate = round(completed_extractions /
+                            total_docs, 2) if total_docs > 0 else 0.0
 
     # Count AI-enhanced documents (have ingestion_metadata with ai_proposals > 0)
-    ai_enhanced = docs.filter(ingestion_metadata__meta__ai_proposals__gt=0).count()
+    ai_enhanced = docs.filter(
+        ingestion_metadata__meta__ai_proposals__gt=0).count()
 
     # Renamed files (have a display_name set)
-    renamed_count = docs.exclude(display_name="").exclude(display_name__isnull=True).count()
+    renamed_count = docs.exclude(display_name="").exclude(
+        display_name__isnull=True).count()
 
     # ── Entities ───────────────────────────────────────────────
     person_count = case.persons.count()
@@ -4640,10 +4728,12 @@ def api_case_dashboard(request, pk):
     findings = Finding.objects.filter(case=case)
     finding_total = findings.count()
     sev_counts = dict(
-        findings.values_list("severity").annotate(n=Count("id")).values_list("severity", "n")
+        findings.values_list("severity").annotate(
+            n=Count("id")).values_list("severity", "n")
     )
     status_counts = dict(
-        findings.values_list("status").annotate(n=Count("id")).values_list("status", "n")
+        findings.values_list("status").annotate(
+            n=Count("id")).values_list("status", "n")
     )
 
     # Top triggered rules
@@ -4657,10 +4747,10 @@ def api_case_dashboard(request, pk):
         for r in rule_counts
     ]
 
-
     # ── Financials ─────────────────────────────────────────────
 
-    snapshots = FinancialSnapshot.objects.filter(case=case).order_by("tax_year")
+    snapshots = FinancialSnapshot.objects.filter(
+        case=case).order_by("tax_year")
     years_covered = snapshots.values("tax_year").distinct().count()
     fin_agg = snapshots.aggregate(
         total_rev=Sum("total_revenue"),
@@ -4768,7 +4858,8 @@ def api_case_coverage(request, pk):
     blind_rule_ids.discard("META")
     blind_rule_ids.discard("ALL")
     active_rules = total_rules - len(blind_rule_ids)
-    coverage_score = round(active_rules / total_rules, 2) if total_rules > 0 else 0.0
+    coverage_score = round(active_rules / total_rules,
+                           2) if total_rules > 0 else 0.0
 
     return JsonResponse(
         {
@@ -4817,7 +4908,8 @@ def _generate_memo_fallback(
     # Executive Summary
     lines.append("EXECUTIVE SUMMARY")
     lines.append("-" * 70)
-    lines.append(case.notes or ("Case under investigation for potential fraud indicators."))
+    lines.append(case.notes or (
+        "Case under investigation for potential fraud indicators."))
     lines.append(f"Total Findings: {findings.count()}")
     lines.append("")
 
@@ -4829,7 +4921,8 @@ def _generate_memo_fallback(
         if persons.exists():
             lines.append("Persons:")
             for p in persons[:15]:
-                roles = ", ".join(p.role_tags) if p.role_tags else "unknown role"
+                roles = ", ".join(
+                    p.role_tags) if p.role_tags else "unknown role"
                 lines.append(f"  • {p.full_name} ({roles})")
             lines.append("")
 
@@ -4889,7 +4982,8 @@ def _generate_memo_fallback(
                 .first()
             )
             if prior_rev:
-                change_pct = (((fs.total_revenue or 0) - prior_rev) / (prior_rev or 1)) * 100
+                change_pct = (((fs.total_revenue or 0) -
+                              prior_rev) / (prior_rev or 1)) * 100
                 lines.append(f"  Revenue change YoY: {change_pct:.1f}%")
             lines.append("")
 
@@ -4923,7 +5017,6 @@ def _generate_memo_fallback(
             "Recommend further investigation by appropriate agency or referral to law enforcement."
         )
 
-
     lines.append("")
     lines.append("---")
     lines.append("This memo was automatically generated from case evidence.")
@@ -4943,7 +5036,8 @@ def api_case_referral_memo(request, pk):
     case = get_object_or_404(Case, pk=pk)
 
     # Gather all case data for AI context and fallback template
-    findings = Finding.objects.filter(case=case).prefetch_related("entity_links")
+    findings = Finding.objects.filter(
+        case=case).prefetch_related("entity_links")
     financial_snapshots = (
         FinancialSnapshot.objects.filter(case=case)
         .select_related("organization")
@@ -4970,7 +5064,6 @@ def api_case_referral_memo(request, pk):
             )
         context_parts.append("")
 
-
     # Entities
     if persons.exists():
         context_parts.append("PERSONS OF INTEREST:")
@@ -4982,7 +5075,8 @@ def api_case_referral_memo(request, pk):
     if orgs.exists():
         context_parts.append("ORGANIZATIONS:")
         for o in orgs[:10]:
-            context_parts.append(f"  - {o.name} (EIN: {o.ein or 'N/A'}, type: {o.org_type})")
+            context_parts.append(
+                f"  - {o.name} (EIN: {o.ein or 'N/A'}, type: {o.org_type})")
         context_parts.append("")
 
     if properties.exists():
@@ -5043,13 +5137,15 @@ def api_case_referral_memo(request, pk):
         if "error" not in result and "_model" in result:
             # If AI returns structured JSON, extract text fields
             if isinstance(result, dict):
-                memo_text = result.get("memo", result.get("text", result.get("content")))
+                memo_text = result.get("memo", result.get(
+                    "text", result.get("content")))
             if memo_text is None:
                 # Try to get the raw response
                 memo_text = result.get("raw", "")
 
     except Exception as e:
-        logger.warning("AI memo generation failed: %s. Using fallback template.", e)
+        logger.warning(
+            "AI memo generation failed: %s. Using fallback template.", e)
 
     # Fallback: structured template if AI fails
     if not memo_text or len(memo_text) < 50:
@@ -5346,7 +5442,8 @@ def api_research_add_to_case(request, pk):
                     "FOUNDATION",
                     "SOCIETY",
                 ]
-                is_org = any(keyword in owner_name.upper() for keyword in org_keywords)
+                is_org = any(keyword in owner_name.upper()
+                             for keyword in org_keywords)
 
                 if is_org:
                     # Check if organization already exists (case-insensitive)
@@ -5420,7 +5517,8 @@ def api_research_add_to_case(request, pk):
             name = data.get("business_name", "")
             # Connector returns charter_number, frontend may send
             # entity_number
-            entity_number = data.get("entity_number") or data.get("charter_number") or ""
+            entity_number = data.get("entity_number") or data.get(
+                "charter_number") or ""
             status = data.get("status", "UNKNOWN")
             filing_date_str = data.get("filing_date")
             county = data.get("county", "")
@@ -5432,7 +5530,8 @@ def api_research_add_to_case(request, pk):
                 )
 
             # Check for duplicate organization (case-insensitive)
-            existing_org = Organization.objects.filter(case=case, name__iexact=name).first()
+            existing_org = Organization.objects.filter(
+                case=case, name__iexact=name).first()
             if existing_org:
                 return JsonResponse(
                     {
@@ -5452,7 +5551,8 @@ def api_research_add_to_case(request, pk):
                 name=name,
                 org_type="OTHER",
                 registration_state="OH",
-                status=status if status in ["ACTIVE", "DISSOLVED", "REVOKED"] else "UNKNOWN",
+                status=status if status in [
+                    "ACTIVE", "DISSOLVED", "REVOKED"] else "UNKNOWN",
                 formation_date=formation_date,
                 notes=f"Imported from Ohio SOS. Charter #: {entity_number}. County: {county}",
             )
@@ -5529,7 +5629,8 @@ def api_research_add_to_case(request, pk):
             # IRS search returns taxpayer_name, ein, return_type,
             # tax_year, batch_id, object_id from the TEOS index.
             # These are search index results, not fetched XML data.
-            name = data.get("taxpayer_name") or data.get("organization_name") or ""
+            name = data.get("taxpayer_name") or data.get(
+                "organization_name") or ""
             ein = data.get("ein", "")
             state = data.get("state", "OH")
             tax_year = data.get("tax_year")
@@ -5544,9 +5645,11 @@ def api_research_add_to_case(request, pk):
             # Check for duplicate organization by EIN or name
             existing_org = None
             if ein:
-                existing_org = Organization.objects.filter(case=case, ein=str(ein)).first()
+                existing_org = Organization.objects.filter(
+                    case=case, ein=str(ein)).first()
             if not existing_org:
-                existing_org = Organization.objects.filter(case=case, name__iexact=name).first()
+                existing_org = Organization.objects.filter(
+                    case=case, name__iexact=name).first()
 
             if existing_org:
                 return JsonResponse(
@@ -5695,3 +5798,85 @@ def api_admin_sos_csv_status(request):
         },
         status=200,
     )
+
+
+# ---------------------------------------------------------------------------
+# Referral PDF export
+# ---------------------------------------------------------------------------
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_case_referral_pdf(request, pk):
+    """Generate a deterministic, citation-bearing referral package PDF.
+
+    POST /api/cases/<uuid>/referral-pdf/
+
+    Returns the PDF as an attachment.  Does not require any request body.
+    """
+    case = get_object_or_404(Case, pk=pk)
+
+    findings_qs = (
+        Finding.objects.filter(
+            case=case,
+            status=FindingStatus.CONFIRMED,
+            evidence_weight__in=[EvidenceWeight.DOCUMENTED, EvidenceWeight.TRACED],
+        )
+        .prefetch_related("finding_entities", "finding_documents")
+        .order_by("-severity", "created_at")
+    )
+
+    persons_qs = Person.objects.filter(
+        persondocument__document__case=case
+    ).distinct()
+    orgs_qs = Organization.objects.filter(
+        orgdocument__document__case=case
+    ).distinct()
+    entities = {"persons": persons_qs, "organizations": orgs_qs}
+
+    documents_qs = case.documents.all().order_by("created_at")
+    financials_qs = FinancialSnapshot.objects.filter(case=case).order_by(
+        "tax_year"
+    )
+
+    from .referral_export import ReferralPDFGenerator
+
+    try:
+        pdf_buffer = ReferralPDFGenerator().generate(
+            case=case,
+            findings=findings_qs,
+            entities=entities,
+            documents=documents_qs,
+            financials=financials_qs,
+        )
+    except Exception as exc:
+        logger.exception("Referral PDF generation failed for case %s: %s", pk, exc)
+        return JsonResponse({"error": "PDF generation failed."}, status=500)
+
+    filename = f"referral-package-{case.pk}.pdf"
+    response = HttpResponse(pdf_buffer.getvalue(), content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Compatibility shims for removed models
+# ---------------------------------------------------------------------------
+
+
+@require_http_methods(["GET"])
+def api_referral_collection(request):
+    """Cross-case referral list — GovernmentReferral model removed in Session 33.
+
+    Returns 410 Gone so the frontend can handle the removal gracefully instead
+    of crashing the URL resolver at boot.
+    """
+    return JsonResponse(
+        {"detail": "Government referrals have been replaced by the PDF referral package exporter."},
+        status=410,
+    )
+
+
+# api_case_reevaluate_findings is the name used in urls.py; the implementation
+# lives under the older name api_case_reevaluate_signals.
+api_case_reevaluate_findings = api_case_reevaluate_signals
