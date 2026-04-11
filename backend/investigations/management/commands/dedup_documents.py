@@ -18,7 +18,7 @@ from itertools import groupby
 
 from django.core.management.base import BaseCommand
 
-from investigations.models import Case, Detection, Document
+from investigations.models import Case, Document, Finding
 from investigations.signal_rules import evaluate_case, evaluate_document, persist_signals
 
 
@@ -102,23 +102,30 @@ class Command(BaseCommand):
         if not backfill:
             return
 
-        self.stdout.write("Backfilling Detection rows from clean document set...")
+        self.stdout.write("Backfilling Finding rows from clean document set...")
         backfill_count = 0
 
         for case in cases:
-            # Clear existing auto-generated detections so we start fresh
-            cleared, _ = Detection.objects.filter(
-                case=case, detection_method="SYSTEM_AUTO"
+            # Clear existing auto-generated findings so we start fresh
+            cleared, _ = Finding.objects.filter(
+                case=case, source="AUTO"
             ).delete()
             if cleared:
-                self.stdout.write(f"  Case {case.pk}: cleared {cleared} existing auto-detections.")
+                self.stdout.write(
+                    f"  Case {case.pk}: cleared {cleared} auto-findings."
+                )
 
             docs = Document.objects.filter(case=case)
             for doc in docs:
-                triggers = evaluate_document(case, doc) + evaluate_case(case, trigger_doc=doc)
+                triggers = (
+                    evaluate_document(case, doc)
+                    + evaluate_case(case, trigger_doc=doc)
+                )
                 created = persist_signals(case, triggers)
                 backfill_count += len(created)
 
         self.stdout.write(
-            self.style.SUCCESS(f"Backfill complete. Created {backfill_count} detection(s).")
+            self.style.SUCCESS(
+                f"Backfill complete. Created {backfill_count} finding(s)."
+            )
         )

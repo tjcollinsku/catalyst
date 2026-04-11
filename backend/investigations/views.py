@@ -19,15 +19,12 @@ from .models import (
     AuditAction,
     AuditLog,
     Case,
-    Detection,
     Document,
     DocumentType,
-    EntitySignal,
     FinancialInstrument,
     FinancialSnapshot,
     Finding,
     FindingEntity,
-    GovernmentReferral,
     InvestigatorNote,
     OcrStatus,
     Organization,
@@ -38,28 +35,20 @@ from .models import (
     Property,
     PropertyTransaction,
     Relationship,
-    Signal,
-    SignalSeverity,
-    SocialMediaConnection,
+    Severity,
 )
 from .serializers import (
     CaseIntakeSerializer,
     CaseUpdateSerializer,
-    DetectionIntakeSerializer,
-    DetectionUpdateSerializer,
     DocumentIntakeSerializer,
     DocumentUpdateSerializer,
     FindingIntakeSerializer,
     FindingUpdateSerializer,
     NoteIntakeSerializer,
     NoteUpdateSerializer,
-    ReferralIntakeSerializer,
-    ReferralUpdateSerializer,
-    SignalUpdateSerializer,
     serialize_audit_log,
     serialize_case,
     serialize_case_detail,
-    serialize_detection,
     serialize_document,
     serialize_financial_instrument,
     serialize_finding,
@@ -67,8 +56,6 @@ from .serializers import (
     serialize_organization,
     serialize_person,
     serialize_property,
-    serialize_referral,
-    serialize_signal,
 )
 
 DEFAULT_PAGE_LIMIT = 25
@@ -1753,12 +1740,12 @@ def api_case_signal_collection(request, pk):
         return sort_error
 
     ordering = _build_ordering_fields(order_by, direction)
-    signals_qs = Signal.objects.filter(case=case).order_by(*ordering)
+    signals_qs = Finding.objects.filter(case=case).order_by(*ordering)
 
     # Optional filters
     raw_status = request.GET.get("status")
     if raw_status is not None:
-        valid_statuses = {c[0] for c in Signal._meta.get_field("status").choices}
+        valid_statuses = {c[0] for c in Finding._meta.get_field("status").choices}
         if raw_status not in valid_statuses:
             return JsonResponse(
                 {
@@ -1774,7 +1761,7 @@ def api_case_signal_collection(request, pk):
 
     raw_severity = request.GET.get("severity")
     if raw_severity is not None:
-        valid_severities = {c[0] for c in Signal._meta.get_field("severity").choices}
+        valid_severities = {c[0] for c in Finding._meta.get_field("severity").choices}
         if raw_severity not in valid_severities:
             return JsonResponse(
                 {
@@ -1805,7 +1792,7 @@ def api_case_signal_collection(request, pk):
             "offset": offset,
             "next_offset": next_offset,
             "previous_offset": previous_offset,
-            "results": [serialize_signal(s) for s in paged],
+            "results": [serialize_finding(s) for s in paged],
         }
     )
 
@@ -1814,83 +1801,49 @@ def api_case_signal_collection(request, pk):
 @require_http_methods(["GET", "PATCH"])
 def api_case_signal_detail(request, pk, signal_id):
     case = get_object_or_404(Case, pk=pk)
-    signal = get_object_or_404(Signal, pk=signal_id, case=case)
+    finding = get_object_or_404(Finding, pk=signal_id, case=case)
 
     if request.method == "PATCH":
         payload, error_response = _parse_json_body(request)
         if error_response is not None:
             return error_response
 
-        before = {"status": signal.status, "investigator_note": signal.investigator_note}
-        serializer = SignalUpdateSerializer(data=payload, instance=signal)
+        before = {"status": finding.status, "investigator_note": finding.investigator_note}
+        serializer = FindingUpdateSerializer(data=payload, instance=finding)
         if not serializer.is_valid():
             return JsonResponse({"errors": serializer.errors}, status=400)
 
         serializer.save()
 
         # Determine the right audit action based on the new status
-        new_status = serializer.validated_data.get("status", signal.status)
+        new_status = serializer.validated_data.get("status", finding.status)
         if new_status == "CONFIRMED":
             audit_action = AuditAction.SIGNAL_CONFIRMED
         elif new_status == "DISMISSED":
             audit_action = AuditAction.SIGNAL_DISMISSED
-        elif new_status == "ESCALATED":
-            audit_action = AuditAction.SIGNAL_ESCALATED
         else:
             audit_action = AuditAction.RECORD_UPDATED
 
         AuditLog.log(
             action=audit_action,
-            table_name="signals",
-            record_id=signal.pk,
+            table_name="findings",
+            record_id=finding.pk,
             case_id=case.pk,
             before_state=before,
             after_state=serializer.validated_data,
             performed_by=getattr(request, "api_token", None),
         )
 
-        # Auto-escalate: when a signal is CONFIRMED, create a Detection
-        # per the charter workflow: Signal → Detection → Finding
-        detection_data = None
-        if new_status == "CONFIRMED":
-            try:
-                from .signal_rules import escalate_signal_to_detection
+        return JsonResponse(serializer.data)
 
-                note = serializer.validated_data.get("investigator_note", "")
-                detection = escalate_signal_to_detection(signal, investigator_note=note)
-                detection_data = serialize_detection(detection)
-
-                AuditLog.log(
-                    action=AuditAction.RECORD_CREATED,
-                    table_name="detections",
-                    record_id=detection.pk,
-                    case_id=case.pk,
-                    after_state={
-                        "escalated_from_signal": str(signal.pk),
-                        "rule_id": signal.rule_id,
-                    },
-                    performed_by=getattr(request, "api_token", None),
-                    notes="signal_escalated_to_detection",
-                )
-            except Exception:
-                logger.exception(
-                    "signal_escalation_failed",
-                    extra={"signal_id": str(signal.pk), "case_id": str(case.pk)},
-                )
-
-        response_data = serializer.data
-        if detection_data:
-            response_data["created_detection"] = detection_data
-        return JsonResponse(response_data)
-
-    return JsonResponse(serialize_signal(signal))
+    return JsonResponse(serialize_finding(finding))
 
 
 _SEVERITY_RANK = {
-    SignalSeverity.CRITICAL: 4,
-    SignalSeverity.HIGH: 3,
-    SignalSeverity.MEDIUM: 2,
-    SignalSeverity.LOW: 1,
+    Severity.CRITICAL: 4,
+    Severity.HIGH: 3,
+    Severity.MEDIUM: 2,
+    Severity.LOW: 1,
 }
 
 _RANK_TO_SEVERITY = {v: k for k, v in _SEVERITY_RANK.items()}
@@ -1907,10 +1860,10 @@ def api_signal_summary(request):
     signals are omitted — the frontend treats absence as no severity badge.
     """
     severity_expr = DbCase(
-        When(severity=SignalSeverity.CRITICAL, then=Value(4)),
-        When(severity=SignalSeverity.HIGH, then=Value(3)),
-        When(severity=SignalSeverity.MEDIUM, then=Value(2)),
-        When(severity=SignalSeverity.LOW, then=Value(1)),
+        When(severity=Severity.CRITICAL, then=Value(4)),
+        When(severity=Severity.HIGH, then=Value(3)),
+        When(severity=Severity.MEDIUM, then=Value(2)),
+        When(severity=Severity.LOW, then=Value(1)),
         default=Value(0),
         output_field=IntegerField(),
     )
@@ -1918,10 +1871,10 @@ def api_signal_summary(request):
     from django.db.models import Count
 
     rows = (
-        Signal.objects.values("case_id")
+        Finding.objects.values("case_id")
         .annotate(
             max_rank=Max(severity_expr),
-            open_count=Count("id", filter=Q(status="OPEN")),
+            open_count=Count("id", filter=Q(status="NEW")),
         )
         .filter(max_rank__gt=0)
     )
@@ -2048,29 +2001,29 @@ def api_search(request):
                 }
             )
 
-    # --- Signals ---
-    if raw_type in (None, "signal"):
-        vector = SearchVector("description", weight="A")
-        sig_qs = (
-            Signal.objects.select_related("case")
+    # --- Findings ---
+    if raw_type in (None, "finding"):
+        vector = SearchVector("title", weight="A")
+        finding_qs = (
+            Finding.objects.select_related("case")
             .annotate(rank=SearchRank(vector, search_query))
             .filter(rank__gt=0)
             .order_by("-rank")
         )
         if raw_case_id:
-            sig_qs = sig_qs.filter(case_id=raw_case_id)
-        for s in sig_qs[:25]:
+            finding_qs = finding_qs.filter(case_id=raw_case_id)
+        for f in finding_qs[:25]:
             results.append(
                 {
-                    "type": "signal",
-                    "id": str(s.pk),
-                    "title": f"{s.rule_id} — {s.severity}",
-                    "subtitle": f"Signal — {s.status}",
-                    "snippet": s.description[:200] if s.description else "",
-                    "relevance": round(float(s.rank), 4),
-                    "case_id": str(s.case_id),
-                    "case_name": s.case.name,
-                    "route": f"/cases/{s.case_id}",
+                    "type": "finding",
+                    "id": str(f.pk),
+                    "title": f"{f.rule_id} — {f.severity}",
+                    "subtitle": f"Finding — {f.status}",
+                    "snippet": f.title[:200] if f.title else "",
+                    "relevance": round(float(f.rank), 4),
+                    "case_id": str(f.case_id),
+                    "case_name": f.case.name,
+                    "route": f"/cases/{f.case_id}",
                 }
             )
 
@@ -2224,8 +2177,6 @@ def api_case_export(request, pk):
 
     # Gather all related data
     documents = list(case.documents.order_by("-uploaded_at"))
-    signals = list(case.findings.order_by("-created_at"))
-    detections = []
     findings = list(Finding.objects.filter(case=case).order_by("-created_at"))
     referrals = list(case.referrals.order_by("-filing_date"))
     persons = list(case.persons.order_by("full_name"))
@@ -2246,24 +2197,7 @@ def api_case_export(request, pk):
         export_data = {
             "case": serialize_case(case),
             "documents": [serialize_document(d) for d in documents],
-            "signals": [serialize_signal(s) for s in signals],
-            "detections": [serialize_detection(d) for d in detections],
-            "findings": [
-                {
-                    "id": str(f.pk),
-                    "title": f.title,
-                    "narrative": f.narrative,
-                    "severity": f.severity,
-                    "confidence": f.confidence,
-                    "status": f.status,
-                    "signal_type": f.signal_type,
-                    "signal_rule_id": f.signal_rule_id,
-                    "legal_refs": f.legal_refs,
-                    "created_at": f.created_at.isoformat() if f.created_at else None,
-                }
-                for f in findings
-            ],
-            "referrals": [serialize_referral(r) for r in referrals],
+            "findings": [serialize_finding(f) for f in findings],
             "persons": [serialize_person(p) for p in persons],
             "organizations": [serialize_organization(o) for o in organizations],
             "properties": [serialize_property(p) for p in properties],
@@ -2325,18 +2259,18 @@ def api_case_export(request, pk):
         )
     writer.writerow([])
 
-    # Signals
-    writer.writerow(["=== SIGNALS ==="])
-    writer.writerow(["ID", "Rule ID", "Severity", "Status", "Summary", "Detected At"])
-    for s in signals:
+    # Findings
+    writer.writerow(["=== FINDINGS ==="])
+    writer.writerow(["ID", "Rule ID", "Severity", "Status", "Title", "Created At"])
+    for f in findings:
         writer.writerow(
             [
-                str(s.pk),
-                s.rule_id,
-                s.severity,
-                s.status,
-                s.description or "",
-                s.created_at.isoformat() if s.created_at else "",
+                str(f.pk),
+                f.rule_id,
+                f.severity,
+                f.status,
+                f.title or "",
+                f.created_at.isoformat() if f.created_at else "",
             ]
         )
     writer.writerow([])
@@ -2496,10 +2430,10 @@ def api_entity_detail(request, entity_type, entity_id):
     data["related_documents"] = related_docs
 
     # --- Related Signals (via EntitySignal) ---
-    entity_signal_links = EntitySignal.objects.filter(
+    entity_signal_links = FindingEntity.objects.filter(
         entity_id=entity_id, entity_type=entity_type
     ).select_related("finding")
-    data["related_signals"] = [serialize_signal(es.finding) for es in
+    data["related_signals"] = [serialize_finding(es.finding) for es in
                                 entity_signal_links]
 
     # --- Related Findings (via FindingEntity) ---
@@ -2853,7 +2787,7 @@ def api_signal_collection(request):
         return sort_error
 
     ordering = _build_ordering_fields(order_by, direction)
-    qs = Signal.objects.select_related("case").order_by(*ordering)
+    qs = Finding.objects.select_related("case").order_by(*ordering)
 
     # Filters
     raw_status = request.GET.get("status")
@@ -2878,9 +2812,9 @@ def api_signal_collection(request):
     previous_offset = max(offset - limit, 0) if offset > 0 else None
 
     results = []
-    for signal in paged:
-        data = serialize_signal(signal)
-        data["case_name"] = signal.case.name
+    for finding in paged:
+        data = serialize_finding(finding)
+        data["case_name"] = finding.case.name
         results.append(data)
 
     return JsonResponse(
@@ -2896,56 +2830,8 @@ def api_signal_collection(request):
 
 
 # ---------------------------------------------------------------------------
-# Cross-case referrals list
+# Cross-case referrals list (REMOVED — referral workflow consolidated into PDF exporter)
 # ---------------------------------------------------------------------------
-
-
-@require_http_methods(["GET"])
-def api_referral_collection(request):
-    """Cross-case referral list with filters.
-
-    TODO(SEC-010): When user-level auth is added, scope this queryset to
-    cases the authenticated user has access to.
-    """
-    limit, offset, pagination_error = _parse_limit_offset(request)
-    if pagination_error is not None:
-        return pagination_error
-
-    qs = GovernmentReferral.objects.select_related("case").order_by("-filing_date")
-
-    raw_status = request.GET.get("status")
-    if raw_status is not None:
-        qs = qs.filter(status=raw_status)
-
-    raw_agency = request.GET.get("agency")
-    if raw_agency is not None:
-        qs = qs.filter(agency_name__icontains=raw_agency)
-
-    raw_case_id = request.GET.get("case_id")
-    if raw_case_id is not None:
-        qs = qs.filter(case_id=raw_case_id)
-
-    total_count = qs.count()
-    paged = qs[offset : offset + limit]
-    next_offset = offset + limit if (offset + limit) < total_count else None
-    previous_offset = max(offset - limit, 0) if offset > 0 else None
-
-    results = []
-    for referral in paged:
-        data = serialize_referral(referral)
-        data["case_name"] = referral.case.name if referral.case else ""
-        results.append(data)
-
-    return JsonResponse(
-        {
-            "count": total_count,
-            "limit": limit,
-            "offset": offset,
-            "next_offset": next_offset,
-            "previous_offset": previous_offset,
-            "results": results,
-        }
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -2969,7 +2855,7 @@ def api_case_graph(request, pk):
 
     Nodes are derived from Person, Organization, Property, FinancialInstrument.
     Edges are derived from PersonOrganization, PersonDocument, OrgDocument,
-    PropertyTransaction, Relationship, and SocialMediaConnection junction tables.
+    PropertyTransaction, and Relationship junction tables.
     """
     case = get_object_or_404(Case, pk=pk)
 
@@ -2978,50 +2864,15 @@ def api_case_graph(request, pk):
     node_ids = set()  # track which UUIDs are in the graph
     node_type_counts = {"person": 0, "organization": 0, "property": 0, "financial_instrument": 0}
 
-    # ── Helper: build signal count lookup per entity ──────────────────
-    # EntitySignal stores (signal_id, entity_id, entity_type) so we group
-    # by entity_id to get how many signals reference each entity.
-    entity_signal_counts = {}
+    # ── Helper: build finding count lookup per entity ──────────────────
+    # FindingEntity stores (finding_id, entity_id, entity_type) so we group
+    # by entity_id to get how many findings reference each entity.
+    entity_finding_counts = {}
     for row in (
-        EntitySignal.objects.filter(finding__case=case).values(
+        FindingEntity.objects.filter(finding__case=case).values(
             "entity_id").annotate(cnt=Count("id"))
     ):
-        entity_signal_counts[str(row["entity_id"])] = row["cnt"]
-
-    # ── Helper: build detection count lookups per entity ──────────────
-    # Detection has direct FK fields: person, organization, property_record,
-    # financial_instrument. We count per-entity for each type.
-    _det_person_counts = {}
-    for row in (
-        Detection.objects.filter(case=case, person__isnull=False)
-        .values("person_id")
-        .annotate(cnt=Count("id"))
-    ):
-        _det_person_counts[str(row["person_id"])] = row["cnt"]
-
-    _det_org_counts = {}
-    for row in (
-        Detection.objects.filter(case=case, organization__isnull=False)
-        .values("organization_id")
-        .annotate(cnt=Count("id"))
-    ):
-        _det_org_counts[str(row["organization_id"])] = row["cnt"]
-
-    _det_prop_counts = {}
-    for row in (
-        Detection.objects.filter(case=case, property_record__isnull=False)
-        .values("property_record_id")
-        .annotate(cnt=Count("id"))
-    ):
-        _det_prop_counts[str(row["property_record_id"])] = row["cnt"]
-
-    _det_fi_counts = {}
-    for row in (
-        Detection.objects.filter(case=case, financial_instrument__isnull=False)
-        .values("financial_instrument_id")
-        .annotate(cnt=Count("id"))
-    ):
-        _det_fi_counts[str(row["financial_instrument_id"])] = row["cnt"]
+        entity_finding_counts[str(row["entity_id"])] = row["cnt"]
 
     # ── 1. Collect nodes ──────────────────────────────────────────────
 
@@ -3040,8 +2891,7 @@ def api_case_graph(request, pk):
                     "role_tags": p.role_tags or [],
                     "aliases": p.aliases or [],
                     "date_of_death": p.date_of_death.isoformat() if p.date_of_death else None,
-                    "signal_count": entity_signal_counts.get(pid, 0),
-                    "detection_count": _det_person_counts.get(pid, 0),
+                    "finding_count": entity_finding_counts.get(pid, 0),
                     "doc_count": doc_count,
                 },
             }
@@ -3062,8 +2912,7 @@ def api_case_graph(request, pk):
                     "org_type": o.org_type,
                     "ein": o.ein,
                     "status": o.status,
-                    "signal_count": entity_signal_counts.get(oid, 0),
-                    "detection_count": _det_org_counts.get(oid, 0),
+                    "finding_count": entity_finding_counts.get(oid, 0),
                     "doc_count": doc_count,
                 },
             }
@@ -3084,8 +2933,7 @@ def api_case_graph(request, pk):
                     "county": prop.county,
                     "assessed_value": str(prop.assessed_value) if prop.assessed_value else None,
                     "purchase_price": str(prop.purchase_price) if prop.purchase_price else None,
-                    "signal_count": entity_signal_counts.get(propid, 0),
-                    "detection_count": _det_prop_counts.get(propid, 0),
+                    "finding_count": entity_finding_counts.get(propid, 0),
                     "doc_count": 0,
                 },
             }
@@ -3106,8 +2954,7 @@ def api_case_graph(request, pk):
                     "filing_number": fi.filing_number,
                     "filing_date": fi.filing_date.isoformat() if fi.filing_date else None,
                     "amount": str(fi.amount) if fi.amount else None,
-                    "signal_count": entity_signal_counts.get(fiid, 0),
-                    "detection_count": _det_fi_counts.get(fiid, 0),
+                    "finding_count": entity_finding_counts.get(fiid, 0),
                     "doc_count": 0,
                 },
             }
@@ -3277,26 +3124,6 @@ def api_case_graph(request, pk):
                 }
             )
 
-    # SocialMediaConnection → SOCIAL_CONNECTION edges
-    for sc in SocialMediaConnection.objects.filter(case=case).select_related("person"):
-        src = str(sc.person_id)
-        if sc.connected_person_id:
-            tgt = str(sc.connected_person_id)
-            if src in node_ids and tgt in node_ids:
-                edges.append(
-                    {
-                        "source": src,
-                        "target": tgt,
-                        "relationship": "SOCIAL_CONNECTION",
-                        "label": f"{sc.platform} {sc.connection_type}".strip(),
-                        "weight": 1,
-                        "metadata": {
-                            "platform": sc.platform,
-                            "connection_type": sc.connection_type,
-                        },
-                    }
-                )
-
     # ── 3. Collect timeline events ────────────────────────────────────
 
     timeline_events = []
@@ -3316,22 +3143,20 @@ def api_case_graph(request, pk):
                 }
             )
 
-    # Signals layer — created_at
-    for sig in Signal.objects.filter(case=case).only(
-        "pk", "rule_id", "severity", "created_at", "description",
-        "trigger_entity_id"
+    # Findings layer — created_at
+    for f in Finding.objects.filter(case=case).only(
+        "pk", "rule_id", "severity", "created_at", "title"
     ):
-        if sig.created_at:
+        if f.created_at:
             timeline_events.append(
                 {
-                    "id": str(sig.pk),
-                    "layer": "signal",
-                    "date": sig.created_at.isoformat(),
-                    "label": f"{sig.rule_id}: {(sig.description or '')[:60]}",
+                    "id": str(f.pk),
+                    "layer": "finding",
+                    "date": f.created_at.isoformat(),
+                    "label": f"{f.rule_id}: {(f.title or '')[:60]}",
                     "metadata": {
-                        "severity": sig.severity,
-                        "rule_id": sig.rule_id,
-                        "entity_id": str(sig.trigger_entity_id) if sig.trigger_entity_id else None,
+                        "severity": f.severity,
+                        "rule_id": f.rule_id,
                     },
                 }
             )
@@ -4654,263 +4479,46 @@ def api_research_recorder(request, pk):
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 def api_case_referral_collection(request, pk):
-    case = get_object_or_404(Case, pk=pk)
-
-    if request.method == "GET":
-        referrals = case.referrals.order_by("-filing_date")
-        return JsonResponse({"results": [serialize_referral(r) for r in referrals]})
-
-    payload, error_response = _parse_json_body(request)
-    if error_response is not None:
-        return error_response
-
-    serializer = ReferralIntakeSerializer(data=payload, case=case)
-    if not serializer.is_valid():
-        return JsonResponse({"errors": serializer.errors}, status=400)
-
-    referral = serializer.save()
-    AuditLog.log(
-        action=AuditAction.REFERRAL_CREATED,
-        table_name="government_referrals",
-        record_id=None,  # AutoField PK, not UUID
-        case_id=case.pk,
-        after_state={"agency_name": referral.agency_name, "status": referral.status},
-        performed_by=getattr(request, "api_token", None),
-        notes=f"referral_id={referral.referral_id}",
+    """Referral collection endpoint removed — use PDF exporter instead."""
+    return JsonResponse(
+        {"error": "Referral workflow removed; use POST /api/cases/{id}/referral-pdf/"},
+        status=410,
     )
-    return JsonResponse(serializer.data, status=201)
 
 
 @csrf_exempt
 @require_http_methods(["GET", "PATCH", "DELETE"])
 def api_case_referral_detail(request, pk, referral_id):
-    """Retrieve, update, or delete a single government referral.
-
-    Restored from truncation — see SEC-006 in SECURITY_AUDIT.md.
-    """
-    case = get_object_or_404(Case, pk=pk)
-    referral = get_object_or_404(GovernmentReferral, referral_id=referral_id, case=case)
-
-    if request.method == "PATCH":
-        payload, error_response = _parse_json_body(request)
-        if error_response is not None:
-            return error_response
-
-        before = {"status": referral.status, "notes": referral.notes}
-        serializer = ReferralUpdateSerializer(data=payload, instance=referral)
-        if not serializer.is_valid():
-            return JsonResponse({"errors": serializer.errors}, status=400)
-
-        serializer.save()
-
-        # Use specific audit action if status changed
-        new_status = serializer.validated_data.get("status", referral.status)
-        if new_status == "SUBMITTED" and before["status"] != "SUBMITTED":
-            audit_action = AuditAction.REFERRAL_SUBMITTED
-        elif new_status != before["status"]:
-            audit_action = AuditAction.REFERRAL_STATUS_CHANGED
-        else:
-            audit_action = AuditAction.RECORD_UPDATED
-
-        AuditLog.log(
-            action=audit_action,
-            table_name="government_referrals",
-            case_id=case.pk,
-            before_state=before,
-            after_state=serializer.validated_data,
-            performed_by=getattr(request, "api_token", None),
-            notes=f"referral_id={referral.referral_id}",
-        )
-        return JsonResponse(serializer.data)
-
-    if request.method == "DELETE":
-        ref_id = referral.referral_id
-        agency = referral.agency_name
-        referral.delete()
-        AuditLog.log(
-            action=AuditAction.RECORD_DELETED,
-            table_name="government_referrals",
-            case_id=case.pk,
-            before_state={"agency_name": agency},
-            performed_by=getattr(request, "api_token", None),
-            notes=f"referral_id={ref_id}",
-        )
-        return HttpResponse(status=204)
-
-    return JsonResponse(serialize_referral(referral))
+    """Referral detail endpoint removed — use PDF exporter instead."""
+    return JsonResponse(
+        {"error": "Referral workflow removed; use POST /api/cases/{id}/referral-pdf/"},
+        status=410,
+    )
 
 
 # ---------------------------------------------------------------------------
-# Detection collection + detail  (Milestone 2)
+# Detection collection + detail (REMOVED — consolidated into Findings)
 # ---------------------------------------------------------------------------
-
-DETECTION_SORT_FIELDS = {
-    "created_at",
-    "severity",
-    "status",
-    "signal_type",
-    "confidence_score",
-    "id",
-}
 
 
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 def api_case_detection_collection(request, pk):
-    """List detections for a case (GET) or create one manually (POST)."""
-    case = get_object_or_404(Case, pk=pk)
-
-    if request.method == "POST":
-        payload, err = _parse_json_body(request)
-        if err is not None:
-            return err
-
-        serializer = DetectionIntakeSerializer(data=payload, case=case)
-        if not serializer.is_valid():
-            return JsonResponse({"errors": serializer.errors}, status=400)
-
-        detection = serializer.save()
-        AuditLog.log(
-            action=AuditAction.RECORD_CREATED,
-            table_name="detections",
-            record_id=detection.pk,
-            case_id=case.pk,
-            after_state=serializer.validated_data,
-            performed_by=getattr(request, "api_token", None),
-        )
-        return JsonResponse(serializer.data, status=201)
-
-    # GET — paginated, filterable list
-    limit, offset, pagination_error = _parse_limit_offset(request)
-    if pagination_error is not None:
-        return pagination_error
-
-    order_by, direction, sort_error = _parse_sort_params(
-        request,
-        allowed_fields=DETECTION_SORT_FIELDS,
-        default_field="created_at",
-    )
-    if sort_error is not None:
-        return sort_error
-
-    ordering = _build_ordering_fields(order_by, direction)
-    qs = Detection.objects.filter(case=case).order_by(*ordering)
-
-    # Optional filters
-    raw_status = request.GET.get("status")
-    if raw_status is not None:
-        valid_statuses = {c[0] for c in Detection._meta.get_field("status").choices}
-        if raw_status not in valid_statuses:
-            return JsonResponse(
-                {
-                    "errors": {
-                        "status": [
-                            f"Invalid status. Expected one of: {', '.join(sorted(valid_statuses))}."
-                        ]
-                    }
-                },
-                status=400,
-            )
-        qs = qs.filter(status=raw_status)
-
-    raw_severity = request.GET.get("severity")
-    if raw_severity is not None:
-        valid_severities = {c[0] for c in Detection._meta.get_field("severity").choices}
-        if raw_severity not in valid_severities:
-            return JsonResponse(
-                {
-                    "errors": {
-                        "severity": [
-                            f"Invalid severity. Expected one of: "
-                            f"{', '.join(sorted(valid_severities))}."
-                        ]
-                    }
-                },
-                status=400,
-            )
-        qs = qs.filter(severity=raw_severity)
-
-    raw_signal_type = request.GET.get("signal_type")
-    if raw_signal_type is not None:
-        qs = qs.filter(signal_type=raw_signal_type)
-
-    total_count = qs.count()
-    paged = qs[offset : offset + limit]
-    next_offset = offset + limit if (offset + limit) < total_count else None
-    previous_offset = max(offset - limit, 0) if offset > 0 else None
-
+    """Detection collection endpoint removed — use Findings endpoints instead."""
     return JsonResponse(
-        {
-            "count": total_count,
-            "limit": limit,
-            "offset": offset,
-            "next_offset": next_offset,
-            "previous_offset": previous_offset,
-            "results": [serialize_detection(d) for d in paged],
-        }
+        {"error": "Detection model removed; use /api/cases/{id}/findings/"},
+        status=410,
     )
 
 
 @csrf_exempt
 @require_http_methods(["GET", "PATCH", "DELETE"])
 def api_case_detection_detail(request, pk, detection_id):
-    """Retrieve, update, or delete a single detection."""
-    case = get_object_or_404(Case, pk=pk)
-    detection = get_object_or_404(Detection, pk=detection_id, case=case)
-
-    if request.method == "PATCH":
-        payload, error_response = _parse_json_body(request)
-        if error_response is not None:
-            return error_response
-
-        before = {
-            "status": detection.status,
-            "investigator_note": detection.investigator_note,
-            "confidence_score": detection.confidence_score,
-        }
-        serializer = DetectionUpdateSerializer(data=payload, instance=detection)
-        if not serializer.is_valid():
-            return JsonResponse({"errors": serializer.errors}, status=400)
-
-        serializer.save()
-
-        # Determine the right audit action based on the new status
-        new_status = serializer.validated_data.get("status", detection.status)
-        if new_status == "CONFIRMED":
-            audit_action = AuditAction.SIGNAL_CONFIRMED
-        elif new_status == "DISMISSED":
-            audit_action = AuditAction.SIGNAL_DISMISSED
-        elif new_status == "ESCALATED":
-            audit_action = AuditAction.SIGNAL_ESCALATED
-        else:
-            audit_action = AuditAction.RECORD_UPDATED
-
-        AuditLog.log(
-            action=audit_action,
-            table_name="detections",
-            record_id=detection.pk,
-            case_id=case.pk,
-            before_state=before,
-            after_state=serializer.validated_data,
-            performed_by=getattr(request, "api_token", None),
-        )
-        return JsonResponse(serializer.data)
-
-    if request.method == "DELETE":
-        detection_pk = detection.pk
-        signal_type = detection.signal_type
-        detection.delete()
-        AuditLog.log(
-            action=AuditAction.RECORD_DELETED,
-            table_name="detections",
-            record_id=detection_pk,
-            case_id=case.pk,
-            before_state={"signal_type": signal_type},
-            performed_by=getattr(request, "api_token", None),
-        )
-        return HttpResponse(status=204)
-
-    return JsonResponse(serialize_detection(detection))
+    """Detection detail endpoint removed — use Findings endpoints instead."""
+    return JsonResponse(
+        {"error": "Detection model removed; use /api/cases/{id}/findings/{id}/"},
+        status=410,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -4923,7 +4531,7 @@ def api_case_detection_detail(request, pk, detection_id):
 def api_case_reevaluate_signals(request, pk):
     """Re-run signal detection rules across all case documents.
 
-    Returns any newly persisted detections (deduplication prevents
+    Returns any newly persisted findings (deduplication prevents
     re-persisting existing ones).
     """
     case = get_object_or_404(Case, pk=pk)
@@ -4943,16 +4551,16 @@ def api_case_reevaluate_signals(request, pk):
     if documents:
         all_triggers.extend(evaluate_case(case, trigger_doc=documents[-1]))
 
-    new_detections = persist_signals(case, all_triggers)
+    new_findings = persist_signals(case, all_triggers)
 
     AuditLog.log(
         action=AuditAction.RECORD_UPDATED,
-        table_name="detections",
+        table_name="findings",
         case_id=case.pk,
         after_state={
             "documents_evaluated": len(documents),
             "triggers_found": len(all_triggers),
-            "new_detections": len(new_detections),
+            "new_findings": len(new_findings),
         },
         performed_by=getattr(request, "api_token", None),
         notes="reevaluate_signals",
@@ -4962,7 +4570,7 @@ def api_case_reevaluate_signals(request, pk):
         {
             "documents_evaluated": len(documents),
             "triggers_found": len(all_triggers),
-            "new_detections": [serialize_detection(d) for d in new_detections],
+            "new_findings": [serialize_finding(f) for f in new_findings],
         }
     )
 
@@ -5028,44 +4636,27 @@ def api_case_dashboard(request, pk):
     property_count = case.properties.count()
     instrument_count = case.financial_instruments.count()
 
-    # ── Signals ────────────────────────────────────────────────
-    signals = Signal.objects.filter(case=case)
-    signal_total = signals.count()
+    # ── Findings ───────────────────────────────────────────────
+    findings = Finding.objects.filter(case=case)
+    finding_total = findings.count()
     sev_counts = dict(
-        signals.values_list("severity").annotate(n=Count("id")).values_list("severity", "n")
+        findings.values_list("severity").annotate(n=Count("id")).values_list("severity", "n")
     )
     status_counts = dict(
-        signals.values_list("status").annotate(n=Count("id")).values_list("status", "n")
+        findings.values_list("status").annotate(n=Count("id")).values_list("status", "n")
     )
 
     # Top triggered rules
     rule_counts = (
-        signals.values("rule_id", "description").annotate(
+        findings.values("rule_id", "title").annotate(
             n=Count("id")).order_by("-n")[:10]
     )
     top_rules = [
-        {"rule_id": r["rule_id"], "summary": r["description"],
+        {"rule_id": r["rule_id"], "summary": r["title"],
             "count": r["n"]}
         for r in rule_counts
     ]
 
-    # ── Detections ─────────────────────────────────────────────
-    from .models import Detection
-
-    detections = Detection.objects.filter(case=case)
-    detection_total = detections.count()
-    detection_confirmed = detections.filter(status="CONFIRMED").count()
-    detection_pending = detections.filter(status="OPEN").count()
-
-    # ── Findings ───────────────────────────────────────────────
-    findings = case.findings.all()
-    finding_total = findings.count()
-    finding_sev = dict(
-        findings.values_list("severity").annotate(n=Count("id")).values_list("severity", "n")
-    )
-    finding_status = dict(
-        findings.values_list("status").annotate(n=Count("id")).values_list("status", "n")
-    )
 
     # ── Financials ─────────────────────────────────────────────
 
@@ -5118,21 +4709,11 @@ def api_case_dashboard(request, pk):
                 "financial_instruments": instrument_count,
                 "total": person_count + org_count + property_count + instrument_count,
             },
-            "signals": {
-                "total": signal_total,
+            "findings": {
+                "total": finding_total,
                 "by_severity": sev_counts,
                 "by_status": status_counts,
                 "top_rules": top_rules,
-            },
-            "detections": {
-                "total": detection_total,
-                "confirmed": detection_confirmed,
-                "pending": detection_pending,
-            },
-            "findings": {
-                "total": finding_total,
-                "by_severity": finding_sev,
-                "by_status": finding_status,
             },
             "financials": {
                 "years_covered": years_covered,
@@ -5215,12 +4796,12 @@ def api_case_coverage(request, pk):
 
 
 def _generate_memo_fallback(
-    case, findings, signals, detections, persons, orgs, properties, financial_snapshots, referrals
+    case, findings, persons, orgs, properties, financial_snapshots
 ):
     """Generate a structured memo template when AI fails.
 
     Provides a baseline professional memo with all key findings
-    and signals formatted for government submission.
+    formatted for government submission.
     """
     lines = []
     now_str = timezone.now().strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -5237,11 +4818,7 @@ def _generate_memo_fallback(
     lines.append("EXECUTIVE SUMMARY")
     lines.append("-" * 70)
     lines.append(case.notes or ("Case under investigation for potential fraud indicators."))
-    lines.append(
-        f"Total Findings: {findings.count()} | "
-        f"Confirmed Signals: {signals.count()} | "
-        f"Detections: {detections.count()}"
-    )
+    lines.append(f"Total Findings: {findings.count()}")
     lines.append("")
 
     # Entities of Interest
@@ -5280,14 +4857,14 @@ def _generate_memo_fallback(
                 )
             lines.append("")
 
-    # Fraud Indicators (Confirmed/Escalated Signals)
-    if signals.exists():
+    # Fraud Indicators (Findings)
+    if findings.exists():
         lines.append("FRAUD INDICATORS")
         lines.append("-" * 70)
-        for s in signals[:20]:
-            summary = s.description or "(no summary)"
+        for f in findings[:20]:
+            summary = f.title or "(no summary)"
             lines.append(
-                f"[{s.severity}] {s.rule_id}\n  Status: {s.status}\n"
+                f"[{f.severity}] {f.rule_id}\n  Status: {f.status}\n"
                 f"  Summary: {summary[:200]}\n"
             )
         lines.append("")
@@ -5331,14 +4908,14 @@ def _generate_memo_fallback(
     # Recommendations
     lines.append("RECOMMENDED ACTION")
     lines.append("-" * 70)
-    if signals.filter(severity="CRITICAL").exists():
+    if findings.filter(severity="CRITICAL").exists():
         lines.append(
-            "CRITICAL signals detected. Recommend immediate "
+            "CRITICAL findings detected. Recommend immediate "
             "escalation to appropriate federal or state agency."
         )
-    elif signals.filter(severity="HIGH").exists():
+    elif findings.filter(severity="HIGH").exists():
         lines.append(
-            "Multiple HIGH-severity signals detected. Recommend "
+            "Multiple HIGH-severity findings detected. Recommend "
             "escalation for formal investigation."
         )
     else:
@@ -5346,9 +4923,6 @@ def _generate_memo_fallback(
             "Recommend further investigation by appropriate agency or referral to law enforcement."
         )
 
-    if referrals.exists():
-        lines.append("")
-        lines.append(f"Status: {referrals.count()} referral(s) pending.")
 
     lines.append("")
     lines.append("---")
@@ -5370,16 +4944,11 @@ def api_case_referral_memo(request, pk):
 
     # Gather all case data for AI context and fallback template
     findings = Finding.objects.filter(case=case).prefetch_related("entity_links")
-    signals = Signal.objects.filter(case=case, status__in=["CONFIRMED", "ESCALATED"]).order_by(
-        "-severity"
-    )
-    detections = Detection.objects.filter(case=case).order_by("-severity")
     financial_snapshots = (
         FinancialSnapshot.objects.filter(case=case)
         .select_related("organization")
         .order_by("-tax_year")
     )
-    referrals = GovernmentReferral.objects.filter(case=case)
 
     # Entities (persons, orgs, properties)
     persons = Person.objects.filter(case=case)
@@ -5401,23 +4970,6 @@ def api_case_referral_memo(request, pk):
             )
         context_parts.append("")
 
-    # Confirmed/Escalated signals
-    if signals.exists():
-        context_parts.append("CONFIRMED/ESCALATED SIGNALS:")
-        for s in signals[:15]:
-            summary = s.description or ""
-            context_parts.append(
-                f"  - [{s.severity}] {s.rule_id}: {summary[:150]}")
-        context_parts.append("")
-
-    # Detections
-    if detections.exists():
-        context_parts.append("DETECTIONS:")
-        for d in detections[:10]:
-            context_parts.append(
-                (f"  - [{d.severity}] {d.signal_type} (confidence: {d.confidence_score:.0%})")
-            )
-        context_parts.append("")
 
     # Entities
     if persons.exists():
@@ -5504,13 +5056,10 @@ def api_case_referral_memo(request, pk):
         memo_text = _generate_memo_fallback(
             case,
             findings,
-            signals,
-            detections,
             persons,
             orgs,
             properties,
             financial_snapshots,
-            referrals,
         )
 
     # Create memo document
