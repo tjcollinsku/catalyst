@@ -20,8 +20,7 @@ export function DocumentsTab() {
         deletingDocumentId,
         onProcessPendingOcr,
         processingPendingOcr,
-        onGenerateMemo,
-        generatingMemo,
+
     } = useOutletContext<CaseDetailContext>();
 
     const [docTypeFilter, setDocTypeFilter] = useState("all");
@@ -153,19 +152,6 @@ export function DocumentsTab() {
                 </div>
             </article>
 
-            {/* Referral memo generator */}
-            <article className="info-card">
-                <div className="card-toolbar">
-                    <h3>Referral Memo</h3>
-                    <Button variant="primary" disabled={generatingMemo} onClick={onGenerateMemo}>
-                        {generatingMemo ? "Generating\u2026" : "Generate Memo"}
-                    </Button>
-                </div>
-                <p className={styles.memoHint}>
-                    Generates a summary memo from the current case state and referral records.
-                    The memo is saved as a document and will appear in the Documents list above.
-                </p>
-            </article>
 
             {/* Case notes (read-only for now) */}
             {caseDetail?.notes && (

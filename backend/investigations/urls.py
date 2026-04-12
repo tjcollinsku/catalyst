@@ -14,11 +14,6 @@ urlpatterns = [
         views.api_signal_summary,
         name="api_signal_summary",
     ),
-    path(
-        "api/referrals/",
-        views.api_referral_collection,
-        name="api_referral_collection",
-    ),
     path("api/search/", views.api_search, name="api_search"),
     path(
         "api/entities/",
@@ -114,21 +109,6 @@ urlpatterns = [
         "api/cases/<uuid:pk>/findings/<uuid:finding_id>/",
         views.api_case_finding_detail,
         name="api_case_finding_detail",
-    ),
-    path(
-        "api/cases/<uuid:pk>/referrals/",
-        views.api_case_referral_collection,
-        name="api_case_referral_collection",
-    ),
-    path(
-        "api/cases/<uuid:pk>/referrals/<int:referral_id>/",
-        views.api_case_referral_detail,
-        name="api_case_referral_detail",
-    ),
-    path(
-        "api/cases/<uuid:pk>/referral-memo/",
-        views.api_case_referral_memo,
-        name="api_case_referral_memo",
     ),
     path(
         "api/cases/<uuid:pk>/referral-pdf/",

@@ -4560,26 +4560,6 @@ def api_research_recorder(request, pk):
 # ---------------------------------------------------------------------------
 
 
-@csrf_exempt
-@require_http_methods(["GET", "POST"])
-def api_case_referral_collection(request, pk):
-    """Referral collection endpoint removed — use PDF exporter instead."""
-    return JsonResponse(
-        {"error": "Referral workflow removed; use POST /api/cases/{id}/referral-pdf/"},
-        status=410,
-    )
-
-
-@csrf_exempt
-@require_http_methods(["GET", "PATCH", "DELETE"])
-def api_case_referral_detail(request, pk, referral_id):
-    """Referral detail endpoint removed — use PDF exporter instead."""
-    return JsonResponse(
-        {"error": "Referral workflow removed; use POST /api/cases/{id}/referral-pdf/"},
-        status=410,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Detection collection + detail (REMOVED — consolidated into Findings)
 # ---------------------------------------------------------------------------
@@ -5820,7 +5800,8 @@ def api_case_referral_pdf(request, pk):
         Finding.objects.filter(
             case=case,
             status=FindingStatus.CONFIRMED,
-            evidence_weight__in=[EvidenceWeight.DOCUMENTED, EvidenceWeight.TRACED],
+            evidence_weight__in=[
+                EvidenceWeight.DOCUMENTED, EvidenceWeight.TRACED],
         )
         .prefetch_related("finding_entities", "finding_documents")
         .order_by("-severity", "created_at")
@@ -5850,11 +5831,13 @@ def api_case_referral_pdf(request, pk):
             financials=financials_qs,
         )
     except Exception as exc:
-        logger.exception("Referral PDF generation failed for case %s: %s", pk, exc)
+        logger.exception(
+            "Referral PDF generation failed for case %s: %s", pk, exc)
         return JsonResponse({"error": "PDF generation failed."}, status=500)
 
     filename = f"referral-package-{case.pk}.pdf"
-    response = HttpResponse(pdf_buffer.getvalue(), content_type="application/pdf")
+    response = HttpResponse(pdf_buffer.getvalue(),
+                            content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
 
@@ -5862,19 +5845,6 @@ def api_case_referral_pdf(request, pk):
 # ---------------------------------------------------------------------------
 # Compatibility shims for removed models
 # ---------------------------------------------------------------------------
-
-
-@require_http_methods(["GET"])
-def api_referral_collection(request):
-    """Cross-case referral list — GovernmentReferral model removed in Session 33.
-
-    Returns 410 Gone so the frontend can handle the removal gracefully instead
-    of crashing the URL resolver at boot.
-    """
-    return JsonResponse(
-        {"detail": "Government referrals have been replaced by the PDF referral package exporter."},
-        status=410,
-    )
 
 
 # api_case_reevaluate_findings is the name used in urls.py; the implementation

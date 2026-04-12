@@ -313,11 +313,7 @@ export async function processPendingOcr(
     }, options);
 }
 
-export async function generateReferralMemo(caseId: string, options?: ApiRequestOptions): Promise<DocumentItem> {
-    return request<DocumentItem>(`/api/cases/${caseId}/referral-memo/`, {
-        method: "POST"
-    }, options);
-}
+
 
 export async function generateReferralPdf(
     caseId: string,

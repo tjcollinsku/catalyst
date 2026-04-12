@@ -10,7 +10,7 @@ import {
     deleteFinding,
     fetchCaseDetail,
     fetchCaseFindings,
-    generateReferralMemo,
+
     isAbortError,
     processPendingOcr,
     reevaluateFindings,
@@ -48,8 +48,6 @@ export interface CaseDetailContext {
     deletingDocumentId: string | null;
     onProcessPendingOcr: () => void;
     processingPendingOcr: boolean;
-    onGenerateMemo: () => void;
-    generatingMemo: boolean;
     /* Findings (consolidated — replaces signals + detections + old findings) */
     findings: FindingItem[];
     loadingFindings: boolean;
@@ -89,7 +87,7 @@ export function CaseDetailView() {
 
     /* ── Documents ────────────────────────────────────────── */
     const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
-    const [generatingMemo, setGeneratingMemo] = useState(false);
+
     const [processingPendingOcr_, setProcessingPendingOcr] = useState(false);
 
     /* ── Load everything on mount / caseId change ─────────── */
@@ -194,22 +192,6 @@ export function CaseDetailView() {
         }
     }, [caseId, pushToast]);
 
-    const handleGenerateMemo = useCallback(async () => {
-        if (!caseId) return;
-        setGeneratingMemo(true);
-        try {
-            const doc = await generateReferralMemo(caseId);
-            setCaseDetail((prev) =>
-                prev ? { ...prev, documents: [...prev.documents, doc] } : prev,
-            );
-            pushToast("success", `Memo generated: ${doc.filename}`);
-        } catch (err) {
-            pushToast("error", (err as Error).message);
-        } finally {
-            setGeneratingMemo(false);
-        }
-    }, [caseId, pushToast]);
-
     /* ── Finding handlers ─────────────────────────────────── */
     const handleCreateFinding = useCallback(
         async (payload: NewFindingPayload) => {
@@ -291,8 +273,7 @@ export function CaseDetailView() {
         deletingDocumentId,
         onProcessPendingOcr: () => void handleProcessPendingOcr(),
         processingPendingOcr: processingPendingOcr_,
-        onGenerateMemo: () => void handleGenerateMemo(),
-        generatingMemo,
+
         findings,
         loadingFindings,
         savingFindingId,
