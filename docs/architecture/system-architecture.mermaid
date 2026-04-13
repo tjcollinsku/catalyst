@@ -1,0 +1,50 @@
+%%  Catalyst — Full System Architecture
+%%  Last updated: 2026-04-13 (Session 34)
+%%  View live at: https://mermaid.live  (paste this file's contents)
+
+flowchart TB
+    User(["Investigator - Browser"])
+
+    subgraph FE["Frontend — React 18 + TypeScript + Vite"]
+        UI["8 Routes, 6 Case Tabs\nD3.js Entity Graph, Brushable Timeline\nDark / Light / Auto Theming"]
+    end
+
+    subgraph DEPLOY["Railway Cloud — Docker Container (node:20 + python:3.11)"]
+        subgraph BE["Django 4.2 Backend"]
+            API["views.py — 43 REST API Endpoints\nCSRF + rate limiting via middleware.py"]
+            subgraph PIPE["Document Processing Pipeline"]
+                EX["extraction.py\nPDF to text\nPyPDF2 + Tesseract OCR fallback"]
+                CL["classification.py\nDoc type detection\n(990, deed, bank stmt, etc.)"]
+                EN["entity_extraction.py\nRule-based: People, Orgs, Properties"]
+                ER["entity_resolution.py\nFuzzy match + dedup candidates"]
+                SIG["signal_rules.py\n14 Fraud Detection Rules\n(SR-003 through SR-029)"]
+            end
+            AIPRX["ai_proxy.py\nClaude API wrapper + response cache"]
+        end
+        DB[("PostgreSQL 16\n22 Data Models\n(Case, Document, Finding,\nPerson, Org, Property...)")]
+    end
+
+    subgraph EXT["External Data Connectors"]
+        IRS["irs_connector.py  WORKING\nIRS TEOS 990 XML\nHTTP range requests (~5KB per filing)"]
+        SOS["ohio_sos_connector.py  WORKING\nOhio Secretary of State\nLocal CSV search"]
+        AOS["ohio_aos_connector.py  WORKING\nOhio Auditor of State\nASP.NET web scraper"]
+        REC["county_recorder_connector.py  WORKING\n88 OH County Recorders\nURL builder + deed parser"]
+        AUD["county_auditor_connector.py  BROKEN\nODNR ArcGIS Parcels\n404 error from Railway"]
+    end
+
+    CLAUDE(["Anthropic Claude API\nHaiku: doc extraction\nSonnet: analysis + referral"])
+
+    User --> FE
+    FE <-->|"HTTPS / JSON API calls"| API
+    API <--> DB
+    API -->|"triggered on document upload"| EX
+    EX --> CL --> EN --> ER --> SIG
+    SIG --> DB
+    EN -.->|"AI fallback for messy docs"| AIPRX
+    AIPRX <--> CLAUDE
+    API -->|"Research tab"| IRS
+    API -->|"Research tab"| SOS
+    API -->|"Research tab"| AOS
+    API -->|"Research tab"| REC
+    API -->|"Research tab"| AUD
+    API --> AIPRX
