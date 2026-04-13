@@ -87,16 +87,19 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 # ODNR statewide parcel layer — ArcGIS REST query endpoint
-# Layer 4 of the odnr_landbase_v2 MapServer is the Statewide Parcels layer.
+# Layer 4 of the odnr_landbase MapServer is the Statewide Parcels layer.
 # Primary URL; if this returns 404/503 we try the fallback.
+# NOTE: The old URLs (arcgis_site2 + odnr_landbase_v2, geo1.oit.ohio.gov) went dead ~2025-2026.
+# Updated 2026-04-13: path changed from arcgis_site2 → arcgis, odnr_landbase_v2 → odnr_landbase.
 ODNR_PARCEL_QUERY_URL = (
-    "https://gis.ohiodnr.gov/arcgis_site2/rest/services/"
-    "OIT_Services/odnr_landbase_v2/MapServer/4/query"
+    "https://gis.ohiodnr.gov/arcgis/rest/services/"
+    "OIT_Services/odnr_landbase/MapServer/4/query"
 )
 
-# Fallback: Ohio OIT hosts a newer copy of the statewide parcels layer.
+# Fallback: Ohio Hub (ArcGIS Online-hosted mirror of the statewide parcels layer).
+# geo1.oit.ohio.gov timed out as of 2026-04-13; using Hub as fallback instead.
 ODNR_PARCEL_QUERY_URL_FALLBACK = (
-    "https://geo1.oit.ohio.gov/arcgis/rest/services/Statewide_Parcels_2022/MapServer/0/query"
+    "https://services1.arcgis.com/3mEFe0kHlJBSNSuE/arcgis/rest/services/Ohio_Parcels/FeatureServer/0/query"
 )
 
 # Fields to request from the ODNR layer
