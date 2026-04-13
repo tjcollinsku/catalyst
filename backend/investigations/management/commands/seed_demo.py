@@ -83,8 +83,20 @@ class Command(BaseCommand):
         DEMO_CASE_NAME = "Bright Future Foundation Investigation"
 
         if options["reset"]:
-            deleted, _ = Case.objects.filter(name=DEMO_CASE_NAME).delete()
-            self.stdout.write(f"Deleted {deleted} existing demo case(s).")
+            # Delete related objects first due to RESTRICT constraints
+            case = Case.objects.filter(name=DEMO_CASE_NAME).first()
+            if case:
+                # Delete in reverse dependency order
+                Finding.objects.filter(case=case).delete()
+                Document.objects.filter(case=case).delete()
+                FinancialSnapshot.objects.filter(case=case).delete()
+                Property.objects.filter(case=case).delete()
+                Address.objects.filter(case=case).delete()
+                Relationship.objects.filter(case=case).delete()
+                Organization.objects.filter(case=case).delete()
+                Person.objects.filter(case=case).delete()
+                case.delete()
+                self.stdout.write("Deleted existing demo case.")
 
         case, created = Case.objects.get_or_create(
             name=DEMO_CASE_NAME,
@@ -500,22 +512,13 @@ class Command(BaseCommand):
         OrgDocument.objects.get_or_create(
             org=bff,
             document=docs["BFF_Form990_2021.pdf"],
-            defaults={"context_note": "Most recent 990 filing (2021 tax year)"},
+            defaults={
+                "context_note": "Most recent 990 filing (2021 tax year)"},
         )
         OrgDocument.objects.get_or_create(
             org=bff,
             document=docs["BFF_Articles_Incorporation.pdf"],
             defaults={"context_note": "Formation documents (2015)"},
-        )
-
-        # Link property transactions to deed documents
-        FindingDocument.objects.get_or_create(
-            document=docs["Deed_1250_Oak_St.pdf"],
-            defaults={
-                "finding": None,
-                "page_reference": "Page 1",
-                "context_note": "Proof of BFF purchase from Mitchell Dev",
-            },
         )
 
         self.stdout.write(
@@ -882,8 +885,9 @@ class Command(BaseCommand):
         InvestigatorNote.objects.get_or_create(
             case=case,
             target_type="Case",
+            target_id=case.id,
             defaults={
-                "note_text": (
+                "content": (
                     "Initial case opened based on IRS Form 990 anomalies: "
                     "zero officer compensation, rapid revenue growth (85K→4.2M), "
                     "and suspicious property transactions. County recorder search "
@@ -900,7 +904,7 @@ class Command(BaseCommand):
             target_type="Organization",
             target_id=bff.id,
             defaults={
-                "note_text": (
+                "content": (
                     "Two of four board members are married to each other "
                     "(Sarah & James Mitchell). Both are also officers/managers of "
                     "Mitchell Development Group, which has made property deals "
@@ -914,7 +918,7 @@ class Command(BaseCommand):
             target_type="Person",
             target_id=sarah.id,
             defaults={
-                "note_text": (
+                "content": (
                     "Sarah Mitchell is ED of BFF and Manager of Mitchell Dev. "
                     "Her spouse James is board member at BFF and Member of "
                     "Mitchell Dev. Need to pull Sarah's personal tax returns to "
