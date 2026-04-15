@@ -526,6 +526,31 @@ ALLOWED_MIME_TYPES = {
     "text/plain",
 }
 
+# Magic byte signatures used to detect actual file content, independent of the
+# client-supplied Content-Type header (SEC-009).
+_MIME_MAGIC: list[tuple[bytes, str]] = [
+    (b"%PDF", "application/pdf"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"\x89PNG", "image/png"),
+    (b"II*\x00", "image/tiff"),  # little-endian TIFF
+    (b"MM\x00*", "image/tiff"),  # big-endian TIFF
+]
+
+
+def _sniff_mime(uploaded_file) -> str:
+    """Detect MIME type from file magic bytes, ignoring the client-supplied header."""
+    header = uploaded_file.read(8)
+    uploaded_file.seek(0)
+    for magic, mime in _MIME_MAGIC:
+        if header.startswith(magic):
+            return mime
+    # text/plain has no universal magic bytes; accept only if the header is valid UTF-8
+    try:
+        header.decode("utf-8")
+        return "text/plain"
+    except UnicodeDecodeError:
+        return "application/octet-stream"
+
 
 class UploadValidationError(ValueError):
     """Raised when an uploaded file fails intake validation."""
@@ -547,11 +572,11 @@ def _validate_uploaded_file(uploaded_file):
             f"which exceeds the {max_mb} MB limit."
         )
 
-    # --- MIME type check ---
-    content_type = getattr(uploaded_file, "content_type", None) or ""
-    if content_type not in ALLOWED_MIME_TYPES:
+    # --- MIME type check against actual file content, not client header (SEC-009) ---
+    actual_mime = _sniff_mime(uploaded_file)
+    if actual_mime not in ALLOWED_MIME_TYPES:
         raise UploadValidationError(
-            f"File type '{content_type}' is not allowed. "
+            f"File content does not match an allowed type. "
             f"Accepted types: {', '.join(sorted(ALLOWED_MIME_TYPES))}."
         )
 

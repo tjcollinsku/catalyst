@@ -232,4 +232,12 @@ LOGGING = {
 
 # ---------------------------------------------------------------------------
 # API Token Authentication (SEC-001)
-# ---------------
+# ---------------------------------------------------------------------------
+# Auth is ON by default. Set CATALYST_REQUIRE_AUTH=False in .env to disable
+# locally without configuring tokens (friction-free dev mode).
+# In production, set CATALYST_API_TOKENS to a comma-separated list of tokens.
+# ---------------------------------------------------------------------------
+CATALYST_API_TOKENS = [
+    t.strip() for t in os.getenv("CATALYST_API_TOKENS", "").split(",") if t.strip()
+]
+CATALYST_REQUIRE_AUTH = os.getenv("CATALYST_REQUIRE_AUTH", "True").lower() == "true"

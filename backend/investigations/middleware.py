@@ -162,6 +162,18 @@ class RateLimitMiddleware:
         self._lock = threading.Lock()
         self._request_count = 0
 
+    def _get_client_ip(self, request) -> str:
+        """Return the real client IP, trusting X-Forwarded-For when behind a proxy.
+
+        Railway (and most cloud platforms) prepend the real client IP as the
+        first entry in X-Forwarded-For. REMOTE_ADDR alone would return the
+        proxy IP, causing all users to share one rate-limit bucket.
+        """
+        forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        if forwarded_for:
+            return forwarded_for.split(",")[0].strip()
+        return request.META.get("REMOTE_ADDR", "unknown")
+
     def _is_write_method(self, method: str) -> bool:
         return method in ("POST", "PUT", "PATCH", "DELETE")
 
@@ -217,7 +229,7 @@ class RateLimitMiddleware:
         if not request.path.startswith("/api/"):
             return self.get_response(request)
 
-        ip = request.META.get("REMOTE_ADDR", "unknown")
+        ip = self._get_client_ip(request)
         is_write = self._is_write_method(request.method)
 
         # Pick the right bucket and limits
