@@ -1,3 +1,4 @@
+
 # ═══════════════════════════════════════════════════════════════
 # .gitignore — Catalyst Intelligence Triage Platform
 # ═══════════════════════════════════════════════════════════════
@@ -82,3 +83,4 @@ Irs 990 XML/
 
 # ── Claude / Cowork session artifacts ────────────────────────
 .claude/
+docs/architecture/Tyler_Collins_Resume_2026_v5.pdf
