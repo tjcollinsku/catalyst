@@ -61,8 +61,13 @@ class TokenAuthMiddleware:
         return bool(self.tokens) or self.require_auth
 
     def __call__(self, request):
-        # Only gate /api/ paths
-        if request.path.startswith("/api/") and self._auth_active:
+        # Only gate /api/ paths. Healthcheck stays public because external probes
+        # (Railway) don't send an Authorization header.
+        if (
+            request.path.startswith("/api/")
+            and request.path != "/api/health/"
+            and self._auth_active
+        ):
             auth_header = request.META.get("HTTP_AUTHORIZATION", "")
 
             if not auth_header:
