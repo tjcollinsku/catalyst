@@ -53,6 +53,8 @@ services:
       DB_HOST: db
       DB_PORT: "5432"
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      CATALYST_REQUIRE_AUTH: ${CATALYST_REQUIRE_AUTH:-False}
+      CATALYST_API_TOKENS: ${CATALYST_API_TOKENS:-}
       CHROMA_PATH: /chroma_data
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
     depends_on:
