@@ -328,6 +328,87 @@ def _build_finding_context(finding) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Agentic tools — pure DB callables invoked by Claude inside ai_ask()
+# ---------------------------------------------------------------------------
+
+
+def _tool_search_case_documents(case, query: str, limit: int = 10) -> dict:
+    """Search OCR'd document text within a single case.
+
+    Case-insensitive substring match against Document.extracted_text. Returns
+    up to `limit` matching documents, each with a ~200-char snippet around
+    the first occurrence. Documents with empty or missing extracted_text are
+    excluded.
+
+    Called by Claude via the agentic tool-use loop in ai_ask(). Real
+    exceptions bubble up to the loop, which converts them to is_error
+    tool_result blocks.
+    """
+    from .models import Document
+
+    if not query or not query.strip():
+        return {"query": query, "match_count": 0, "results": []}
+
+    qs = (
+        Document.objects.filter(case=case, extracted_text__icontains=query)
+        .exclude(extracted_text__isnull=True)
+        .exclude(extracted_text__exact="")[:limit]
+    )
+
+    results = []
+    q_lower = query.lower()
+    for doc in qs:
+        text = doc.extracted_text or ""
+        idx = text.lower().find(q_lower)
+        if idx < 0:
+            continue
+        start = max(0, idx - 200)
+        end = min(len(text), idx + len(query) + 200)
+        snippet = text[start:end]
+        results.append(
+            {
+                "document_id": str(doc.pk),
+                "display_name": doc.display_name or doc.filename,
+                "doc_type": doc.doc_type,
+                "sha256": doc.sha256_hash,
+                "snippet": snippet,
+                "match_position": idx,
+            }
+        )
+
+    return {"query": query, "match_count": len(results), "results": results}
+
+
+SEARCH_DOCS_TOOL = {
+    "name": "search_case_documents",
+    "description": (
+        "Search OCR'd document text within the current case. Use this to verify "
+        "whether a fact appears in source documents, cross-reference 990 disclosures "
+        "against deeds or UCC filings, or find supporting evidence before making a "
+        "pattern claim. Returns up to 10 matching documents, each with a ~200-char "
+        "snippet around the first match. Case-insensitive substring search. "
+        "Search for distinctive names, EINs, parcel numbers, or phrases — not common "
+        "words."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Text to search for (case-insensitive substring match)",
+            },
+        },
+        "required": ["query"],
+    },
+}
+
+
+TOOLS = {
+    "search_case_documents": _tool_search_case_documents,
+}
+
+
+# ---------------------------------------------------------------------------
 # Core AI call wrapper
 # ---------------------------------------------------------------------------
 
@@ -371,7 +452,7 @@ def _call_ai(
         logger.warning("AI returned non-JSON response: %s", raw[:200])
         return {"error": "AI returned non-JSON response", "raw": raw[:500]}
     except Exception as e:
-        logger.error("AI call failed: %s", e)
+        logger.exception("AI call failed: %s", e)
         return {"error": str(e)}
 
 
@@ -672,6 +753,11 @@ Cross-Document Patterns (highest investigative value — only visible across mul
 - Charity Conduit: Nonprofit pays contractor who works on officer's private LLC property,
   990 discloses neither = HIGH. Charitable funds improving private real estate.
 
+TOOLS AVAILABLE:
+You have access to a document search tool (search_case_documents). Prefer citing
+actual document text over relying only on the case summary above. Before making
+a pattern claim about a specific name, EIN, or parcel number, search for it.
+
 RESPONSE FORMAT — structure every response as:
 
 1. WHAT THE DATA SHOWS
@@ -694,66 +780,175 @@ LANGUAGE RULES:
 - Always cite document name and specific field when referencing evidence
 - When data is insufficient to assess a pattern, say so explicitly
 
-Respond with valid JSON:
-{
-  "what_data_shows": "factual observations with citations",
-  "pattern_assessment": "indicator matches with severity levels",
-  "exculpatory_note": "plausible innocent explanation or null",
-  "thread_to_pull": "one specific next investigative action",
-  "sources_cited": [{"name": "...", "field": "990 Part IX Line 11 / doc page / filing date"}]
-}
+Respond in prose (NOT JSON). Use the four labeled sections above as headers in
+your response. End with a brief "Sources cited" section listing document names
+or 990 line numbers you referenced.
 """
 
 
-def ai_ask(case, question: str, conversation_history: list[dict] | None = None) -> dict:
-    """Answer a free-form question about the case. Uses Sonnet."""
-    # Don't cache conversational queries — each is unique
+def ai_ask(
+    case,
+    question: str,
+    conversation_history: list[dict] | None = None,
+) -> dict:
+    """Answer a free-form question using the agentic tool-use loop.
+
+    Claude may call tools (currently just search_case_documents) up to
+    MAX_TOOL_ITERATIONS times to gather evidence before producing the final
+    answer. Rate limit decrements once per user question, regardless of how
+    many Claude API calls happen inside the loop.
+
+    Returns:
+        {
+          "answer": str,                    # prose response from Claude
+          "tool_calls_made": list[dict],    # [{name, input, match_count|error}]
+          "tool_budget_exceeded": bool,
+          "_model": str,
+          "_usage": {"input_tokens": int, "output_tokens": int},
+        }
+        or {"error": "..."} on rate-limit / API failure.
+    """
+    MAX_TOOL_ITERATIONS = 5
+
     if not _check_rate_limit(str(case.pk)):
         return {"error": "Rate limit exceeded. Try again in a minute."}
 
     case_ctx = _build_case_context(case)
 
-    # Build messages list for multi-turn conversation
-    messages = []
-
+    messages: list[dict] = []
     if conversation_history:
-        # Keep last 6 messages for context
         for msg in conversation_history[-6:]:
             messages.append({"role": msg["role"], "content": msg["content"]})
 
-    # Current question with case context
     user_content = f"CASE DATA:\n{case_ctx}\n\nQUESTION: {question}"
     messages.append({"role": "user", "content": user_content})
 
+    tool_calls_made: list[dict] = []
+    total_input_tokens = 0
+    total_output_tokens = 0
+    tool_budget_exceeded = False
+
     try:
-        # Use the client directly for multi-turn
         client = _get_client()
+        tools_param = [SEARCH_DOCS_TOOL]
+
         response = client.messages.create(
             model=MODEL_SONNET,
             max_tokens=MAX_TOKENS,
             temperature=0.3,
             system=ASK_SYSTEM,
             messages=messages,
+            tools=tools_param,
         )
-        raw = response.content[0].text
+        total_input_tokens += response.usage.input_tokens
+        total_output_tokens += response.usage.output_tokens
 
-        # Parse JSON
-        cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            lines = cleaned.split("\n")
-            lines = [line for line in lines if not line.strip().startswith("```")]
-            cleaned = "\n".join(lines).strip()
+        iteration = 0
+        while response.stop_reason == "tool_use":
+            if iteration >= MAX_TOOL_ITERATIONS:
+                tool_budget_exceeded = True
+                logger.warning(
+                    "ai_ask tool budget exceeded (case=%s, iterations=%d)",
+                    case.pk,
+                    iteration,
+                )
+                break
 
-        result = json.loads(cleaned)
-        result["_model"] = MODEL_SONNET
-        result["_usage"] = {
-            "input_tokens": response.usage.input_tokens,
-            "output_tokens": response.usage.output_tokens,
+            tool_result_blocks: list[dict] = []
+            for block in response.content:
+                if getattr(block, "type", None) != "tool_use":
+                    continue
+                tool_name = block.name
+                tool_input = dict(block.input)
+                tool_use_id = block.id
+                logger.info(
+                    "ai_ask tool call: case=%s tool=%s input=%s",
+                    case.pk,
+                    tool_name,
+                    tool_input,
+                )
+                record: dict = {"name": tool_name, "input": tool_input}
+                try:
+                    fn = TOOLS.get(tool_name)
+                    if fn is None:
+                        raise ValueError(f"Unknown tool: {tool_name}")
+                    result = fn(case, **tool_input)
+                    record["match_count"] = result.get("match_count", 0)
+                    tool_result_blocks.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_use_id,
+                            "content": json.dumps(result, default=str),
+                        }
+                    )
+                except Exception as exc:
+                    logger.exception(
+                        "ai_ask tool error: case=%s tool=%s",
+                        case.pk,
+                        tool_name,
+                    )
+                    record["error"] = str(exc)
+                    tool_result_blocks.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_use_id,
+                            "is_error": True,
+                            "content": str(exc),
+                        }
+                    )
+                tool_calls_made.append(record)
+
+            messages.append({"role": "assistant", "content": response.content})
+            messages.append({"role": "user", "content": tool_result_blocks})
+
+            response = client.messages.create(
+                model=MODEL_SONNET,
+                max_tokens=MAX_TOKENS,
+                temperature=0.3,
+                system=ASK_SYSTEM,
+                messages=messages,
+                tools=tools_param,
+            )
+            total_input_tokens += response.usage.input_tokens
+            total_output_tokens += response.usage.output_tokens
+            iteration += 1
+
+        text_parts = [
+            getattr(block, "text", "")
+            for block in response.content
+            if getattr(block, "type", None) == "text"
+        ]
+        answer = "\n".join(p for p in text_parts if p).strip()
+        if not answer and tool_budget_exceeded:
+            answer = "(tool-use budget exceeded before final answer)"
+
+        # `sources` and `follow_up_questions` are kept for frontend
+        # compatibility (AIAskResponse shape in frontend/src/types.ts).
+        # Populated from tool_calls_made so the UI can show what was searched.
+        sources = [
+            {
+                "type": "tool_call",
+                "id": str(i),
+                "label": f"{c['name']}({c['input'].get('query', '')}) → "
+                         f"{c.get('match_count', '?')} matches",
+            }
+            for i, c in enumerate(tool_calls_made)
+            if "error" not in c
+        ]
+
+        return {
+            "answer": answer,
+            "sources": sources,
+            "follow_up_questions": [],
+            "tool_calls_made": tool_calls_made,
+            "tool_budget_exceeded": tool_budget_exceeded,
+            "_model": MODEL_SONNET,
+            "_usage": {
+                "input_tokens": total_input_tokens,
+                "output_tokens": total_output_tokens,
+            },
         }
-        return result
 
-    except json.JSONDecodeError:
-        return {"answer": raw, "sources": [], "follow_up_questions": []}
     except Exception as e:
-        logger.error("AI ask failed: %s", e)
+        logger.exception("AI ask failed: %s", e)
         return {"error": str(e)}
