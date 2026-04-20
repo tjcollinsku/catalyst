@@ -91,6 +91,16 @@ urlpatterns = [
         name="api_research_add_to_case",
     ),
     path(
+        "api/jobs/<uuid:job_id>/",
+        views.api_job_detail,
+        name="api_job_detail",
+    ),
+    path(
+        "api/cases/<uuid:pk>/jobs/",
+        views.api_case_jobs,
+        name="api_case_jobs",
+    ),
+    path(
         "api/cases/<uuid:pk>/documents/<uuid:document_id>/",
         views.api_case_document_detail,
         name="api_case_document_detail",

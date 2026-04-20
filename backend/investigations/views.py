@@ -28,6 +28,8 @@ from .models import (
     FindingEntity,
     FindingStatus,
     InvestigatorNote,
+    JobStatus,
+    JobType,
     OcrStatus,
     Organization,
     OrgDocument,
@@ -37,6 +39,7 @@ from .models import (
     Property,
     PropertyTransaction,
     Relationship,
+    SearchJob,
     Severity,
 )
 from .serializers import (
@@ -5876,3 +5879,55 @@ def api_case_referral_pdf(request, pk):
 # api_case_reevaluate_findings is the name used in urls.py; the implementation
 # lives under the older name api_case_reevaluate_signals.
 api_case_reevaluate_findings = api_case_reevaluate_signals
+
+
+@require_http_methods(["GET"])
+def api_job_detail(request, job_id):
+    """Return the current state of a SearchJob for frontend polling."""
+    job = get_object_or_404(SearchJob, pk=job_id)
+    return JsonResponse(
+        {
+            "id": str(job.id),
+            "case_id": str(job.case_id) if job.case_id else None,
+            "job_type": job.job_type,
+            "status": job.status,
+            "query_params": job.query_params,
+            "result": job.result,
+            "error_message": job.error_message,
+            "created_at": job.created_at.isoformat() if job.created_at else None,
+            "started_at": job.started_at.isoformat() if job.started_at else None,
+            "finished_at": (
+                job.finished_at.isoformat() if job.finished_at else None
+            ),
+        }
+    )
+
+
+@require_http_methods(["GET"])
+def api_case_jobs(request, pk):
+    """List recent SearchJobs for a case — used by frontend reattach-on-mount."""
+    case = get_object_or_404(Case, pk=pk)
+    try:
+        limit = int(request.GET.get("limit", "5"))
+    except ValueError:
+        limit = 5
+    limit = max(1, min(limit, 50))
+
+    jobs = SearchJob.objects.filter(case=case).order_by("-created_at")[:limit]
+    return JsonResponse(
+        {
+            "results": [
+                {
+                    "id": str(j.id),
+                    "job_type": j.job_type,
+                    "status": j.status,
+                    "query_params": j.query_params,
+                    "created_at": j.created_at.isoformat(),
+                    "finished_at": (
+                        j.finished_at.isoformat() if j.finished_at else None
+                    ),
+                }
+                for j in jobs
+            ]
+        }
+    )
