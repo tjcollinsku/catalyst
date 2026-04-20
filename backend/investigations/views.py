@@ -30,7 +30,6 @@ from .models import (
     FindingEntity,
     FindingStatus,
     InvestigatorNote,
-    JobStatus,
     JobType,
     OcrStatus,
     Organization,
