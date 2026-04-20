@@ -548,21 +548,22 @@ def search_990_by_name(
     max_results: int = 50,
 ) -> list[IndexRecord]:
     """
-    Search IRS index CSVs by org name (case-insensitive).
+    Search IRS index CSVs by org name (case-insensitive) across all years.
 
-    Uses streaming search — never loads full index into memory.
-    Only searches most recent 2 years by default to limit time.
+    Returns every matching filing (not deduped by EIN) so callers can group
+    by org and show multi-year filing history. Per-year results are capped
+    at `max_results` to bound work on very common names.
 
     Args:
         name: Organization name to search for.
         state: Ignored (not in index CSV).
-        years: Years to search (default: most recent 2).
-        max_results: Max results to return.
+        years: Years to search (default: all indexed years).
+        max_results: Per-year cap on matches.
 
     Returns:
-        Matching IndexRecords, sorted by tax year desc.
+        All matching IndexRecords, sorted by tax year desc.
     """
-    search_years = years or INDEX_YEARS[:2]
+    search_years = years or INDEX_YEARS
     name_upper = name.upper().strip()
 
     logger.info(
@@ -572,7 +573,7 @@ def search_990_by_name(
     )
 
     results: list[IndexRecord] = []
-    seen_eins: set[str] = set()
+    seen_object_ids: set[str] = set()
 
     for year in search_years:
         try:
@@ -590,14 +591,11 @@ def search_990_by_name(
             continue
 
         for record in matches:
-            if record.ein not in seen_eins:
-                results.append(record)
-                seen_eins.add(record.ein)
-                if len(results) >= max_results:
-                    break
+            if record.object_id and record.object_id in seen_object_ids:
+                continue
+            seen_object_ids.add(record.object_id)
+            results.append(record)
 
-        if len(results) >= max_results:
-            break
         time.sleep(POLITE_DELAY)
 
     results.sort(
@@ -605,9 +603,10 @@ def search_990_by_name(
         reverse=True,
     )
     logger.info(
-        "Found %d orgs matching '%s'",
+        "Found %d filings matching '%s' across %d orgs",
         len(results),
         name,
+        len({r.ein for r in results}),
     )
     return results
 

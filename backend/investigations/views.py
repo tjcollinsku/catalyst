@@ -4338,7 +4338,7 @@ def api_research_irs(request, pk):
         if is_ein:
             # EIN search — check most recent 3 index years
             result = irs_connector.search_990_by_ein(
-                cleaned, years=irs_connector.INDEX_YEARS[:3])
+                cleaned, years=irs_connector.INDEX_YEARS)
             for filing in result.filings:
                 record = irs_connector.filing_to_dict(filing)
 
@@ -4365,16 +4365,17 @@ def api_research_irs(request, pk):
                     f"The organization may file on paper or be below the e-filing threshold."
                 )
         else:
-            # Name search — search most recent 2 index years
+            # Name search — scan every indexed year. Returns one record per
+            # filing (flat); the frontend groups by EIN for display.
             filings = irs_connector.search_990_by_name(
-                query, years=irs_connector.INDEX_YEARS[:2], max_results=50
+                query, years=irs_connector.INDEX_YEARS, max_results=200
             )
             for filing in filings:
                 records.append(irs_connector.filing_to_dict(filing))
 
             notes.append(
-                "Name search returns the most recent filing per organization. "
-                "Search by EIN for all available filings."
+                "City/state not shown in search — click Fetch 990 Data to pull "
+                "address and full financial/governance detail from the XML."
             )
 
         logger.info(
