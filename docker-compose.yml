@@ -62,6 +62,10 @@ services:
         condition: service_healthy
     volumes:
       - chromadb_data:/chroma_data
+      # Bind-mount source for fast dev iteration. The Dockerfile still
+      # COPYs the code at build time (so prod images are self-contained),
+      # but locally this lets code edits hit the container without a rebuild.
+      - ./backend:/app
     ports:
       - "8000:8000"
 
