@@ -4139,40 +4139,7 @@ def api_research_ohio_sos(request, pk):
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_research_ohio_aos(request, pk):
-    """Search Ohio Auditor of State audit reports.
-
-    This endpoint scrapes the Ohio AOS audit database for audit findings,
-    especially "Findings for Recovery" which indicate that public money was
-    spent illegally or misappropriated. Useful for detecting government
-    corruption entanglement and regulatory violations.
-
-    POST body (JSON):
-        {
-            "query": "Osgood"                          # required: entity name
-        }
-
-    Returns:
-        {
-            "source": "ohio_aos",
-            "results": [
-                {
-                    "entity_name": "...",
-                    "county": "...",
-                    "report_type": "...",
-                    "entity_type": "...",
-                    "report_period": "...",
-                    "release_date": "2024-01-15" or null,
-                    "has_findings_for_recovery": true,
-                    "pdf_url": "https://..."
-                }
-            ],
-            "count": N,
-            "notes": []
-        }
-
-    Note: This endpoint scrapes a public HTML search interface and may be
-    subject to rate limiting. Typical request time is 5-15 seconds.
-    """
+    """Enqueue an Ohio AOS audit-report search job; return 202."""
     case = get_object_or_404(Case, pk=pk)
 
     try:
@@ -4184,86 +4151,27 @@ def api_research_ohio_aos(request, pk):
         )
 
     query = body.get("query", "").strip()
-
     if not query:
         return JsonResponse(
             {"error": "Missing required field: query"},
             status=400,
         )
 
-    try:
-        from . import ohio_aos_connector
-
-        reports = ohio_aos_connector.search_audit_reports(query)
-
-        # Serialize AuditReport dataclasses to dicts
-        records = []
-        for report in reports:
-            records.append(
-                {
-                    "entity_name": report.entity_name,
-                    "county": report.county,
-                    "report_type": report.report_type,
-                    "entity_type": report.entity_type,
-                    "report_period": report.report_period,
-                    "release_date": report.release_date.isoformat()
-                    if report.release_date
-                    else None,
-                    "has_findings_for_recovery": report.has_findings_for_recovery,
-                    "pdf_url": report.pdf_url,
-                }
-            )
-
-        logger.info(
-            "research_ohio_aos_search",
-            extra={
-                "case_id": str(case.pk),
-                "query": query,
-                "results_count": len(records),
-            },
+    with transaction.atomic():
+        job = SearchJob.objects.create(
+            case=case,
+            job_type=JobType.OHIO_AOS,
+            query_params={"query": query},
         )
+        async_task("investigations.jobs.run_ohio_aos_search", str(job.id))
 
-        return JsonResponse(
-            {
-                "source": "ohio_aos",
-                "results": records,
-                "count": len(records),
-                "notes": [],
-            },
-            status=200,
-        )
-
-    except ohio_aos_connector.AOSError as e:
-        logger.warning(
-            "research_ohio_aos_failed",
-            extra={"case_id": str(case.pk), "query": query, "error": str(e)},
-        )
-        return JsonResponse(
-            {
-                "error": f"Ohio AOS search failed: {str(e)}",
-                "source": "ohio_aos",
-                "results": [],
-                "count": 0,
-                "notes": [],
-            },
-            status=400,
-        )
-
-    except Exception:
-        logger.exception(
-            "research_ohio_aos_unexpected",
-            extra={"case_id": str(case.pk), "query": query},
-        )
-        return JsonResponse(
-            {
-                "error": "Internal error searching Ohio AOS",
-                "source": "ohio_aos",
-                "results": [],
-                "count": 0,
-                "notes": [],
-            },
-            status=500,
-        )
+    return JsonResponse(
+        {
+            "job_id": str(job.id),
+            "status_url": f"/api/jobs/{job.id}/",
+        },
+        status=202,
+    )
 
 
 @csrf_exempt
