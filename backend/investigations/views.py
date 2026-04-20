@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, time
 
 from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+from django.db import transaction
 from django.db.models import Case as DbCase
 from django.db.models import Count, IntegerField, Max, Q, Value, When
 from django.db.models.deletion import ProtectedError, RestrictedError
@@ -13,6 +14,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
+from django_q.tasks import async_task
 
 from .forms import CaseForm, DocumentUploadForm
 from .models import (
@@ -4267,47 +4269,12 @@ def api_research_ohio_aos(request, pk):
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_research_irs(request, pk):
-    """Search IRS Form 990 e-file data by EIN or organization name.
+    """Enqueue an IRS 990 search job; return 202 with a job id to poll.
 
-    This endpoint searches the IRS TEOS (Tax Exempt Organization Search)
-    yearly index files and can fetch + parse the actual 990 XML filings
-    directly from apps.irs.gov. Returns full financial, governance, and
-    officer compensation data.
-
-    POST body (JSON):
-        {
-            "query": "12-3456789"          # EIN (with or without dash)
-            OR
-            "query": "Do Good Ministries"  # Organization name search
-
-            // Optional:
-            "fetch_xml": false             # If true, also fetch + parse the XML
-        }
-
-    Returns:
-        {
-            "source": "irs_teos_xml",
-            "results": [
-                {
-                    "ein": "63-0809530",
-                    "taxpayer_name": "WALKER COUNTY HUMANE SOCIETY",
-                    "return_type": "990EZ",
-                    "tax_year": 2023,
-                    "tax_period": "202312",
-                    "object_id": "...",
-                    "batch_id": "2024_TEOS_XML_01A",
-                    "index_year": 2024,
-                    // If fetch_xml=true, also includes:
-                    "parsed": { financials, governance, officers, ... }
-                }
-            ],
-            "count": N,
-            "notes": []
-        }
-
-    The index files are cached in memory after first download (~50MB each,
-    takes 30-60 seconds). Subsequent searches within the same process are
-    instant.
+    The actual work runs in a Django-Q2 worker (see investigations.jobs).
+    Two paths:
+      - EIN + fetch_xml=true  -> IRS_FETCH_XML task (fetch + parse XML)
+      - everything else       -> IRS_NAME_SEARCH task (index scan)
     """
     case = get_object_or_404(Case, pk=pk)
 
@@ -4320,7 +4287,7 @@ def api_research_irs(request, pk):
         )
 
     query = body.get("query", "").strip()
-    fetch_xml = body.get("fetch_xml", False)
+    fetch_xml = bool(body.get("fetch_xml", False))
 
     if not query:
         return JsonResponse(
@@ -4328,111 +4295,31 @@ def api_research_irs(request, pk):
             status=400,
         )
 
-    try:
-        from . import irs_connector
+    cleaned = query.replace("-", "").replace(" ", "")
+    is_ein = cleaned.isdigit() and 7 <= len(cleaned) <= 9
 
-        # Detect if query looks like an EIN (digits with optional dash)
-        cleaned = query.replace("-", "").replace(" ", "")
-        is_ein = cleaned.isdigit() and 7 <= len(cleaned) <= 9
+    if is_ein and fetch_xml:
+        job_type = JobType.IRS_FETCH_XML
+        task_path = "investigations.jobs.run_irs_fetch_xml"
+    else:
+        job_type = JobType.IRS_NAME_SEARCH
+        task_path = "investigations.jobs.run_irs_name_search"
 
-        records = []
-        notes = []
-
-        if is_ein:
-            # EIN search — check most recent 3 index years
-            result = irs_connector.search_990_by_ein(
-                cleaned, years=irs_connector.INDEX_YEARS)
-            for filing in result.filings:
-                record = irs_connector.filing_to_dict(filing)
-
-                # Optionally fetch and parse the actual XML
-                if fetch_xml:
-                    try:
-                        xml_text = irs_connector.fetch_990_xml(filing)
-                        parsed = irs_connector.parse_990_xml(
-                            xml_text, filing.object_id, filing.xml_batch_id
-                        )
-                        record["parsed"] = irs_connector.parsed_990_to_dict(
-                            parsed)
-                    except (irs_connector.IRSNetworkError, irs_connector.IRSParseError) as e:
-                        record["parsed"] = None
-                        notes.append(
-                            f"Could not parse {filing.return_type} {filing.tax_year}: {e}")
-
-                records.append(record)
-
-            if result.total_found == 0:
-                notes.append(
-                    f"No e-filed 990 returns found for EIN {result.ein_formatted} "
-                    f"in {', '.join(str(y) for y in result.years_searched)} indexes. "
-                    f"The organization may file on paper or be below the e-filing threshold."
-                )
-        else:
-            # Name search — scan every indexed year. Returns one record per
-            # filing (flat); the frontend groups by EIN for display.
-            filings = irs_connector.search_990_by_name(
-                query, years=irs_connector.INDEX_YEARS, max_results=200
-            )
-            for filing in filings:
-                records.append(irs_connector.filing_to_dict(filing))
-
-            notes.append(
-                "City/state not shown in search — click Fetch 990 Data to pull "
-                "address and full financial/governance detail from the XML."
-            )
-
-        logger.info(
-            "research_irs_search",
-            extra={
-                "case_id": str(case.pk),
-                "query": query,
-                "is_ein": is_ein,
-                "fetch_xml": fetch_xml,
-                "results_count": len(records),
-            },
+    with transaction.atomic():
+        job = SearchJob.objects.create(
+            case=case,
+            job_type=job_type,
+            query_params={"query": query, "fetch_xml": fetch_xml},
         )
+        async_task(task_path, str(job.id))
 
-        return JsonResponse(
-            {
-                "source": "irs_teos_xml",
-                "results": records,
-                "count": len(records),
-                "notes": notes,
-            },
-            status=200,
-        )
-
-    except irs_connector.IRSError as e:
-        logger.warning(
-            "research_irs_failed",
-            extra={"case_id": str(case.pk), "query": query, "error": str(e)},
-        )
-        return JsonResponse(
-            {
-                "error": f"IRS search failed: {str(e)}",
-                "source": "irs_teos_xml",
-                "results": [],
-                "count": 0,
-                "notes": [],
-            },
-            status=400,
-        )
-
-    except Exception:
-        logger.exception(
-            "research_irs_unexpected",
-            extra={"case_id": str(case.pk), "query": query},
-        )
-        return JsonResponse(
-            {
-                "error": "Internal error searching IRS",
-                "source": "irs_teos_xml",
-                "results": [],
-                "count": 0,
-                "notes": [],
-            },
-            status=500,
-        )
+    return JsonResponse(
+        {
+            "job_id": str(job.id),
+            "status_url": f"/api/jobs/{job.id}/",
+        },
+        status=202,
+    )
 
 
 @csrf_exempt
