@@ -3848,40 +3848,7 @@ def api_case_fetch_990s(request, pk):
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_research_parcels(request, pk):
-    """Search Ohio parcel records by owner name across all 88 counties.
-
-    This endpoint queries the ODNR statewide parcel API for property ownership
-    patterns. Useful for detecting property flipping rings and cross-county
-    asset transfers.
-
-    POST body (JSON):
-        {
-            "query": "HOMAN",                          # required: owner name
-            "search_type": "owner" | "parcel",         # optional: defaults to "owner"
-            "county": "DARKE"                          # optional: county name (uppercase)
-        }
-
-    Returns:
-        {
-            "source": "county_auditor",
-            "results": [
-                {
-                    "pin": "...",
-                    "owner1": "...",
-                    "owner2": "...",
-                    "county": "...",
-                    "acres_calc": "...",
-                    "acres_desc": "...",
-                    "aud_link": "..."
-                }
-            ],
-            "count": N,
-            "notes": ["..."]
-        }
-
-    Note: This is a long-running request (may timeout after 30s for large
-    cross-county searches). ODNR API is public and requires no authentication.
-    """
+    """Enqueue a County Auditor (ODNR) parcel search job; return 202."""
     case = get_object_or_404(Case, pk=pk)
 
     try:
@@ -3893,106 +3860,32 @@ def api_research_parcels(request, pk):
         )
 
     query = body.get("query", "").strip()
-    search_type = body.get("search_type", "owner").strip().lower()
-    county_str = body.get("county", "").strip()
-
+    county = body.get("county")
+    if county:
+        county = county.strip().upper()
     if not query:
         return JsonResponse(
             {"error": "Missing required field: query"},
             status=400,
         )
 
-    try:
-        from . import county_auditor_connector
-
-        # Parse county enum if provided (normalize to uppercase for enum key)
-        county = None
-        if county_str:
-            try:
-                county = county_auditor_connector.OhioCounty[county_str.upper(
-                )]
-            except KeyError:
-                return JsonResponse(
-                    {"error": f"Invalid county: {county_str}. Must be a valid Ohio county name."},
-                    status=400,
-                )
-
-        # Run search based on type
-        if search_type == "parcel":
-            result = county_auditor_connector.search_parcels_by_pin(
-                query, county=county)
-        else:
-            result = county_auditor_connector.search_parcels_by_owner(
-                query, county=county)
-
-        # Serialize dataclass records to dicts
-        records = []
-        for record in result.records:
-            records.append(
-                {
-                    "pin": record.pin,
-                    "owner1": record.owner1,
-                    "owner2": record.owner2,
-                    "county": record.county,
-                    "acres_calc": record.calc_acres,
-                    "acres_desc": record.assr_acres,
-                    "aud_link": record.aud_link,
-                }
-            )
-
-        notes = [result.note] if result.note else []
-
-        logger.info(
-            "research_parcels_search",
-            extra={
-                "case_id": str(case.pk),
-                "query": query,
-                "county": county_str,
-                "results_count": len(records),
-            },
+    with transaction.atomic():
+        job = SearchJob.objects.create(
+            case=case,
+            job_type=JobType.COUNTY_PARCEL,
+            query_params={"query": query, "county": county},
+        )
+        async_task(
+            "investigations.jobs.run_county_parcel_search", str(job.id)
         )
 
-        return JsonResponse(
-            {
-                "source": "county_auditor",
-                "results": records,
-                "count": len(records),
-                "notes": notes,
-            },
-            status=200,
-        )
-
-    except county_auditor_connector.AuditorError as e:
-        logger.warning(
-            "research_parcels_failed",
-            extra={"case_id": str(case.pk), "query": query, "error": str(e)},
-        )
-        return JsonResponse(
-            {
-                "error": f"Parcel search failed: {str(e)}",
-                "source": "county_auditor",
-                "results": [],
-                "count": 0,
-                "notes": [],
-            },
-            status=400,
-        )
-
-    except Exception:
-        logger.exception(
-            "research_parcels_unexpected",
-            extra={"case_id": str(case.pk), "query": query},
-        )
-        return JsonResponse(
-            {
-                "error": "Internal error searching parcels",
-                "source": "county_auditor",
-                "results": [],
-                "count": 0,
-                "notes": [],
-            },
-            status=500,
-        )
+    return JsonResponse(
+        {
+            "job_id": str(job.id),
+            "status_url": f"/api/jobs/{job.id}/",
+        },
+        status=202,
+    )
 
 
 @csrf_exempt
