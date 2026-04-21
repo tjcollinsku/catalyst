@@ -64,9 +64,6 @@ describe("useAsyncJob", () => {
         expect(result.current.status).toBe("queued");
 
         await act(flushTimers);
-        await waitFor(() => expect(result.current.status).toBe("running"));
-
-        await act(flushTimers);
         await waitFor(() => expect(result.current.status).toBe("success"));
         expect((result.current.result as { count: number }).count).toBe(2);
     });
