@@ -19,6 +19,7 @@ import {
     NewCasePayload,
     NewFindingPayload,
     PaginatedResponse,
+    SearchJobSummary,
     SearchResponse,
 } from "./types";
 
@@ -727,6 +728,29 @@ export async function fetch990Data(
             ...options,
             timeoutMs: options?.timeoutMs ?? 180000,
         }
+    );
+}
+
+export async function fetchJob(
+    jobId: string,
+    options?: ApiRequestOptions,
+): Promise<SearchJobSummary> {
+    return request<SearchJobSummary>(
+        `/api/jobs/${jobId}/`,
+        { method: "GET" },
+        { ...options, timeoutMs: options?.timeoutMs ?? 10000 },
+    );
+}
+
+export async function fetchCaseJobs(
+    caseId: string,
+    limit = 5,
+    options?: ApiRequestOptions,
+): Promise<SearchJobSummary[]> {
+    return request<SearchJobSummary[]>(
+        `/api/cases/${caseId}/jobs/?limit=${limit}`,
+        { method: "GET" },
+        { ...options, timeoutMs: options?.timeoutMs ?? 10000 },
     );
 }
 
