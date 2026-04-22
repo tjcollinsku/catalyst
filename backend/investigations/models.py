@@ -129,6 +129,7 @@ class EvidenceWeight(models.TextChoices):
 class FindingSource(models.TextChoices):
     AUTO = "AUTO", "Auto-detected by signal rules"
     MANUAL = "MANUAL", "Manually created by investigator"
+    AI = "AI", "AI-flagged pattern"
 
 
 class Severity(models.TextChoices):
@@ -1304,6 +1305,7 @@ class JobType(models.TextChoices):
     IRS_FETCH_XML = "IRS_FETCH_XML", "IRS Fetch XML"
     OHIO_AOS = "OHIO_AOS", "Ohio Auditor of State"
     COUNTY_PARCEL = "COUNTY_PARCEL", "County Parcel Search"
+    AI_PATTERN_ANALYSIS = "AI_PATTERN_ANALYSIS", "AI Pattern Analysis"
 
 
 class JobStatus(models.TextChoices):
