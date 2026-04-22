@@ -57,6 +57,7 @@ export interface CaseDetailContext {
     onDeleteFinding: (findingId: string) => void;
     onReevaluateFindings: () => void;
     reevaluatingFindings: boolean;
+    onRefreshFindings: () => void;
     /* Utility */
     pushToast: (tone: "error" | "success", message: string) => void;
 }
@@ -242,6 +243,17 @@ export function CaseDetailView() {
         [caseId, pushToast],
     );
 
+    const handleRefreshFindings = useCallback(async () => {
+        if (!caseId) return;
+        try {
+            const res = await fetchCaseFindings(caseId);
+            setFindings(res.results);
+            refreshBadges();
+        } catch (err) {
+            pushToast("error", (err as Error).message);
+        }
+    }, [caseId, pushToast, refreshBadges]);
+
     const handleReevaluateFindings = useCallback(async () => {
         if (!caseId) return;
         setReevaluatingFindings(true);
@@ -282,6 +294,7 @@ export function CaseDetailView() {
         onDeleteFinding: (id) => void handleDeleteFinding(id),
         onReevaluateFindings: () => void handleReevaluateFindings(),
         reevaluatingFindings: reevaluatingFindings_,
+        onRefreshFindings: () => void handleRefreshFindings(),
         pushToast,
     };
 

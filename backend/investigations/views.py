@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, time
 
 from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+from django.db import transaction
 from django.db.models import Case as DbCase
 from django.db.models import Count, IntegerField, Max, Q, Value, When
 from django.db.models.deletion import ProtectedError, RestrictedError
@@ -13,6 +14,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
+from django_q.tasks import async_task
 
 from .forms import CaseForm, DocumentUploadForm
 from .models import (
@@ -28,6 +30,8 @@ from .models import (
     FindingEntity,
     FindingStatus,
     InvestigatorNote,
+    JobStatus,
+    JobType,
     OcrStatus,
     Organization,
     OrgDocument,
@@ -37,6 +41,7 @@ from .models import (
     Property,
     PropertyTransaction,
     Relationship,
+    SearchJob,
     Severity,
 )
 from .serializers import (
@@ -3843,40 +3848,7 @@ def api_case_fetch_990s(request, pk):
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_research_parcels(request, pk):
-    """Search Ohio parcel records by owner name across all 88 counties.
-
-    This endpoint queries the ODNR statewide parcel API for property ownership
-    patterns. Useful for detecting property flipping rings and cross-county
-    asset transfers.
-
-    POST body (JSON):
-        {
-            "query": "HOMAN",                          # required: owner name
-            "search_type": "owner" | "parcel",         # optional: defaults to "owner"
-            "county": "DARKE"                          # optional: county name (uppercase)
-        }
-
-    Returns:
-        {
-            "source": "county_auditor",
-            "results": [
-                {
-                    "pin": "...",
-                    "owner1": "...",
-                    "owner2": "...",
-                    "county": "...",
-                    "acres_calc": "...",
-                    "acres_desc": "...",
-                    "aud_link": "..."
-                }
-            ],
-            "count": N,
-            "notes": ["..."]
-        }
-
-    Note: This is a long-running request (may timeout after 30s for large
-    cross-county searches). ODNR API is public and requires no authentication.
-    """
+    """Enqueue a County Auditor (ODNR) parcel search job; return 202."""
     case = get_object_or_404(Case, pk=pk)
 
     try:
@@ -3888,106 +3860,32 @@ def api_research_parcels(request, pk):
         )
 
     query = body.get("query", "").strip()
-    search_type = body.get("search_type", "owner").strip().lower()
-    county_str = body.get("county", "").strip()
-
+    county = body.get("county")
+    if county:
+        county = county.strip().upper()
     if not query:
         return JsonResponse(
             {"error": "Missing required field: query"},
             status=400,
         )
 
-    try:
-        from . import county_auditor_connector
-
-        # Parse county enum if provided (normalize to uppercase for enum key)
-        county = None
-        if county_str:
-            try:
-                county = county_auditor_connector.OhioCounty[county_str.upper(
-                )]
-            except KeyError:
-                return JsonResponse(
-                    {"error": f"Invalid county: {county_str}. Must be a valid Ohio county name."},
-                    status=400,
-                )
-
-        # Run search based on type
-        if search_type == "parcel":
-            result = county_auditor_connector.search_parcels_by_pin(
-                query, county=county)
-        else:
-            result = county_auditor_connector.search_parcels_by_owner(
-                query, county=county)
-
-        # Serialize dataclass records to dicts
-        records = []
-        for record in result.records:
-            records.append(
-                {
-                    "pin": record.pin,
-                    "owner1": record.owner1,
-                    "owner2": record.owner2,
-                    "county": record.county,
-                    "acres_calc": record.calc_acres,
-                    "acres_desc": record.assr_acres,
-                    "aud_link": record.aud_link,
-                }
-            )
-
-        notes = [result.note] if result.note else []
-
-        logger.info(
-            "research_parcels_search",
-            extra={
-                "case_id": str(case.pk),
-                "query": query,
-                "county": county_str,
-                "results_count": len(records),
-            },
+    with transaction.atomic():
+        job = SearchJob.objects.create(
+            case=case,
+            job_type=JobType.COUNTY_PARCEL,
+            query_params={"query": query, "county": county},
+        )
+        async_task(
+            "investigations.jobs.run_county_parcel_search", str(job.id)
         )
 
-        return JsonResponse(
-            {
-                "source": "county_auditor",
-                "results": records,
-                "count": len(records),
-                "notes": notes,
-            },
-            status=200,
-        )
-
-    except county_auditor_connector.AuditorError as e:
-        logger.warning(
-            "research_parcels_failed",
-            extra={"case_id": str(case.pk), "query": query, "error": str(e)},
-        )
-        return JsonResponse(
-            {
-                "error": f"Parcel search failed: {str(e)}",
-                "source": "county_auditor",
-                "results": [],
-                "count": 0,
-                "notes": [],
-            },
-            status=400,
-        )
-
-    except Exception:
-        logger.exception(
-            "research_parcels_unexpected",
-            extra={"case_id": str(case.pk), "query": query},
-        )
-        return JsonResponse(
-            {
-                "error": "Internal error searching parcels",
-                "source": "county_auditor",
-                "results": [],
-                "count": 0,
-                "notes": [],
-            },
-            status=500,
-        )
+    return JsonResponse(
+        {
+            "job_id": str(job.id),
+            "status_url": f"/api/jobs/{job.id}/",
+        },
+        status=202,
+    )
 
 
 @csrf_exempt
@@ -4134,40 +4032,7 @@ def api_research_ohio_sos(request, pk):
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_research_ohio_aos(request, pk):
-    """Search Ohio Auditor of State audit reports.
-
-    This endpoint scrapes the Ohio AOS audit database for audit findings,
-    especially "Findings for Recovery" which indicate that public money was
-    spent illegally or misappropriated. Useful for detecting government
-    corruption entanglement and regulatory violations.
-
-    POST body (JSON):
-        {
-            "query": "Osgood"                          # required: entity name
-        }
-
-    Returns:
-        {
-            "source": "ohio_aos",
-            "results": [
-                {
-                    "entity_name": "...",
-                    "county": "...",
-                    "report_type": "...",
-                    "entity_type": "...",
-                    "report_period": "...",
-                    "release_date": "2024-01-15" or null,
-                    "has_findings_for_recovery": true,
-                    "pdf_url": "https://..."
-                }
-            ],
-            "count": N,
-            "notes": []
-        }
-
-    Note: This endpoint scrapes a public HTML search interface and may be
-    subject to rate limiting. Typical request time is 5-15 seconds.
-    """
+    """Enqueue an Ohio AOS audit-report search job; return 202."""
     case = get_object_or_404(Case, pk=pk)
 
     try:
@@ -4179,132 +4044,38 @@ def api_research_ohio_aos(request, pk):
         )
 
     query = body.get("query", "").strip()
-
     if not query:
         return JsonResponse(
             {"error": "Missing required field: query"},
             status=400,
         )
 
-    try:
-        from . import ohio_aos_connector
-
-        reports = ohio_aos_connector.search_audit_reports(query)
-
-        # Serialize AuditReport dataclasses to dicts
-        records = []
-        for report in reports:
-            records.append(
-                {
-                    "entity_name": report.entity_name,
-                    "county": report.county,
-                    "report_type": report.report_type,
-                    "entity_type": report.entity_type,
-                    "report_period": report.report_period,
-                    "release_date": report.release_date.isoformat()
-                    if report.release_date
-                    else None,
-                    "has_findings_for_recovery": report.has_findings_for_recovery,
-                    "pdf_url": report.pdf_url,
-                }
-            )
-
-        logger.info(
-            "research_ohio_aos_search",
-            extra={
-                "case_id": str(case.pk),
-                "query": query,
-                "results_count": len(records),
-            },
+    with transaction.atomic():
+        job = SearchJob.objects.create(
+            case=case,
+            job_type=JobType.OHIO_AOS,
+            query_params={"query": query},
         )
+        async_task("investigations.jobs.run_ohio_aos_search", str(job.id))
 
-        return JsonResponse(
-            {
-                "source": "ohio_aos",
-                "results": records,
-                "count": len(records),
-                "notes": [],
-            },
-            status=200,
-        )
-
-    except ohio_aos_connector.AOSError as e:
-        logger.warning(
-            "research_ohio_aos_failed",
-            extra={"case_id": str(case.pk), "query": query, "error": str(e)},
-        )
-        return JsonResponse(
-            {
-                "error": f"Ohio AOS search failed: {str(e)}",
-                "source": "ohio_aos",
-                "results": [],
-                "count": 0,
-                "notes": [],
-            },
-            status=400,
-        )
-
-    except Exception:
-        logger.exception(
-            "research_ohio_aos_unexpected",
-            extra={"case_id": str(case.pk), "query": query},
-        )
-        return JsonResponse(
-            {
-                "error": "Internal error searching Ohio AOS",
-                "source": "ohio_aos",
-                "results": [],
-                "count": 0,
-                "notes": [],
-            },
-            status=500,
-        )
+    return JsonResponse(
+        {
+            "job_id": str(job.id),
+            "status_url": f"/api/jobs/{job.id}/",
+        },
+        status=202,
+    )
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_research_irs(request, pk):
-    """Search IRS Form 990 e-file data by EIN or organization name.
+    """Enqueue an IRS 990 search job; return 202 with a job id to poll.
 
-    This endpoint searches the IRS TEOS (Tax Exempt Organization Search)
-    yearly index files and can fetch + parse the actual 990 XML filings
-    directly from apps.irs.gov. Returns full financial, governance, and
-    officer compensation data.
-
-    POST body (JSON):
-        {
-            "query": "12-3456789"          # EIN (with or without dash)
-            OR
-            "query": "Do Good Ministries"  # Organization name search
-
-            // Optional:
-            "fetch_xml": false             # If true, also fetch + parse the XML
-        }
-
-    Returns:
-        {
-            "source": "irs_teos_xml",
-            "results": [
-                {
-                    "ein": "63-0809530",
-                    "taxpayer_name": "WALKER COUNTY HUMANE SOCIETY",
-                    "return_type": "990EZ",
-                    "tax_year": 2023,
-                    "tax_period": "202312",
-                    "object_id": "...",
-                    "batch_id": "2024_TEOS_XML_01A",
-                    "index_year": 2024,
-                    // If fetch_xml=true, also includes:
-                    "parsed": { financials, governance, officers, ... }
-                }
-            ],
-            "count": N,
-            "notes": []
-        }
-
-    The index files are cached in memory after first download (~50MB each,
-    takes 30-60 seconds). Subsequent searches within the same process are
-    instant.
+    The actual work runs in a Django-Q2 worker (see investigations.jobs).
+    Two paths:
+      - EIN + fetch_xml=true  -> IRS_FETCH_XML task (fetch + parse XML)
+      - everything else       -> IRS_NAME_SEARCH task (index scan)
     """
     case = get_object_or_404(Case, pk=pk)
 
@@ -4317,7 +4088,7 @@ def api_research_irs(request, pk):
         )
 
     query = body.get("query", "").strip()
-    fetch_xml = body.get("fetch_xml", False)
+    fetch_xml = bool(body.get("fetch_xml", False))
 
     if not query:
         return JsonResponse(
@@ -4325,110 +4096,31 @@ def api_research_irs(request, pk):
             status=400,
         )
 
-    try:
-        from . import irs_connector
+    cleaned = query.replace("-", "").replace(" ", "")
+    is_ein = cleaned.isdigit() and 7 <= len(cleaned) <= 9
 
-        # Detect if query looks like an EIN (digits with optional dash)
-        cleaned = query.replace("-", "").replace(" ", "")
-        is_ein = cleaned.isdigit() and 7 <= len(cleaned) <= 9
+    if is_ein and fetch_xml:
+        job_type = JobType.IRS_FETCH_XML
+        task_path = "investigations.jobs.run_irs_fetch_xml"
+    else:
+        job_type = JobType.IRS_NAME_SEARCH
+        task_path = "investigations.jobs.run_irs_name_search"
 
-        records = []
-        notes = []
-
-        if is_ein:
-            # EIN search — check most recent 3 index years
-            result = irs_connector.search_990_by_ein(
-                cleaned, years=irs_connector.INDEX_YEARS[:3])
-            for filing in result.filings:
-                record = irs_connector.filing_to_dict(filing)
-
-                # Optionally fetch and parse the actual XML
-                if fetch_xml:
-                    try:
-                        xml_text = irs_connector.fetch_990_xml(filing)
-                        parsed = irs_connector.parse_990_xml(
-                            xml_text, filing.object_id, filing.xml_batch_id
-                        )
-                        record["parsed"] = irs_connector.parsed_990_to_dict(
-                            parsed)
-                    except (irs_connector.IRSNetworkError, irs_connector.IRSParseError) as e:
-                        record["parsed"] = None
-                        notes.append(
-                            f"Could not parse {filing.return_type} {filing.tax_year}: {e}")
-
-                records.append(record)
-
-            if result.total_found == 0:
-                notes.append(
-                    f"No e-filed 990 returns found for EIN {result.ein_formatted} "
-                    f"in {', '.join(str(y) for y in result.years_searched)} indexes. "
-                    f"The organization may file on paper or be below the e-filing threshold."
-                )
-        else:
-            # Name search — search most recent 2 index years
-            filings = irs_connector.search_990_by_name(
-                query, years=irs_connector.INDEX_YEARS[:2], max_results=50
-            )
-            for filing in filings:
-                records.append(irs_connector.filing_to_dict(filing))
-
-            notes.append(
-                "Name search returns the most recent filing per organization. "
-                "Search by EIN for all available filings."
-            )
-
-        logger.info(
-            "research_irs_search",
-            extra={
-                "case_id": str(case.pk),
-                "query": query,
-                "is_ein": is_ein,
-                "fetch_xml": fetch_xml,
-                "results_count": len(records),
-            },
+    with transaction.atomic():
+        job = SearchJob.objects.create(
+            case=case,
+            job_type=job_type,
+            query_params={"query": query, "fetch_xml": fetch_xml},
         )
+        async_task(task_path, str(job.id))
 
-        return JsonResponse(
-            {
-                "source": "irs_teos_xml",
-                "results": records,
-                "count": len(records),
-                "notes": notes,
-            },
-            status=200,
-        )
-
-    except irs_connector.IRSError as e:
-        logger.warning(
-            "research_irs_failed",
-            extra={"case_id": str(case.pk), "query": query, "error": str(e)},
-        )
-        return JsonResponse(
-            {
-                "error": f"IRS search failed: {str(e)}",
-                "source": "irs_teos_xml",
-                "results": [],
-                "count": 0,
-                "notes": [],
-            },
-            status=400,
-        )
-
-    except Exception:
-        logger.exception(
-            "research_irs_unexpected",
-            extra={"case_id": str(case.pk), "query": query},
-        )
-        return JsonResponse(
-            {
-                "error": "Internal error searching IRS",
-                "source": "irs_teos_xml",
-                "results": [],
-                "count": 0,
-                "notes": [],
-            },
-            status=500,
-        )
+    return JsonResponse(
+        {
+            "job_id": str(job.id),
+            "status_url": f"/api/jobs/{job.id}/",
+        },
+        status=202,
+    )
 
 
 @csrf_exempt
@@ -5322,6 +5014,54 @@ def api_ai_ask(request, pk):
     return JsonResponse(result)
 
 
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_ai_analyze_patterns(request, pk):
+    """Enqueue a case-level AI pattern analysis job.
+
+    One AI job per case may be in-flight at a time. The worker writes each
+    returned pattern as a Finding with source=AI. The in-flight check runs
+    inside a transaction with select_for_update on the case row so two
+    concurrent POSTs (double-click, two tabs) cannot both enqueue — each
+    real Claude call costs tokens.
+    """
+    get_object_or_404(Case, pk=pk)  # 404 outside the transaction
+
+    try:
+        with transaction.atomic():
+            case = Case.objects.select_for_update().get(pk=pk)
+            in_flight = SearchJob.objects.filter(
+                case=case,
+                job_type=JobType.AI_PATTERN_ANALYSIS,
+                status__in=[JobStatus.QUEUED, JobStatus.RUNNING],
+            ).exists()
+            if in_flight:
+                return JsonResponse(
+                    {
+                        "error": (
+                            "An AI analysis job is already running for this "
+                            "case."
+                        )
+                    },
+                    status=409,
+                )
+            job = SearchJob.objects.create(
+                case=case,
+                job_type=JobType.AI_PATTERN_ANALYSIS,
+                query_params={"case_id": str(case.id)},
+            )
+            async_task(
+                "investigations.jobs.run_ai_pattern_analysis", str(job.id)
+            )
+    except Case.DoesNotExist:
+        return JsonResponse({"error": "Case not found"}, status=404)
+
+    return JsonResponse(
+        {"job_id": str(job.id), "status_url": f"/api/jobs/{job.id}/"},
+        status=202,
+    )
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Research → Case Wiring: Add to Case
 # ──────────────────────────────────────────────────────────────────────
@@ -5875,3 +5615,55 @@ def api_case_referral_pdf(request, pk):
 # api_case_reevaluate_findings is the name used in urls.py; the implementation
 # lives under the older name api_case_reevaluate_signals.
 api_case_reevaluate_findings = api_case_reevaluate_signals
+
+
+@require_http_methods(["GET"])
+def api_job_detail(request, job_id):
+    """Return the current state of a SearchJob for frontend polling."""
+    job = get_object_or_404(SearchJob, pk=job_id)
+    return JsonResponse(
+        {
+            "id": str(job.id),
+            "case_id": str(job.case_id) if job.case_id else None,
+            "job_type": job.job_type,
+            "status": job.status,
+            "query_params": job.query_params,
+            "result": job.result,
+            "error_message": job.error_message,
+            "created_at": job.created_at.isoformat() if job.created_at else None,
+            "started_at": job.started_at.isoformat() if job.started_at else None,
+            "finished_at": (
+                job.finished_at.isoformat() if job.finished_at else None
+            ),
+        }
+    )
+
+
+@require_http_methods(["GET"])
+def api_case_jobs(request, pk):
+    """List recent SearchJobs for a case — used by frontend reattach-on-mount."""
+    case = get_object_or_404(Case, pk=pk)
+    try:
+        limit = int(request.GET.get("limit", "5"))
+    except ValueError:
+        limit = 5
+    limit = max(1, min(limit, 50))
+
+    jobs = SearchJob.objects.filter(case=case).order_by("-created_at")[:limit]
+    return JsonResponse(
+        {
+            "results": [
+                {
+                    "id": str(j.id),
+                    "job_type": j.job_type,
+                    "status": j.status,
+                    "query_params": j.query_params,
+                    "created_at": j.created_at.isoformat(),
+                    "finished_at": (
+                        j.finished_at.isoformat() if j.finished_at else None
+                    ),
+                }
+                for j in jobs
+            ]
+        }
+    )

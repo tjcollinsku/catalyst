@@ -53,6 +53,8 @@ services:
       DB_HOST: db
       DB_PORT: "5432"
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      CATALYST_REQUIRE_AUTH: ${CATALYST_REQUIRE_AUTH:-False}
+      CATALYST_API_TOKENS: ${CATALYST_API_TOKENS:-}
       CHROMA_PATH: /chroma_data
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
     depends_on:
@@ -60,8 +62,42 @@ services:
         condition: service_healthy
     volumes:
       - chromadb_data:/chroma_data
+      # Bind-mount source for fast dev iteration. The Dockerfile still
+      # COPYs the code at build time (so prod images are self-contained),
+      # but locally this lets code edits hit the container without a rebuild.
+      - ./backend:/app
     ports:
       - "8000:8000"
+
+  # ---------------------------------------------------------------------------
+  # qcluster — Django-Q2 worker (pulls async jobs off the Postgres broker)
+  # ---------------------------------------------------------------------------
+  qcluster:
+    build:
+      context: ./backend
+      dockerfile: docker/Dockerfile
+    container_name: catalyst_qcluster
+    restart: unless-stopped
+    command: python manage.py qcluster
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-True}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      POSTGRES_DB: catalyst_db
+      POSTGRES_USER: catalyst_user
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: db
+      DB_PORT: "5432"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      CATALYST_REQUIRE_AUTH: ${CATALYST_REQUIRE_AUTH:-False}
+      CATALYST_API_TOKENS: ${CATALYST_API_TOKENS:-}
+      CHROMA_PATH: /chroma_data
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - chromadb_data:/chroma_data
+      - ./backend:/app
 
   # ---------------------------------------------------------------------------
   # frontend — Nginx serving React SPA + reverse proxy to backend API

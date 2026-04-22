@@ -129,6 +129,7 @@ class EvidenceWeight(models.TextChoices):
 class FindingSource(models.TextChoices):
     AUTO = "AUTO", "Auto-detected by signal rules"
     MANUAL = "MANUAL", "Manually created by investigator"
+    AI = "AI", "AI-flagged pattern"
 
 
 class Severity(models.TextChoices):
@@ -1297,3 +1298,67 @@ class InvestigatorNote(models.Model):
 
     def __str__(self) -> str:
         return f"Note on {self.target_type} ({self.created_at:%Y-%m-%d})"
+
+
+class JobType(models.TextChoices):
+    IRS_NAME_SEARCH = "IRS_NAME_SEARCH", "IRS Name Search"
+    IRS_FETCH_XML = "IRS_FETCH_XML", "IRS Fetch XML"
+    OHIO_AOS = "OHIO_AOS", "Ohio Auditor of State"
+    COUNTY_PARCEL = "COUNTY_PARCEL", "County Parcel Search"
+    AI_PATTERN_ANALYSIS = "AI_PATTERN_ANALYSIS", "AI Pattern Analysis"
+
+
+class JobStatus(models.TextChoices):
+    QUEUED = "QUEUED", "Queued"
+    RUNNING = "RUNNING", "Running"
+    SUCCESS = "SUCCESS", "Success"
+    FAILED = "FAILED", "Failed"
+
+
+class SearchJob(UUIDPrimaryKeyModel):
+    """Async research job — tracks state of a backgrounded external-data fetch.
+
+    The four slow research endpoints (`/research/irs/` name search,
+    `/research/irs/` with fetch_xml=true, `/research/ohio-aos/`,
+    `/research/parcels/`) create a SearchJob row, enqueue a Django-Q2
+    task, and return 202 with the job_id. A worker in the qcluster
+    container picks the task up, calls the connector code, and writes
+    the response payload to `result`. The frontend polls
+    `/api/jobs/<id>/` for status + result.
+    """
+
+    case = models.ForeignKey(
+        "Case",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="search_jobs",
+    )
+    job_type = models.CharField(max_length=32, choices=JobType.choices)
+    status = models.CharField(
+        max_length=16,
+        choices=JobStatus.choices,
+        default=JobStatus.QUEUED,
+    )
+    query_params = models.JSONField()
+    result = models.JSONField(null=True, blank=True)
+    error_message = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="search_jobs",
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["case", "-created_at"]),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.job_type} {self.status} ({self.id})"

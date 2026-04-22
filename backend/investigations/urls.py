@@ -91,6 +91,16 @@ urlpatterns = [
         name="api_research_add_to_case",
     ),
     path(
+        "api/jobs/<uuid:job_id>/",
+        views.api_job_detail,
+        name="api_job_detail",
+    ),
+    path(
+        "api/cases/<uuid:pk>/jobs/",
+        views.api_case_jobs,
+        name="api_case_jobs",
+    ),
+    path(
         "api/cases/<uuid:pk>/documents/<uuid:document_id>/",
         views.api_case_document_detail,
         name="api_case_document_detail",
@@ -176,6 +186,11 @@ urlpatterns = [
         "api/cases/<uuid:pk>/ai/ask/",
         views.api_ai_ask,
         name="api_ai_ask",
+    ),
+    path(
+        "api/cases/<uuid:pk>/ai/analyze-patterns/",
+        views.api_ai_analyze_patterns,
+        name="api_ai_analyze_patterns",
     ),
     path("", views.case_list, name="case_list"),
     path("cases/new/", views.case_create, name="case_create"),

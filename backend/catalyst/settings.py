@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "corsheaders",
+    "django_q",
     "investigations",
 ]
 
@@ -241,3 +242,21 @@ CATALYST_API_TOKENS = [
     t.strip() for t in os.getenv("CATALYST_API_TOKENS", "").split(",") if t.strip()
 ]
 CATALYST_REQUIRE_AUTH = os.getenv("CATALYST_REQUIRE_AUTH", "True").lower() == "true"
+
+# ---------------------------------------------------------------------------
+# Django-Q2 Background Job Queue
+# ---------------------------------------------------------------------------
+# Uses the built-in ORM broker — tasks are stored in the existing Postgres
+# database, no Redis required. See: django-q2.readthedocs.io
+Q_CLUSTER = {
+    "name": "catalyst",
+    "workers": 2,
+    "timeout": 300,       # hard kill a task after 5 minutes
+    "retry": 360,         # must be > timeout; unused because we disable retries below
+    "max_attempts": 1,    # no retries — we surface the error to the user
+    "save_limit": 500,    # retain last 500 completed tasks in django_q_task
+    "queue_limit": 50,
+    "bulk": 1,
+    "orm": "default",     # use the default Django database as broker
+    "catch_up": False,    # don't re-run scheduled tasks missed while cluster was down
+}

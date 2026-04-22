@@ -16,9 +16,11 @@ import {
     FindingItem,
     FindingUpdatePayload,
     InvestigatorNote,
+    JobEnqueueResponse,
     NewCasePayload,
     NewFindingPayload,
     PaginatedResponse,
+    SearchJobSummary,
     SearchResponse,
 } from "./types";
 
@@ -615,6 +617,21 @@ export async function aiAsk(
     }, options);
 }
 
+export async function runAiPatternAnalysis(
+    caseId: string,
+    options?: ApiRequestOptions
+): Promise<JobEnqueueResponse> {
+    return request<JobEnqueueResponse>(
+        `/api/cases/${caseId}/ai/analyze-patterns/`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+        },
+        options,
+    );
+}
+
 /* ═══════════════════════════════════════════════════════════════
    Research endpoints (external data source connectors)
    ═══════════════════════════════════════════════════════════════ */
@@ -727,6 +744,29 @@ export async function fetch990Data(
             ...options,
             timeoutMs: options?.timeoutMs ?? 180000,
         }
+    );
+}
+
+export async function fetchJob(
+    jobId: string,
+    options?: ApiRequestOptions,
+): Promise<SearchJobSummary> {
+    return request<SearchJobSummary>(
+        `/api/jobs/${jobId}/`,
+        { method: "GET" },
+        { ...options, timeoutMs: options?.timeoutMs ?? 10000 },
+    );
+}
+
+export async function fetchCaseJobs(
+    caseId: string,
+    limit = 5,
+    options?: ApiRequestOptions,
+): Promise<SearchJobSummary[]> {
+    return request<SearchJobSummary[]>(
+        `/api/cases/${caseId}/jobs/?limit=${limit}`,
+        { method: "GET" },
+        { ...options, timeoutMs: options?.timeoutMs ?? 10000 },
     );
 }
 

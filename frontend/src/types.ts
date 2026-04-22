@@ -27,7 +27,7 @@ export interface DocumentItem {
 /* ── Finding status / weight enums (match backend TextChoices) ── */
 export type FindingStatus = "NEW" | "NEEDS_EVIDENCE" | "DISMISSED" | "CONFIRMED";
 export type EvidenceWeight = "SPECULATIVE" | "DIRECTIONAL" | "DOCUMENTED" | "TRACED";
-export type FindingSource = "AUTO" | "MANUAL";
+export type FindingSource = "AUTO" | "MANUAL" | "AI";
 export type FindingSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFORMATIONAL";
 
 export interface FindingEntityLink {
@@ -443,4 +443,31 @@ export interface InvestigatorNote {
     created_by: string;
     created_at: string;
     updated_at: string;
+}
+
+/* ── Async job tracking (research, analysis) ──────────────────── */
+export type JobStatus = "QUEUED" | "RUNNING" | "SUCCESS" | "FAILED";
+
+export type JobType =
+    | "IRS_NAME_SEARCH"
+    | "IRS_FETCH_XML"
+    | "OHIO_AOS"
+    | "COUNTY_PARCEL"
+    | "AI_PATTERN_ANALYSIS";
+
+export interface SearchJobSummary {
+    id: string;
+    job_type: JobType;
+    status: JobStatus;
+    query_params: Record<string, unknown>;
+    result: unknown | null;
+    error_message: string;
+    created_at: string;
+    started_at: string | null;
+    finished_at: string | null;
+}
+
+export interface JobEnqueueResponse {
+    job_id: string;
+    status_url: string;
 }
