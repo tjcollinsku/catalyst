@@ -1,7 +1,17 @@
-import { useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { CaseDetailContext } from "../../views/CaseDetailView";
-import { ResearchResult, Fetch990Result, searchParcels, searchOhioSOS, searchOhioAOS, searchIRS, searchRecorder, addResearchToCase, fetch990Data } from "../../api";
+import {
+    ResearchResult,
+    Fetch990Result,
+    searchOhioSOS,
+    searchRecorder,
+    addResearchToCase,
+    fetch990Data,
+    fetchCaseJobs,
+} from "../../api";
+import { useAsyncJob } from "../../hooks/useAsyncJob";
+import type { SearchJobSummary } from "../../types";
 import styles from "./ResearchTab.module.css";
 
 type SourceType = "parcels" | "ohio-sos" | "ohio-aos" | "irs" | "recorder";
@@ -57,9 +67,19 @@ export function ResearchTab() {
     const [activeSource, setActiveSource] = useState<SourceType>("parcels");
     const [query, setQuery] = useState("");
     const [county, setCounty] = useState(""); // For recorder searches
-    const [results, setResults] = useState<ResearchResult | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const irsJob = useAsyncJob<ResearchResult>({
+        postUrl: `/api/cases/${caseId}/research/irs/`,
+    });
+    const aosJob = useAsyncJob<ResearchResult>({
+        postUrl: `/api/cases/${caseId}/research/ohio-aos/`,
+    });
+    const parcelsJob = useAsyncJob<ResearchResult>({
+        postUrl: `/api/cases/${caseId}/research/parcels/`,
+    });
+
+    const [syncResults, setSyncResults] = useState<ResearchResult | null>(null);
+    const [syncLoading, setSyncLoading] = useState(false);
+    const [syncError, setSyncError] = useState<string | null>(null);
     const [addedRows, setAddedRows] = useState<Set<number>>(new Set());
     const [addingRow, setAddingRow] = useState<number | null>(null);
 
@@ -74,58 +94,105 @@ export function ResearchTab() {
             return;
         }
 
-        setLoading(true);
-        setError(null);
-        setResults(null);
+        if (activeSource === "irs") {
+            await irsJob.run({ query });
+            return;
+        }
+        if (activeSource === "ohio-aos") {
+            await aosJob.run({ query });
+            return;
+        }
+        if (activeSource === "parcels") {
+            const searchType = query.match(/^\d{4}-\d{4}-\d{4}$/) ? "parcel" : "owner";
+            await parcelsJob.run({ query, search_type: searchType, county });
+            return;
+        }
 
+        setSyncLoading(true);
+        setSyncError(null);
+        setSyncResults(null);
         try {
             let result: ResearchResult;
-
-            switch (activeSource) {
-                case "parcels": {
-                    const searchType = query.match(/^\d{4}-\d{4}-\d{4}$/) ? "parcel" : "owner";
-                    result = await searchParcels(caseId, query, searchType, county);
-                    break;
+            if (activeSource === "ohio-sos") {
+                result = await searchOhioSOS(caseId, query);
+            } else if (activeSource === "recorder") {
+                if (!county.trim()) {
+                    pushToast("error", "Please select a county for recorder search");
+                    setSyncLoading(false);
+                    return;
                 }
-                case "ohio-sos": {
-                    result = await searchOhioSOS(caseId, query);
-                    break;
-                }
-                case "ohio-aos": {
-                    result = await searchOhioAOS(caseId, query);
-                    break;
-                }
-                case "irs": {
-                    result = await searchIRS(caseId, query);
-                    break;
-                }
-                case "recorder": {
-                    if (!county.trim()) {
-                        pushToast("error", "Please select a county for recorder search");
-                        setLoading(false);
-                        return;
-                    }
-                    result = await searchRecorder(caseId, county, query);
-                    break;
-                }
-                default:
-                    throw new Error("Unknown source");
-            }
-
-            if (result.error) {
-                setError(result.error);
+                result = await searchRecorder(caseId, county, query);
             } else {
-                setResults(result);
+                throw new Error("Unknown source");
+            }
+            if (result.error) {
+                setSyncError(result.error);
+            } else {
+                setSyncResults(result);
                 setAddedRows(new Set());
             }
         } catch (err) {
             const message = err instanceof Error ? err.message : "Search failed";
-            setError(message);
+            setSyncError(message);
             pushToast("error", message);
         } finally {
-            setLoading(false);
+            setSyncLoading(false);
         }
-    }, [caseId, query, county, activeSource, pushToast]);
+    }, [activeSource, caseId, county, query, pushToast, irsJob, aosJob, parcelsJob]);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const jobs = await fetchCaseJobs(caseId, 5);
+                if (cancelled) return;
+                const latest: Partial<Record<SearchJobSummary["job_type"], SearchJobSummary>> = {};
+                for (const job of jobs) {
+                    if (!latest[job.job_type]) latest[job.job_type] = job;
+                }
+                const reattachIfLive = (
+                    job: SearchJobSummary | undefined,
+                    hook: { reattach: (id: string) => void },
+                ) => {
+                    if (!job) return;
+                    if (job.status === "QUEUED" || job.status === "RUNNING") {
+                        hook.reattach(job.id);
+                    }
+                };
+                reattachIfLive(latest.IRS_NAME_SEARCH ?? latest.IRS_FETCH_XML, irsJob);
+                reattachIfLive(latest.OHIO_AOS, aosJob);
+                reattachIfLive(latest.COUNTY_PARCEL, parcelsJob);
+            } catch {
+                // Non-fatal — the user can simply re-run the search.
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+        // Intentionally only on mount (hooks are stable refs from useAsyncJob)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [caseId]);
+
+    const activeJob = useMemo(() => {
+        if (activeSource === "irs") return irsJob;
+        if (activeSource === "ohio-aos") return aosJob;
+        if (activeSource === "parcels") return parcelsJob;
+        return null;
+    }, [activeSource, irsJob, aosJob, parcelsJob]);
+
+    const loading =
+        activeJob !== null
+            ? activeJob.status === "queued" || activeJob.status === "running"
+            : syncLoading;
+
+    const error = activeJob !== null ? activeJob.error : syncError;
+
+    const results: ResearchResult | null =
+        activeJob !== null
+            ? activeJob.status === "success"
+                ? activeJob.result
+                : null
+            : syncResults;
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === "Enter" && !loading) {
@@ -605,8 +672,8 @@ export function ResearchTab() {
                                     onClick={() => {
                                         setActiveSource(source);
                                         setQuery("");
-                                        setResults(null);
-                                        setError(null);
+                                        setSyncResults(null);
+                                        setSyncError(null);
                                     }}
                                     title={SOURCES[source].description}
                                 >
@@ -667,9 +734,15 @@ export function ResearchTab() {
                 )}
 
                 {loading && (
-                    <div className={styles.resultsLoading}>
-                        <p>Searching {sourceConfig.label}...</p>
-                        <p style={{ fontSize: "0.75rem", marginTop: "0.5rem" }}>This may take a moment.</p>
+                    <div className={styles.resultsLoading} role="status" aria-live="polite">
+                        {activeJob?.status === "queued" && <p>Queued…</p>}
+                        {activeJob?.status === "running" && (
+                            <p>Searching… (typically 20–90 seconds)</p>
+                        )}
+                        {activeJob === null && <p>Searching {sourceConfig.label}...</p>}
+                        <p style={{ fontSize: "0.75rem", marginTop: "0.5rem" }}>
+                            This may take a moment.
+                        </p>
                     </div>
                 )}
 
