@@ -247,3 +247,22 @@ def run_county_parcel_search(job_id: str) -> None:
         _mark_success(job, result)
     except Exception as exc:  # noqa: BLE001
         _mark_failed(job, exc)
+
+
+# ---------------------------------------------------------------------------
+# AI Pattern Analysis
+# ---------------------------------------------------------------------------
+
+
+def run_ai_pattern_analysis(job_id: str) -> None:
+    job = _load_and_mark_running(job_id)
+    if job is None:
+        return
+    try:
+        from investigations import ai_pattern_augmentation
+
+        case_id = job.query_params["case_id"]
+        summary = ai_pattern_augmentation.analyze_case(case_id)
+        _mark_success(job, summary)
+    except Exception as exc:  # noqa: BLE001
+        _mark_failed(job, exc)
