@@ -187,6 +187,11 @@ urlpatterns = [
         views.api_ai_ask,
         name="api_ai_ask",
     ),
+    path(
+        "api/cases/<uuid:pk>/ai/analyze-patterns/",
+        views.api_ai_analyze_patterns,
+        name="api_ai_analyze_patterns",
+    ),
     path("", views.case_list, name="case_list"),
     path("cases/new/", views.case_create, name="case_create"),
     path(

@@ -30,6 +30,7 @@ from .models import (
     FindingEntity,
     FindingStatus,
     InvestigatorNote,
+    JobStatus,
     JobType,
     OcrStatus,
     Organization,
@@ -5011,6 +5012,43 @@ def api_ai_ask(request, pk):
         status = 429 if "Rate limit" in result["error"] else 500
         return JsonResponse(result, status=status)
     return JsonResponse(result)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_ai_analyze_patterns(request, pk):
+    """Enqueue a case-level AI pattern analysis job.
+
+    One AI job per case may be in-flight at a time. The worker writes each
+    returned pattern as a Finding with source=AI.
+    """
+    case = get_object_or_404(Case, pk=pk)
+
+    in_flight = SearchJob.objects.filter(
+        case=case,
+        job_type=JobType.AI_PATTERN_ANALYSIS,
+        status__in=[JobStatus.QUEUED, JobStatus.RUNNING],
+    ).exists()
+    if in_flight:
+        return JsonResponse(
+            {"error": "An AI analysis job is already running for this case."},
+            status=409,
+        )
+
+    with transaction.atomic():
+        job = SearchJob.objects.create(
+            case=case,
+            job_type=JobType.AI_PATTERN_ANALYSIS,
+            query_params={"case_id": str(case.id)},
+        )
+        async_task(
+            "investigations.jobs.run_ai_pattern_analysis", str(job.id)
+        )
+
+    return JsonResponse(
+        {"job_id": str(job.id), "status_url": f"/api/jobs/{job.id}/"},
+        status=202,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
