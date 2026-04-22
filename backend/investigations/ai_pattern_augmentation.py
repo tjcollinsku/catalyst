@@ -226,17 +226,38 @@ def validate_patterns(
 def call_claude(context: dict[str, Any]) -> str:
     """Single Claude call with the pattern-detection system prompt.
 
-    Thin wrapper so tests can mock this function.
+    Returns the raw model text (expected JSON matching the SYSTEM_PROMPT
+    schema). Thin wrapper so tests can mock this function.
+
+    We do NOT call ai_proxy._call_ai here — that helper json.loads the
+    response and returns a dict. parse_response() below expects a string
+    so it can defensively handle malformed output without raising.
     """
     user_message = (
         "Here is the case. Return patterns as strict JSON per the schema in "
-        "the system prompt.\n\n" + json.dumps(context)
+        "the system prompt.\n\n<case>\n" + json.dumps(context) + "\n</case>"
     )
-    return ai_proxy._call_ai(
-        system_prompt=SYSTEM_PROMPT,
-        user_message=user_message,
-        max_tokens=4096,
-    )
+    try:
+        client = ai_proxy._get_client()
+        response = client.messages.create(
+            model=ai_proxy.MODEL_SONNET,
+            max_tokens=4096,
+            temperature=0.2,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_message}],
+        )
+        raw = response.content[0].text or ""
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.split("\n")
+            lines = [
+                line for line in lines if not line.strip().startswith("```")
+            ]
+            cleaned = "\n".join(lines).strip()
+        return cleaned
+    except Exception as exc:  # noqa: BLE001 — surface via empty-patterns path
+        logger.exception("AI pattern Claude call failed: %s", exc)
+        return ""
 
 
 def analyze_case(case_id: Any) -> dict[str, Any]:
@@ -248,42 +269,66 @@ def analyze_case(case_id: Any) -> dict[str, Any]:
     kept, dropped = validate_patterns(patterns, doc_ref_map)
 
     created = 0
-    with transaction.atomic():
-        for p in kept:
-            finding = Finding.objects.create(
-                case=case,
-                rule_id="",
-                title=p["title"][:500],
-                description=p["description"],
-                narrative=p.get("rationale", ""),
-                severity="INFORMATIONAL",
-                status="NEW",
-                evidence_weight=p["evidence_weight"],
-                source=FindingSource.AI,
-                evidence_snapshot={
-                    "rationale": p["rationale"],
-                    "suggested_action": p["suggested_action"],
-                    "doc_refs": p["doc_refs"],
-                    "entity_refs": p.get("entity_refs", []),
-                },
-            )
-            for ref in p["doc_refs"]:
-                doc_id = doc_ref_map.get(ref)
-                if doc_id:
+    for p in kept:
+        # Each finding gets its own savepoint — one bad pattern (e.g. a
+        # duplicate doc_ref from the LLM that trips FindingDocument's
+        # UNIQUE(finding, document) constraint) must not roll back the
+        # earlier, valid findings.
+        try:
+            with transaction.atomic():
+                finding = Finding.objects.create(
+                    case=case,
+                    rule_id="",
+                    title=p["title"][:500],
+                    description=p["description"],
+                    narrative=p.get("rationale", ""),
+                    severity="INFORMATIONAL",
+                    status="NEW",
+                    evidence_weight=p["evidence_weight"],
+                    source=FindingSource.AI,
+                    evidence_snapshot={
+                        "rationale": p["rationale"],
+                        "suggested_action": p["suggested_action"],
+                        "doc_refs": p["doc_refs"],
+                        "entity_refs": p.get("entity_refs", []),
+                    },
+                )
+                # Dedupe doc_refs; Claude occasionally repeats a ref and the
+                # (finding, document) unique constraint would otherwise raise.
+                seen_docs: set[str] = set()
+                for ref in p["doc_refs"]:
+                    doc_id = doc_ref_map.get(ref)
+                    if not doc_id or doc_id in seen_docs:
+                        continue
+                    seen_docs.add(doc_id)
                     FindingDocument.objects.create(
                         finding=finding,
                         document_id=doc_id,
                     )
-            for entity_id in p.get("entity_refs", []):
-                try:
-                    FindingEntity.objects.create(
-                        finding=finding,
-                        entity_id=entity_id,
-                        entity_type="UNKNOWN",
-                    )
-                except Exception:
-                    logger.info("Skipping invalid entity_ref %s", entity_id)
+                seen_entities: set[str] = set()
+                for entity_id in p.get("entity_refs", []):
+                    if not entity_id or entity_id in seen_entities:
+                        continue
+                    seen_entities.add(entity_id)
+                    try:
+                        with transaction.atomic():
+                            FindingEntity.objects.create(
+                                finding=finding,
+                                entity_id=entity_id,
+                                entity_type="UNKNOWN",
+                            )
+                    except Exception:
+                        logger.info(
+                            "Skipping invalid entity_ref %s", entity_id
+                        )
             created += 1
+        except Exception as exc:  # noqa: BLE001 — drop bad pattern, keep rest
+            logger.warning(
+                "Dropping AI pattern %r due to write error: %s",
+                p.get("title"),
+                exc,
+            )
+            dropped += 1
 
     return {
         "findings_created": created,

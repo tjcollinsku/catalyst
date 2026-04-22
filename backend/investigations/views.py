@@ -5020,30 +5020,41 @@ def api_ai_analyze_patterns(request, pk):
     """Enqueue a case-level AI pattern analysis job.
 
     One AI job per case may be in-flight at a time. The worker writes each
-    returned pattern as a Finding with source=AI.
+    returned pattern as a Finding with source=AI. The in-flight check runs
+    inside a transaction with select_for_update on the case row so two
+    concurrent POSTs (double-click, two tabs) cannot both enqueue — each
+    real Claude call costs tokens.
     """
-    case = get_object_or_404(Case, pk=pk)
+    get_object_or_404(Case, pk=pk)  # 404 outside the transaction
 
-    in_flight = SearchJob.objects.filter(
-        case=case,
-        job_type=JobType.AI_PATTERN_ANALYSIS,
-        status__in=[JobStatus.QUEUED, JobStatus.RUNNING],
-    ).exists()
-    if in_flight:
-        return JsonResponse(
-            {"error": "An AI analysis job is already running for this case."},
-            status=409,
-        )
-
-    with transaction.atomic():
-        job = SearchJob.objects.create(
-            case=case,
-            job_type=JobType.AI_PATTERN_ANALYSIS,
-            query_params={"case_id": str(case.id)},
-        )
-        async_task(
-            "investigations.jobs.run_ai_pattern_analysis", str(job.id)
-        )
+    try:
+        with transaction.atomic():
+            case = Case.objects.select_for_update().get(pk=pk)
+            in_flight = SearchJob.objects.filter(
+                case=case,
+                job_type=JobType.AI_PATTERN_ANALYSIS,
+                status__in=[JobStatus.QUEUED, JobStatus.RUNNING],
+            ).exists()
+            if in_flight:
+                return JsonResponse(
+                    {
+                        "error": (
+                            "An AI analysis job is already running for this "
+                            "case."
+                        )
+                    },
+                    status=409,
+                )
+            job = SearchJob.objects.create(
+                case=case,
+                job_type=JobType.AI_PATTERN_ANALYSIS,
+                query_params={"case_id": str(case.id)},
+            )
+            async_task(
+                "investigations.jobs.run_ai_pattern_analysis", str(job.id)
+            )
+    except Case.DoesNotExist:
+        return JsonResponse({"error": "Case not found"}, status=404)
 
     return JsonResponse(
         {"job_id": str(job.id), "status_url": f"/api/jobs/{job.id}/"},
