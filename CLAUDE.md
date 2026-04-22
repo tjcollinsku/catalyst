@@ -1,5 +1,5 @@
 # CLAUDE.md — Catalyst System Map
-**Last updated:** 2026-04-10 (Session 33)
+**Last updated:** 2026-04-21 (Session 36)
 **Owner:** Tyler Collins (tjcollinsku@gmail.com)
 **Purpose:** This is the single source of truth for the entire Catalyst system. Read this FIRST before doing any work.
 
@@ -47,6 +47,7 @@ Catalyst/
 │   │   ├── ai_extraction.py     ← Claude AI entity/financial extraction
 │   │   ├── ai_proxy.py          ← Claude API wrapper with caching
 │   │   ├── form990_parser.py    ← IRS 990 text parser (Part IV/VI/VII)
+│   │   ├── jobs.py              ← Async task functions for Django-Q2 worker (Session 35)
 │   │   │
 │   │   ├── # --- CONNECTORS ---
 │   │   ├── propublica_connector.py    ← ProPublica 990 API [SUPERSEDED by IRS TEOS]
@@ -119,7 +120,7 @@ This is the #1 problem. We have 6 data source connectors. Here is their actual s
 
 ---
 
-## DATA MODELS (22 Models — consolidated in Session 33)
+## DATA MODELS (23 Models — SearchJob added in Session 35)
 
 ### Core Investigation Models
 - **Case** — name, status (ACTIVE/PAUSED/REFERRED/CLOSED), notes, referral_ref
@@ -146,6 +147,7 @@ This is the #1 problem. We have 6 data source connectors. Here is their actual s
 ### Operational Models
 - **InvestigatorNote** — polymorphic target (any entity/finding)
 - **AuditLog** — append-only forensic log (NEVER UPDATE OR DELETE)
+- **SearchJob** — async background job tracker (Session 35). Fields: `job_type` (IRS_NAME_SEARCH / IRS_FETCH_XML / OHIO_AOS / COUNTY_PARCEL), `status` (QUEUED / RUNNING / SUCCESS / FAILED), `query_params` JSON, `result` JSON, `error_message`, timestamps. Case FK nullable. Created when a slow research endpoint is hit; worker writes the result back. Index on `(case, -created_at)` for reattach-on-mount.
 
 ---
 
@@ -174,7 +176,7 @@ patterns emerge from real cases.
 
 ---
 
-## API ENDPOINTS (43 Total — updated Session 33)
+## API ENDPOINTS (45 Total — updated Session 35)
 
 ### Case Management
 ```
@@ -236,6 +238,7 @@ POST   /api/cases/<uuid>/ai/summarize/          → AI case summary
 POST   /api/cases/<uuid>/ai/connections/        → AI relationship analysis
 POST   /api/cases/<uuid>/ai/narrative/          → AI narrative draft
 POST   /api/cases/<uuid>/ai/ask/                → Free-text AI chat
+POST   /api/cases/<uuid>/ai/analyze-patterns/   → Enqueue AI pattern analysis job (202 + job_id)   [ASYNC]
 ```
 
 ### Data Fetching
@@ -245,12 +248,22 @@ POST   /api/cases/<uuid>/fetch-990s/            → Fetch 990 XML from IRS TEOS 
 
 ### Research Endpoints
 ```
-POST   /api/cases/<uuid>/research/parcels/      → County Auditor parcel search (ODNR API)
-POST   /api/cases/<uuid>/research/ohio-sos/     → Ohio SOS entity lookup (local CSV)
-POST   /api/cases/<uuid>/research/ohio-aos/     → Ohio AOS audit report search
-POST   /api/cases/<uuid>/research/irs/          → IRS TEOS 990 XML lookup (by EIN or name)
-POST   /api/cases/<uuid>/research/recorder/     → County Recorder portal URL builder
-POST   /api/cases/<uuid>/research/add-to-case/ → Import research result as entity/note
+POST   /api/cases/<uuid>/research/parcels/      → County Auditor parcel search (ODNR API)         [ASYNC — returns 202]
+POST   /api/cases/<uuid>/research/ohio-sos/     → Ohio SOS entity lookup (local CSV)              [sync]
+POST   /api/cases/<uuid>/research/ohio-aos/     → Ohio AOS audit report search                    [ASYNC — returns 202]
+POST   /api/cases/<uuid>/research/irs/          → IRS TEOS 990 XML lookup (by EIN or name)        [ASYNC — returns 202]
+POST   /api/cases/<uuid>/research/recorder/     → County Recorder portal URL builder              [sync]
+POST   /api/cases/<uuid>/research/add-to-case/  → Import research result as entity/note
+```
+
+The 4 ASYNC endpoints (Session 35) no longer run inline. They create a `SearchJob` row, hand the task
+to a Django-Q2 worker, and return `202 Accepted` with `{"job_id": "<uuid>", "status_url": "/api/jobs/<uuid>/"}`.
+Frontend polls the status URL every ~2s. See the "Async Jobs" section below.
+
+### Async Jobs (NEW — Session 35)
+```
+GET    /api/jobs/<uuid>/                        → Poll a single SearchJob (status + result + error)
+GET    /api/cases/<uuid>/jobs/?limit=5          → List recent jobs for a case (reattach-on-mount)
 ```
 
 ### Admin Endpoints (NEW — Session 30)
@@ -426,6 +439,7 @@ Results visible in Pipeline tab (Signals → Detections → Findings)
 - Python 3.11, Django 4.2
 - PostgreSQL 16 (Railway managed)
 - Gunicorn (2 workers)
+- Django-Q2 (async job queue, Postgres ORM broker, 2-worker qcluster container — Session 35)
 - PyPDF2 + Tesseract OCR
 - Anthropic Claude API (Haiku for extraction, Sonnet for analysis)
 
@@ -556,7 +570,7 @@ Located in `docs/team/`:
 
 ## SESSION HISTORY
 
-32 sessions completed. Key milestones:
+35 sessions completed. Key milestones:
 - Sessions 1-5: Initial Django + React scaffold, models, basic CRUD
 - Sessions 6-10: Entity extraction, signal rules, document processing pipeline
 - Sessions 11-15: Connectors (Ohio SOS, county auditor/recorder, ProPublica)
@@ -573,6 +587,12 @@ Located in `docs/team/`:
 - Session 32: **The reframe session.** Tyler walked through raw narrative of the founding investigation (Ohio nonprofit, $XK → $X.XM, Karen Example, UCC filings, Example Construction, ExampleVendor, AOS dormant entities, the property transaction, ExampleBoardMember board overlap). Key reframe landed: **Catalyst is referral packaging software for citizen investigators handing to professionals with subpoena power — not investigation software.** The customer of the output is the AG/IRS/FBI investigator, not Tyler. Quality bar: "heavy confidence that it was going to go somewhere." Major scope decisions: collapse Signal/Detection/Finding into one Finding with status + evidence_weight fields; cut signal rule set from 29 to ~5-7 grounded rules; kill AI-generated narrative memo and replace with deterministic template-driven referral package exporter; cut SocialMediaConnection and GovernmentReferral models; build Example Charity as preloaded demo case. Committed to 14-day shipping window (5-7 hrs/day). **New constraint mid-session:** Tyler has job applications already out — repo must look presentable to recruiters TODAY, not at end of rebuild. Day 1 reshaped: README refactor (product-first hook + "Why it exists" story + GitHub/email/LinkedIn contact block), STATUS.md creation with Working/In Active Refactor/Planned columns, surface cleanup (stale CURRENT_STATE.md, wrong model count in CLAUDE.md, pytest cache in repo). Drafts written for README and STATUS.md; awaiting Tyler's LinkedIn URL and referral-case-number decision before committing to disk. "One project, two pitches" framing established: universal pitch for general recruiters, niche pitch for fraud/forensic firms.
 
 - Session 33: **The execution session.** Shipped every major item from the Session 32 scope decisions. Backend: collapsed Signal/Detection/Finding into single Finding model with migration-ready code; cut signal rules from 29 to 14; built deterministic referral package PDF exporter (reportlab, 794 lines — cover page, findings with [Doc-N] citations, financial tables, document index with SHA-256 hashes); built demo case management command (`seed_demo.py`, 965 lines — "Bright Future Foundation" fictional scenario with 4 persons, 2 orgs, 2 properties, 7 documents, 6 years of financials, 9 findings across 9 signal rules); removed SocialMediaConnection model + all references; removed GovernmentReferral model + all references (serializers, 3 endpoints, 3 URL patterns, frontend types, API functions, cross-case view). Frontend: rewrote types.ts (FindingItem replaces SignalItem/DetectionItem), rewrote api.ts, rewrote PipelineTab (single Finding workflow), rewrote CaseDetailView/TriageView/DashboardView, updated EntityGraph/EntityProfilePanel/TimelineView to use finding_count, added evidence weight CSS, added "Generate Referral Package (PDF)" button to ReferralsTab, deleted 13 stale component files, simplified ReferralsView. All builds pass (tsc, vite, ruff, Python syntax). Model count: 24 → 22. JS bundle shrunk 9KB from dead code removal. Tyler learned agent orchestration pattern (parallel task decomposition). Updated resume-talking-points.md with Interview Beat #6 on AI productivity.
+
+- Session 34: Document workspace (6-tab doc viewer), sticky notes on docs/entities/findings, financial anomaly highlighting on the Financials tab, entity→documents quick-view, fixed 22 stale field references in views.py (`detected_summary` → `description`, `detected_at` → `created_at`, `signal__case` → `finding__case` across dashboard, graph, search, export, AI endpoints).
+
+- Session 35: **Async research jobs.** Reproduced `502 Bad Gateway` on the "do good" IRS name search. Root cause: gunicorn 30s worker timeout + IRS name-search takes 30–120s streaming 50–90 MB index CSVs across 7 years. Fix: moved 4 slow research endpoints (IRS name search, IRS `fetch_xml`, Ohio AOS, County Parcel) to Django-Q2 async job queue with **Postgres as broker (no Redis)**. Added `SearchJob` model (UUID PK, status/job_type/query_params/result JSONField, case FK nullable, index on `(case, -created_at)`), qcluster worker container in docker-compose, 2 new endpoints (`GET /api/jobs/<id>/` for polling + `GET /api/cases/<id>/jobs/` for reattach-on-mount). Worker code in new `investigations/jobs.py` — 4 task functions mirror the old inline work, write result back to SearchJob row. 24 tests (4 model + 9 jobs + 10 views + 1 integration) — integration uses Django-Q2's `sync=True` to exercise the real cluster runner with a mocked connector. Backend smoke test confirmed: "do good" search now completes async in ~16s, returns 177 IRS filings via the poll endpoint, zero 502s. Frontend not yet wired (POST returns 202, old frontend expects synchronous result) — Research tab currently breaks with a pre-existing `0 is not iterable` error unrelated to this work. **Branch `feat/async-research-jobs`**, 15 commits (b4bc328 → cc5a017). Deferred: frontend useAsyncJob hook, polling UI, reattach-on-mount, applying pattern to batch OCR endpoint.
+
+- Session 36: **Frontend async wiring + AI pattern augmentation.** Two tracks executed via subagent-driven development from a 20-task plan (`docs/superpowers/plans/2026-04-21-async-frontend-and-ai-patterns.md`). **Track 1 (frontend async):** Added `useAsyncJob<TResult>` React hook — POSTs enqueue body, receives `202 + {job_id, status_url}`, polls `/api/jobs/<id>/` every 2 s, tracks `idle|queued|running|success|failed`, exposes `run / reattach / cancel`. Retrofit Research tab: three `useAsyncJob` instances (irs/aos/parcels), kept sync path for sos/recorder, reattach-on-mount via `fetchCaseJobs(caseId, 5)`. Fixed spec violation: hook now uses `fetchJob` helper, not inline poll. **Track 2 (AI patterns):** Added `FindingSource.AI` and `JobType.AI_PATTERN_ANALYSIS` (migration `0023_ai_source_and_jobtype.py`, choice-only). New module `investigations/ai_pattern_augmentation.py` (265 lines): `build_context_with_refs(case)` assembles entities/snapshots/findings/docs with Doc-N refs and 2000-char excerpts; `call_claude()` wraps `ai_proxy._call_ai` with the pattern-detection system prompt (forbids "fraud/crime/illegal/guilty", caps weight at DIRECTIONAL, requires Doc-N citations); `parse_response()` + `validate_patterns()` drop malformed patterns and coerce weight; `analyze_case()` writes each surviving pattern as a `Finding(source=AI, evidence_weight=..., status=NEW, severity=INFORMATIONAL)` with `FindingDocument` + `FindingEntity` links. 14 tests (build/parse/validate/analyze). New Django-Q task `run_ai_pattern_analysis(job_id)` in `jobs.py`. New endpoint `POST /api/cases/<id>/ai/analyze-patterns/` returns 202 (409 if an AI job is already in-flight for the case). Frontend: `runAiPatternAnalysis()` API client, `onRefreshFindings` context callback on CaseDetailView, and on the Pipeline tab: source filter chips (All/Rule/Manual/AI), AI badge on cards + detail panel ("🤖 AI", purple), "Run AI Analysis" button driven by `useAsyncJob`. On success a toast shows `{findings_created} · {patterns_dropped} dropped` and re-fetches findings. **Build state:** TypeScript clean, Vite build clean, Vitest 11/11 passing. Backend tests not run due to local-env DB setup gap — will validate on Railway after push. Branch `feat/async-research-jobs`, ending at commit `a418222`.
 
 ---
 

@@ -1,6 +1,6 @@
 # Catalyst — Build Status
 
-**Last updated:** 2026-04-10
+**Last updated:** 2026-04-21
 
 This project is in active development. This file is updated every time
 the state of a major component changes. If something looks half-built,
@@ -34,7 +34,10 @@ running on Railway.
 | Financial anomaly highlighting | YOY table flags revenue spikes, zero officer comp, low program ratio, asset/revenue mismatch | Anomaly summary strip at top of Financials tab |
 | Entity → document quick-view | Entity detail page shows related documents, related findings, and sticky notes | Uses the detail API endpoint instead of list filtering |
 | Audit log | Append-only log on every mutation | Never updated or deleted |
-| Backend test suite | 555+ backend tests covering connectors, API endpoints, and signal rules | CI runs ruff + tsc + vite on every push |
+| Async research jobs (backend) | Long-running external-data searches (IRS name search, IRS XML fetch, Ohio AOS, County Parcel) run on a Django-Q2 worker backed by Postgres — no Redis. POST returns 202 with a job id; clients poll `GET /api/jobs/<id>/`. | Replaced synchronous gunicorn-blocking calls that were 502ing at 30s. |
+| Async research jobs (frontend) | Research tab uses a `useAsyncJob` hook that POSTs, receives 202 + `job_id`, polls every 2 s, renders queued / running / success / error states, and reattaches to live or recently-finished jobs on mount via `GET /api/cases/<id>/jobs/`. | Paired with the Session 35 backend. |
+| AI pattern augmentation | On-demand Claude analysis surfaces patterns the rule engine can't see — entity disambiguation, timeline anomalies, narrative inconsistencies. Runs as a Django-Q2 job; writes each returned pattern as a Finding with `source=AI` and `evidence_weight` capped at DIRECTIONAL. | "Run AI Analysis" button on the Pipeline tab. Source filter chips (All / Rule / Manual / AI) and an AI badge distinguish AI-flagged findings from rule-based ones. Augments — never replaces — the 14 grounded signal rules. |
+| Backend test suite | 580+ backend tests covering connectors, API endpoints, signal rules, async job pipeline, and AI pattern augmentation | CI runs ruff + tsc + vite on every push |
 
 ---
 
@@ -46,6 +49,13 @@ the right answer when something is mid-refactor is to say so.
 | Component | Why it's being refactored |
 |-----------|---------------------------|
 | Repo presentation | This file. `README.md`. `CLAUDE.md`. Keeping surface-level docs in sync with the rebuild as it lands. |
+
+**Recently completed (Session 36):**
+- ~~Research tab still on the old synchronous shape~~ → Retrofit to consume the 202 + poll contract. New `useAsyncJob` hook handles enqueue, polling, status transitions, and reattach-on-mount. Four slow sources (IRS name, IRS XML, Ohio AOS, County Parcel) now show "Queued… / Searching…" progress instead of hanging.
+- ~~No AI layer on top of the 14 rules~~ → Shipped **AI pattern augmentation**: single-pass Claude analysis at case level that writes candidate Findings with `source=AI`. Runs as a Django-Q2 job; enforces doc-reference citations; caps `evidence_weight` at DIRECTIONAL (AI can never claim DOCUMENTED or TRACED). Pipeline tab gets source filter chips + AI badge + "Run AI Analysis" button.
+
+**Recently completed (Session 35):**
+- ~~Synchronous research endpoints 502ing at 30s~~ → Moved 4 slow research endpoints (IRS name search, IRS `fetch_xml`, Ohio AOS, County Parcel) to a Django-Q2 async job queue backed by Postgres. New `SearchJob` model tracks state + stores result JSON. Two new endpoints: `GET /api/jobs/<id>/` (poll) and `GET /api/cases/<id>/jobs/` (reattach). 24 tests green. Smoke-tested: "do good" IRS search now returns 177 filings async, no 502.
 
 **Recently completed (Session 33–34):**
 - ~~Signal / Detection / Finding three-table pipeline~~ → Collapsed to single `Finding` model with `status` + `evidence_weight` dimensions. Frontend fully updated.
@@ -70,9 +80,10 @@ In rough priority order. Subject to change as the rebuild progresses.
 2. ~~**Pre-loaded demo case**~~ — **DONE.** "Bright Future Foundation" — fictional scenario with 9 findings across 6 signal rules, exercising the full pipeline.
 3. **Short demo video + README screenshots** — paired with the demo case.
 4. ~~**Inline notes on entities**~~ — **DONE.** Sticky notes on documents, entities, and findings.
-5. **Saved searches** — recurring queries on the entity browser.
-6. ~~**Document annotation**~~ — **Partially addressed.** Document workspace with sticky notes replaces the need for in-app PDF annotation for now.
-7. **ODNR parcel API recovery** — external API has been unreachable from Railway for weeks; monitoring for upstream fix.
+5. ~~**Frontend consuming async job 202 + poll**~~ — **DONE (Session 36).** Research tab consumes the async contract via `useAsyncJob`; reattaches to live jobs on mount.
+6. **Saved searches** — recurring queries on the entity browser.
+7. ~~**Document annotation**~~ — **Partially addressed.** Document workspace with sticky notes replaces the need for in-app PDF annotation for now.
+8. **ODNR parcel API recovery** — external API has been unreachable from Railway for weeks; monitoring for upstream fix.
 
 ---
 
@@ -81,6 +92,7 @@ In rough priority order. Subject to change as the rebuild progresses.
 - **ODNR statewide parcel API** (county auditor connector) is unreachable from Railway. Both the primary and fallback URLs return 404 / time out. External API issue, tracking upstream. Not blocking the referral-package rebuild.
 - **Ohio SOS connector requires manual CSV upload** via an admin endpoint — automated download was blocked by SOS returning 403s. Documented in the connector file.
 - **`form990_parser.py`** exists but isn't yet wired into the post-classification pipeline. May be partially superseded by the new IRS TEOS XML parser, which extracts Parts IV / VI / VII directly. Revisit after rebuild.
+- **AI pattern augmentation** is an investigator aid, not the deliverable. Every AI finding lands with `evidence_weight=DIRECTIONAL` or lower and `status=NEW`; the investigator promotes it up the pipeline manually after verification. The referral package exporter will never ship an AI finding unless the investigator has explicitly confirmed it.
 
 ---
 
