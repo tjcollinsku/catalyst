@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchJob } from "../api";
 import type { JobEnqueueResponse, JobStatus, SearchJobSummary } from "../types";
 
 const POLL_INTERVAL_MS = 2000;
@@ -22,18 +23,6 @@ export interface UseAsyncJobOptions {
 function getCSRFToken(): string {
     const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
     return match ? decodeURIComponent(match[1]) : "";
-}
-
-async function pollJob(jobId: string): Promise<SearchJobSummary> {
-    const res = await fetch(`/api/jobs/${jobId}/`, {
-        method: "GET",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-    });
-    if (!res.ok) {
-        throw new Error(`Poll failed: ${res.status}`);
-    }
-    return res.json() as Promise<SearchJobSummary>;
 }
 
 export function useAsyncJob<TResult = unknown>(
@@ -91,7 +80,7 @@ export function useAsyncJob<TResult = unknown>(
             stopPolling();
             const tick = async () => {
                 try {
-                    const job = await pollJob(id);
+                    const job = await fetchJob(id);
                     applyJobState(job);
                 } catch (e) {
                     if (!mounted.current) return;
@@ -101,6 +90,7 @@ export function useAsyncJob<TResult = unknown>(
                 }
             };
             pollTimer.current = setInterval(tick, POLL_INTERVAL_MS);
+            void tick();
         },
         [applyJobState, stopPolling],
     );

@@ -61,7 +61,6 @@ describe("useAsyncJob", () => {
         await act(async () => {
             await result.current.run({ query: "do good" });
         });
-        expect(result.current.status).toBe("queued");
 
         await act(flushTimers);
         await waitFor(() => expect(result.current.status).toBe("success"));
