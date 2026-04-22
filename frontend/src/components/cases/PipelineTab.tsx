@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { CaseDetailContext } from "../../views/CaseDetailView";
 import type {
@@ -7,6 +7,7 @@ import type {
     FindingStatus,
     EvidenceWeight,
 } from "../../types";
+import { useAsyncJob } from "../../hooks/useAsyncJob";
 import { PipelineStatusBar, PipelineStage } from "../ui/PipelineStatusBar";
 import { SeverityBadge } from "../ui/SeverityBadge";
 import { SlidePanel, SlidePanelSection } from "../ui/SlidePanel";
@@ -83,6 +84,7 @@ export function PipelineTab() {
         onDeleteFinding,
         onReevaluateFindings,
         reevaluatingFindings,
+        onRefreshFindings,
         pushToast,
     } = ctx;
 
@@ -90,6 +92,32 @@ export function PipelineTab() {
     const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
     const [severityFilter, setSeverityFilter] = useState("all");
     const [weightFilter, setWeightFilter] = useState("all");
+    const [sourceFilter, setSourceFilter] = useState<"all" | "AUTO" | "MANUAL" | "AI">("all");
+
+    /* ── AI pattern analysis job ─────────────────────────── */
+
+    const aiJob = useAsyncJob<{
+        findings_created: number;
+        patterns_dropped: number;
+        case_id: string;
+    }>({ postUrl: `/api/cases/${ctx.caseId}/ai/analyze-patterns/` });
+
+    useEffect(() => {
+        if (aiJob.status === "success" && aiJob.result) {
+            const created = aiJob.result.findings_created;
+            const dropped = aiJob.result.patterns_dropped;
+            const parts = [`${created} AI pattern${created === 1 ? "" : "s"} added`];
+            if (dropped > 0) parts.push(`${dropped} dropped (invalid refs)`);
+            pushToast("success", parts.join(" · "));
+            onRefreshFindings();
+            aiJob.cancel();
+        }
+        if (aiJob.status === "failed") {
+            pushToast("error", aiJob.error ?? "AI analysis failed.");
+            aiJob.cancel();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [aiJob.status]);
 
     /* ── Stage counts for status bar ─────────────────────── */
 
@@ -110,10 +138,11 @@ export function PipelineTab() {
                 if (activeStage && statusToStage(f.status) !== activeStage) return false;
                 if (severityFilter !== "all" && f.severity !== severityFilter) return false;
                 if (weightFilter !== "all" && f.evidence_weight !== weightFilter) return false;
+                if (sourceFilter !== "all" && f.source !== sourceFilter) return false;
                 return true;
             })
             .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    }, [findings, activeStage, severityFilter, weightFilter]);
+    }, [findings, activeStage, severityFilter, weightFilter, sourceFilter]);
 
     /* ── Selected finding for detail panel ────────────────── */
 
@@ -243,6 +272,21 @@ export function PipelineTab() {
                         Manual
                     </span>
                 )}
+                {finding.source === "AI" && (
+                    <span
+                        title="AI-flagged pattern — directional, not documented. Verify against source documents."
+                        style={{
+                            fontSize: "0.65rem",
+                            padding: "0.1rem 0.4rem",
+                            borderRadius: "var(--radius-sm)",
+                            background: "rgba(139, 92, 246, 0.15)",
+                            color: "#8b5cf6",
+                            fontWeight: 600,
+                        }}
+                    >
+                        🤖 AI
+                    </span>
+                )}
 
                 {/* AI summary badge */}
                 <div className={styles.cardAiBadge} onClick={(e) => e.stopPropagation()}>
@@ -327,7 +371,39 @@ export function PipelineTab() {
 
             {/* Toolbar */}
             <div className={styles.toolbar}>
-                <span className={styles.toolbarLabel}>Severity:</span>
+                <span className={styles.toolbarLabel}>Source:</span>
+                <div role="group" aria-label="Filter by source" style={{ display: "flex", gap: "0.25rem" }}>
+                    {(
+                        [
+                            { key: "all", label: "All" },
+                            { key: "AUTO", label: "Rule" },
+                            { key: "MANUAL", label: "Manual" },
+                            { key: "AI", label: "AI" },
+                        ] as const
+                    ).map((chip) => {
+                        const active = sourceFilter === chip.key;
+                        return (
+                            <button
+                                key={chip.key}
+                                type="button"
+                                onClick={() => setSourceFilter(chip.key)}
+                                aria-pressed={active ? "true" : "false"}
+                                style={{
+                                    fontSize: "0.7rem",
+                                    padding: "0.2rem 0.55rem",
+                                    borderRadius: "999px",
+                                    border: "1px solid var(--border-subtle)",
+                                    background: active ? "var(--accent)" : "var(--surface-2)",
+                                    color: active ? "white" : "var(--text-main)",
+                                    cursor: "pointer",
+                                }}
+                            >
+                                {chip.label}
+                            </button>
+                        );
+                    })}
+                </div>
+                <span className={styles.toolbarLabel} style={{ marginLeft: "0.75rem" }}>Severity:</span>
                 <FormSelect
                     value={severityFilter}
                     onChange={(e) => setSeverityFilter(e.target.value)}
@@ -353,6 +429,19 @@ export function PipelineTab() {
                     <option value="TRACED">Traced</option>
                 </FormSelect>
                 <span className={styles.toolbarSpacer} />
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void aiJob.run({})}
+                    disabled={aiJob.status === "queued" || aiJob.status === "running"}
+                    title="Ask Claude to surface patterns across this case's documents and entities. Results land as AI findings (Speculative/Directional)."
+                >
+                    {aiJob.status === "queued"
+                        ? "AI queued…"
+                        : aiJob.status === "running"
+                            ? "AI analyzing…"
+                            : "Run AI Analysis"}
+                </Button>
                 <Button
                     variant="secondary"
                     size="sm"
@@ -449,6 +538,21 @@ function FindingDetailPanel({
                             color: "var(--text-soft)",
                         }}>
                             Manual
+                        </span>
+                    )}
+                    {finding.source === "AI" && (
+                        <span
+                            title="AI-flagged pattern — directional, not documented. Verify against source documents."
+                            style={{
+                                fontSize: "0.65rem",
+                                padding: "0.1rem 0.4rem",
+                                borderRadius: "var(--radius-sm)",
+                                background: "rgba(139, 92, 246, 0.15)",
+                                color: "#8b5cf6",
+                                fontWeight: 600,
+                            }}
+                        >
+                            🤖 AI
                         </span>
                     )}
                     <span style={{ fontSize: "var(--text-xs)", color: "var(--text-soft)" }}>

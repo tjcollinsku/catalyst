@@ -27,7 +27,7 @@ export interface DocumentItem {
 /* ── Finding status / weight enums (match backend TextChoices) ── */
 export type FindingStatus = "NEW" | "NEEDS_EVIDENCE" | "DISMISSED" | "CONFIRMED";
 export type EvidenceWeight = "SPECULATIVE" | "DIRECTIONAL" | "DOCUMENTED" | "TRACED";
-export type FindingSource = "AUTO" | "MANUAL";
+export type FindingSource = "AUTO" | "MANUAL" | "AI";
 export type FindingSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFORMATIONAL";
 
 export interface FindingEntityLink {

@@ -16,6 +16,7 @@ import {
     FindingItem,
     FindingUpdatePayload,
     InvestigatorNote,
+    JobEnqueueResponse,
     NewCasePayload,
     NewFindingPayload,
     PaginatedResponse,
@@ -614,6 +615,21 @@ export async function aiAsk(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question, conversation_history: conversationHistory }),
     }, options);
+}
+
+export async function runAiPatternAnalysis(
+    caseId: string,
+    options?: ApiRequestOptions
+): Promise<JobEnqueueResponse> {
+    return request<JobEnqueueResponse>(
+        `/api/cases/${caseId}/ai/analyze-patterns/`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+        },
+        options,
+    );
 }
 
 /* ═══════════════════════════════════════════════════════════════
